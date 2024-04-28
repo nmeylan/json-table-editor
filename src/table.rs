@@ -1,5 +1,3 @@
-use std::iter::Filter;
-use std::slice::Iter;
 use serde_json::Value;
 
 pub struct Table {
@@ -59,7 +57,7 @@ impl Table {
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui) {
-        use egui_extras::{Column, TableBuilder};
+        use crate::components::table::{Column, TableBuilder};
         let text_height = egui::TextStyle::Body
             .resolve(ui.style())
             .size
@@ -84,11 +82,9 @@ impl Table {
                 body.rows(text_height, array.len(), |mut row| {
                     let data = array[row.index()].as_object().unwrap();
                     for key in  self.column_selected.iter() {
-                        row.col(|ui| {
-                            // ui.label( "column");
-                            let key = key.rfind(".").map_or_else(|| key.as_str(), |i| &key[(i+1)..]);
-                            data.get(key).map(|v| ui.label(format!("{}", v)));
-                        });
+                        let key = key.rfind(".").map_or_else(|| key.as_str(), |i| &key[(i+1)..]);
+                        data.get(key).map(|v| row.col(|ui| {ui.label(format!("{}", v));}))
+                            .or_else(|| {row.empty_col(); None});
                     }
                 });
 

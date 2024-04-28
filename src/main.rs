@@ -4,6 +4,7 @@
 
 mod table;
 mod panels;
+mod components;
 
 use std::{env, fs, io, mem};
 use std::collections::{BTreeSet, HashSet};
