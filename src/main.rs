@@ -7,8 +7,9 @@ mod panels;
 mod components;
 
 use std::{env, fs, io, mem};
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 use std::path::Path;
 use eframe::egui;
 use eframe::Theme::Light;
@@ -42,24 +43,6 @@ struct Pos<T> {
     y: T,
 }
 
-// fn main() {
-//     let args: Vec<_> = env::args().collect();
-//     if args.len() < 2 {
-//         println!("Please provide file to open as 1st program argument");
-//     } else {
-//         println!("Opening {}", args[1].as_str());
-//     }
-//
-//     let content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
-//     let mut unique_keys: HashSet<String> = HashSet::new();
-//     let v: Value = serde_json::from_str(&content).unwrap();
-//     let max_depth = 2;
-//     let mut depth = 0;
-//     print_key(&v, &mut unique_keys, depth, max_depth);
-//     for k in unique_keys {
-//         println!("{}", k);
-//     }
-// }
 
 fn main() {
     let options = eframe::NativeOptions {
@@ -81,6 +64,34 @@ struct MyApp {
     depth: u8,
 }
 
+#[derive(Clone, Debug)]
+pub struct Column {
+    name: String,
+    depth: u8,
+    has_child: bool
+}
+
+impl Eq for Column {}
+
+impl PartialEq<Self> for Column {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
+}
+
+impl PartialOrd<Self> for Column {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.name.cmp(&other.name))
+    }
+}
+
+impl Ord for Column {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+
 impl MyApp {
     fn new() -> Self {
         let args: Vec<_> = env::args().collect();
@@ -91,16 +102,21 @@ impl MyApp {
         }
 
         let content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
-        let mut unique_keys: BTreeSet<String> = BTreeSet::new();
+        let mut all_columns: Vec<Column> = Vec::new();
         let mut v: Value = serde_json::from_str(&content).unwrap();
         let mut max_depth = 0;
-        let depth = 0;
-        collect_keys(&v, &mut unique_keys, "", depth, &mut max_depth);
+        let depth = 1;
+        let mut count = 0usize;
 
-        let root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
-        let all_columns = unique_keys.into_iter().collect();
+        let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
+        for node in root_node.as_array().unwrap().iter() {
+            collect_keys(&node, &mut all_columns, "", depth, &mut max_depth, &mut count);
+        }
+
+        all_columns.sort();
+        // println!("{:?}", all_columns);
         Self {
-            table: Table::new(all_columns, root_node, 1),
+            table: Table::new(all_columns, mem::take(root_node.as_array_mut().unwrap()), 1),
             windows: vec![
                 Box::new(SelectColumnsPanel::default())
             ],
@@ -140,7 +156,8 @@ impl eframe::App for MyApp {
                 egui::Slider::new(&mut self.depth, 1..=self.max_depth).text("Depth"),
             );
             if slider_response.changed() {
-                self.table.update_selected_columns(self.depth)
+                self.table.update_selected_columns(self.depth);
+                self.table.update_max_depth(self.depth);
             }
         });
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -149,28 +166,28 @@ impl eframe::App for MyApp {
     }
 }
 
-fn collect_keys(v: &Value, unique_keys: &mut BTreeSet<String>, parent: &str, depth: i32, max_depth: &mut i32) {
+fn collect_keys(node: &Value, unique_keys: &mut Vec<Column>, parent: &str, depth: i32, max_depth: &mut i32, count: &mut usize) {
     if *max_depth < depth {
         *max_depth = depth;
     }
-    if v.is_array() {
-        if let Some(array) = v.as_array() {
-            for v in array.iter() {
-                collect_keys(v, unique_keys, parent, depth + 1, max_depth);
+    if let Some(object) = node.as_object() {
+        for (k, v) in object.iter() {
+            let key = if parent.is_empty() {
+                k.to_string()
+            } else {
+                format!("{}.{}", parent, k)
+            };
+            let column = Column {
+                name: key.to_string(),
+                depth: depth as u8,
+                has_child: v.is_object(),
+            };
+            if !unique_keys.contains(&column) {
+                *count += 1;
+                unique_keys.push(column);
             }
+            collect_keys(v, unique_keys, key.as_str(), depth + 1, max_depth, count);
         }
-    } else if v.is_object() {
-        if let Some(object) = v.as_object() {
-            for (k, v) in object.iter() {
-                let key = if parent.is_empty() {
-                    k.to_string()
-                } else {
-                    format!("{}.{}", parent, k)
-                };
-                unique_keys.insert(key.to_string());
-                collect_keys(v, unique_keys, key.as_str(), depth + 1, max_depth);
-            }
-        }
-    } else {}
+    }
 }
 
