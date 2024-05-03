@@ -1,13 +1,16 @@
+use std::collections::HashMap;
 use egui::Ui;
 use serde_json::Value;
-use crate::Column;
 use crate::components::table::TableBuilder;
+use crate::flatten;
+use crate::flatten::{Column, flatten, PointerKey, ValueType};
 
 pub struct Table {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
     max_depth: usize,
     nodes: Vec<Value>,
+    pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
 }
 
 impl super::View for Table {
@@ -26,21 +29,29 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(all_columns: Vec<Column>, nodes: Vec<Value>, depth: u8) -> Self {
+    pub fn new(nodes: Vec<Value>, depth: u8) -> Self {
+        let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth);
+        all_columns.sort();
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
+            flatten_nodes,
             max_depth: depth as usize,
             nodes,
         }
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) {
+        let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth);
+        all_columns.sort();
+        self.all_columns = all_columns;
+        self.flatten_nodes = flatten_nodes;
         let column_selected = Self::selected_columns(&self.all_columns, depth);
         self.column_selected = column_selected;
     }
     pub fn update_max_depth(&mut self, depth: u8) {
         self.max_depth = depth as usize;
+        self.update_selected_columns(depth);
     }
 
     fn selected_columns(all_columns: &Vec<Column>, depth: u8) -> Vec<Column> {
@@ -70,10 +81,10 @@ impl Table {
             .size
             .max(ui.spacing().interact_size.y);
 
-        Self::draw_table(ui, text_height, &self.column_selected, &self.nodes, self.max_depth);
+        Self::draw_table(ui, text_height, &self.column_selected, &self.flatten_nodes, self.max_depth);
     }
 
-    fn draw_table(ui: &mut Ui, text_height: f32, columns: &Vec<Column>, nodes: &Vec<Value>, max_depth: usize) {
+    fn draw_table(ui: &mut Ui, text_height: f32, columns: &Vec<Column>, nodes: &Vec<Vec<(PointerKey, Option<String>)>>, max_depth: usize) {
         use crate::components::table::{Column, TableBuilder};
         let mut table = TableBuilder::new(ui)
             .striped(true)
@@ -92,50 +103,69 @@ impl Table {
             })
             .body(|mut body| {
                 body.rows(text_height, nodes.len(), |mut row| {
-                    let data = nodes[row.index()].as_object().unwrap();
-                    let depth = 1;
+                    let node = nodes.get(row.index());
+                    let data = node.as_ref().unwrap();
                     for column in columns.iter() {
                         let key = &column.name;
-                        if column.depth == 1 {
-                            if let Some(column_data) = data.get(key) {
-                                if column_data.is_array() {
-                                    row.col(|ui| { ui.label(format!("{}", column_data)); });
-                                } else if column_data.is_object() {
-                                    if depth == max_depth {
-                                        row.col(|ui| { ui.label(format!("{}", column_data)); });
-                                    }
+                        let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
+                        if let Some((pointer, value)) = data {
+                            if key.eq("id") {
+                                println!("{} -> {:?}", pointer.pointer, value);
+                            }
+                            if let Some(value) = value.as_ref() {
+                                if matches!(pointer.value_type, ValueType::Null) {
+                                    row.empty_col();
                                 } else {
-                                    row.col(|ui| { ui.label(format!("{}", column_data)); });
+                                    row.col(|ui| { ui.label(value); });
                                 }
                             } else {
                                 row.empty_col();
                             }
-                        } else if column.depth == 2 {
-                            println!("depth == 2, {} - {}", column.name, key);
-                            let parent = key.find(".").map_or_else(|| key.as_str(), |i| &key[0..i]);
-                            println!("{}", parent);
-                            if let Some(data) = data.get(parent) {
-                                let key = column.name.replace(&format!("{}.", parent), "");
-                                println!("{}", key);
-                                if let Some(column_data) = data.get(key) {
-                                    if column_data.is_array() {
-                                        row.col(|ui| { ui.label(format!("{}", column_data)); });
-                                    } else if column_data.is_object() {
-                                        if depth == max_depth {
-                                            row.col(|ui| { ui.label(format!("{}", column_data)); });
-                                        }
-                                    } else {
-                                        row.col(|ui| { ui.label(format!("{}", column_data)); });
-                                    }
-                                } else {
-                                    row.empty_col();
-                                }
-                            }
-                            row.empty_col();
                         } else {
                             row.empty_col();
                         }
                     }
+                    //
+                    //     if column.depth == 1 {
+                    //         if let Some(column_data) = data.get(key) {
+                    //             if column_data.is_array() {
+                    //                 row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //             } else if column_data.is_object() {
+                    //                 if depth == max_depth {
+                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //                 }
+                    //             } else {
+                    //                 row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //             }
+                    //         } else {
+                    //             row.empty_col();
+                    //         }
+                    //     } else if column.depth == 2 {
+                    //         println!("depth == 2, {} - {}", column.name, key);
+                    //         let parent = key.find(".").map_or_else(|| key.as_str(), |i| &key[0..i]);
+                    //         println!("{}", parent);
+                    //         if let Some(data) = data.get(parent) {
+                    //             let key = column.name.replace(&format!("{}.", parent), "");
+                    //             println!("{}", key);
+                    //             if let Some(column_data) = data.get(key) {
+                    //                 if column_data.is_array() {
+                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //                 } else if column_data.is_object() {
+                    //                     if depth == max_depth {
+                    //                         row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //                     }
+                    //                 } else {
+                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
+                    //                 }
+                    //             } else {
+                    //                 row.empty_col();
+                    //             }
+                    //         }
+                    //         row.empty_col();
+                    //     } else {
+                    //         row.empty_col();
+                    //     }
+                    // }
                 });
             });
     }
