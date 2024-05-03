@@ -92,7 +92,7 @@ impl Table {
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0);
 
-        table = table.columns(Column::auto(), columns.len());
+        table = table.columns(Column::initial(100.0).clip(true).resizable(true), columns.len());
         table
             .header(text_height, |mut header| {
                 for column in columns.iter() {
