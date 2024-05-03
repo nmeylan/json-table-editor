@@ -79,14 +79,28 @@ impl Ord for Column {
     }
 }
 
-pub fn flatten(values: &Vec<Value>, max_depth: u8) -> (Vec<Vec<(PointerKey, Option<String>)>>, Vec<Column>) {
+pub fn flatten(values: &Vec<Value>, max_depth: u8, non_null_columns: &Vec<String>) -> (Vec<Vec<(PointerKey, Option<String>)>>, Vec<Column>) {
     let mut rows = Vec::with_capacity(values.len());
     let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
     for value in values {
         let mut columns: Vec<(PointerKey, Option<String>)> =  Vec::with_capacity(100);
         let mut pointer_fragment: Vec<String> = Vec::with_capacity(max_depth as usize);
         process(value, &mut unique_keys, &mut pointer_fragment, &mut columns, 0, max_depth as i32);
-        rows.push(columns);
+        let mut should_add_row = true;
+        for non_null_column in non_null_columns {
+            if let Some((_, value)) = columns.iter().find(|(p, _)| p.pointer.eq(non_null_column)) {
+                if value.is_none() {
+                    should_add_row = false;
+                    break;
+                }
+            } else {
+                should_add_row = false;
+                break;
+            }
+        }
+        if should_add_row {
+            rows.push(columns);
+        }
     }
     (rows, unique_keys)
 }
@@ -94,12 +108,14 @@ pub fn flatten(values: &Vec<Value>, max_depth: u8) -> (Vec<Vec<(PointerKey, Opti
 pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut PointerFragment, target: &mut ValueMap, depth: i32, max_depth: i32) {
     let pointer = route.concat();
 
-    let column = Column {
-        name: pointer.clone(),
-        depth: depth as u8,
-    };
-    if !unique_keys.contains(&column) {
-        unique_keys.push(column);
+    if !pointer.is_empty() {
+        let column = Column {
+            name: pointer.clone(),
+            depth: depth as u8,
+        };
+        if !unique_keys.contains(&column) {
+            unique_keys.push(column);
+        }
     }
     match value {
         Value::Null => {

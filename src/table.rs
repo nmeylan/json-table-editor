@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use egui::Ui;
+use egui::{Align, Sense, Ui};
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::flatten;
@@ -11,6 +11,8 @@ pub struct Table {
     max_depth: usize,
     nodes: Vec<Value>,
     pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
+    non_null_columns: Vec<String>,
+    pub next_frame_reset_scroll: bool,
 }
 
 impl super::View for Table {
@@ -30,7 +32,7 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(nodes: Vec<Value>, depth: u8) -> Self {
-        let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth);
+        let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth, &vec![]);
         all_columns.sort();
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
@@ -38,11 +40,14 @@ impl Table {
             flatten_nodes,
             max_depth: depth as usize,
             nodes,
+            non_null_columns: vec![],
+            // states
+            next_frame_reset_scroll: false,
         }
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) {
-        let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth);
+        let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth, &self.non_null_columns);
         all_columns.sort();
         self.all_columns = all_columns;
         self.flatten_nodes = flatten_nodes;
@@ -81,92 +86,78 @@ impl Table {
             .size
             .max(ui.spacing().interact_size.y);
 
-        Self::draw_table(ui, text_height, &self.column_selected, &self.flatten_nodes, self.max_depth);
+
+        self.draw_table(ui, text_height);
     }
 
-    fn draw_table(ui: &mut Ui, text_height: f32, columns: &Vec<Column>, nodes: &Vec<Vec<(PointerKey, Option<String>)>>, max_depth: usize) {
+    fn draw_table(&mut self, ui: &mut Ui, text_height: f32) {
         use crate::components::table::{Column, TableBuilder};
         let mut table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
+            .sense(Sense::hover())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0);
 
-        table = table.columns(Column::initial(100.0).clip(true).resizable(true), columns.len());
+        if self.next_frame_reset_scroll {
+            table = table.scroll_to_row(0, Some(Align::TOP));
+            self.next_frame_reset_scroll = false;
+        }
+        table = table.columns(Column::initial(100.0).clip(true).resizable(true), self.column_selected.len());
         table
             .header(text_height, |mut header| {
-                for column in columns.iter() {
-                    header.col(|ui| {
+                let mut clicked_column = None;
+                for column in self.column_selected.iter() {
+                    let (_, response) = header.col(|ui| {
+                        let mut chcked = self.non_null_columns.contains(&column.name);
+                        if ui.checkbox(&mut chcked, "").clicked() {
+                            clicked_column = Some(column.name.clone());
+                        }
                         ui.strong(&column.name);
                     });
                 }
+                if let Some(clicked_column) = clicked_column {
+                    self.on_non_null_column_click(clicked_column);
+                }
             })
             .body(|mut body| {
-                body.rows(text_height, nodes.len(), |mut row| {
-                    let node = nodes.get(row.index());
-                    let data = node.as_ref().unwrap();
-                    for column in columns.iter() {
-                        let key = &column.name;
-                        let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
-                        if let Some((pointer, value)) = data {
-                            if key.eq("id") {
-                                println!("{} -> {:?}", pointer.pointer, value);
-                            }
-                            if let Some(value) = value.as_ref() {
-                                if matches!(pointer.value_type, ValueType::Null) {
-                                    row.empty_col();
+                body.rows(text_height, self.flatten_nodes.len(), |mut row| {
+                    let node = self.flatten_nodes.get(row.index());
+                    if let Some(data) = node.as_ref() {
+                        for column in self.column_selected.iter() {
+                            let key = &column.name;
+                            let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
+                            if let Some((pointer, value)) = data {
+                                if let Some(value) = value.as_ref() {
+                                    if matches!(pointer.value_type, ValueType::Null) {
+                                        row.empty_col();
+                                    } else {
+                                        row.col(|ui| { ui.label(value); });
+                                    }
                                 } else {
-                                    row.col(|ui| { ui.label(value); });
+                                    row.empty_col();
                                 }
                             } else {
                                 row.empty_col();
                             }
-                        } else {
-                            row.empty_col();
                         }
                     }
-                    //
-                    //     if column.depth == 1 {
-                    //         if let Some(column_data) = data.get(key) {
-                    //             if column_data.is_array() {
-                    //                 row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //             } else if column_data.is_object() {
-                    //                 if depth == max_depth {
-                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //                 }
-                    //             } else {
-                    //                 row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //             }
-                    //         } else {
-                    //             row.empty_col();
-                    //         }
-                    //     } else if column.depth == 2 {
-                    //         println!("depth == 2, {} - {}", column.name, key);
-                    //         let parent = key.find(".").map_or_else(|| key.as_str(), |i| &key[0..i]);
-                    //         println!("{}", parent);
-                    //         if let Some(data) = data.get(parent) {
-                    //             let key = column.name.replace(&format!("{}.", parent), "");
-                    //             println!("{}", key);
-                    //             if let Some(column_data) = data.get(key) {
-                    //                 if column_data.is_array() {
-                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //                 } else if column_data.is_object() {
-                    //                     if depth == max_depth {
-                    //                         row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //                     }
-                    //                 } else {
-                    //                     row.col(|ui| { ui.label(format!("{}", column_data)); });
-                    //                 }
-                    //             } else {
-                    //                 row.empty_col();
-                    //             }
-                    //         }
-                    //         row.empty_col();
-                    //     } else {
-                    //         row.empty_col();
-                    //     }
-                    // }
                 });
             });
+    }
+
+    fn on_non_null_column_click(&mut self, column: String) {
+        if self.non_null_columns.is_empty() {
+            self.non_null_columns.push(column);
+        } else {
+            if self.non_null_columns.contains(&column) {
+                self.non_null_columns.retain(|c| !c.eq(&column));
+            } else {
+                self.non_null_columns.push(column);
+            }
+        }
+        let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
+        self.flatten_nodes = flatten_nodes;
+        self.next_frame_reset_scroll = true;
     }
 }
