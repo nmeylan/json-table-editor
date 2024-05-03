@@ -124,23 +124,25 @@ impl Table {
                 body.rows(text_height, self.flatten_nodes.len(), |mut row| {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
-                        for column in self.column_selected.iter() {
+                        row.cols(|(index)| {
+                            // println!("visible {}", self.column_selected[index].name);
+                            let column = self.column_selected.get(index).unwrap();
                             let key = &column.name;
                             let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
                                     if matches!(pointer.value_type, ValueType::Null) {
-                                        row.empty_col();
+                                        return None;
                                     } else {
-                                        row.col(|ui| { ui.label(value); });
+                                        return Some(value);
                                     }
                                 } else {
-                                    row.empty_col();
+                                    return None;
                                 }
                             } else {
-                                row.empty_col();
+                                return None;
                             }
-                        }
+                        });
                     }
                 });
             });

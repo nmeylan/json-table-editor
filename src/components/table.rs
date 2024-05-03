@@ -160,6 +160,7 @@ impl From<Vec<Size>> for Sizing {
 // | fixed size | all available space/minimum | 30% of available width | fixed size |
 // Takes all available height, so if you want something below the table, put it in a strip.
 
+use eframe::epaint::Color32;
 use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id};
 
 #[derive(Clone, Copy)]
@@ -346,7 +347,8 @@ impl<'l> StripLayout<'l> {
             self.ui.painter().rect_filled(
                 gapless_rect,
                 egui::Rounding::ZERO,
-                self.ui.visuals().faint_bg_color,
+                Color32::BLACK,
+                // self.ui.visuals().faint_bg_color,
             );
         }
 
@@ -368,7 +370,7 @@ impl<'l> StripLayout<'l> {
 
         self.set_pos(max_rect);
 
-        let allocation_rect =max_rect;
+        let allocation_rect = max_rect;
 
         self.ui.advance_cursor_after_rect(allocation_rect);
 
@@ -570,7 +572,6 @@ impl Column {
 }
 
 fn to_sizing(columns: &[Column]) -> Sizing {
-
     let mut sizing = Sizing::default();
     for column in columns {
         let size = match column.initial_width {
@@ -578,8 +579,8 @@ fn to_sizing(columns: &[Column]) -> Sizing {
             InitialColumnSize::Automatic(suggested_width) => Size::initial(suggested_width),
             InitialColumnSize::Remainder => Size::remainder(),
         }
-        .at_least(column.width_range.min)
-        .at_most(column.width_range.max);
+            .at_least(column.width_range.min)
+            .at_most(column.width_range.max);
         sizing.add(size);
     }
     sizing
@@ -824,12 +825,12 @@ impl<'a> TableBuilder<'a> {
     fn available_width(&self) -> f32 {
         self.ui.available_rect_before_wrap().width()
             - if self.scroll_options.vscroll {
-                self.ui.spacing().scroll.bar_inner_margin
-                    + self.ui.spacing().scroll.bar_width
-                    + self.ui.spacing().scroll.bar_outer_margin
-            } else {
-                0.0
-            }
+            self.ui.spacing().scroll.bar_inner_margin
+                + self.ui.spacing().scroll.bar_width
+                + self.ui.spacing().scroll.bar_outer_margin
+        } else {
+            0.0
+        }
     }
 
     /// Create a header row which always stays visible and at the top
@@ -867,9 +868,11 @@ impl<'a> TableBuilder<'a> {
                 layout: &mut layout,
                 columns: &columns,
                 widths: &state.column_widths,
+                visible_columns: &[],
                 max_used_widths: &mut max_used_widths,
                 row_index: 0,
                 col_index: 0,
+                start_x: 0.0,
                 height,
                 striped: false,
                 hovered: false,
@@ -898,8 +901,8 @@ impl<'a> TableBuilder<'a> {
 
     /// Create table body without a header row
     pub fn body<F>(self, add_body_contents: F)
-    where
-        F: for<'b> FnOnce(TableBody<'b>),
+        where
+            F: for<'b> FnOnce(TableBody<'b>),
     {
         let available_width = self.available_width();
 
@@ -941,7 +944,7 @@ impl<'a> TableBuilder<'a> {
             scroll_options,
             sense,
         }
-        .body(add_body_contents);
+            .body(add_body_contents);
     }
 }
 
@@ -1014,8 +1017,8 @@ impl<'a> Table<'a> {
 
     /// Create table body after adding a header row
     pub fn body<F>(self, add_body_contents: F)
-    where
-        F: for<'b> FnOnce(TableBody<'b>),
+        where
+            F: for<'b> FnOnce(TableBody<'b>),
     {
         let Table {
             ui,
@@ -1077,17 +1080,36 @@ impl<'a> Table<'a> {
 
                 let layout = StripLayout::new(ui, CellDirection::Horizontal, cell_layout, sense);
 
+                let mut x_offset = 0.0;
+                let end_x = clip_rect.right();
+                let start_x = clip_rect.left();
+                let scroll_offset_x = start_x - layout.rect.left();
+                let mut visibile_index = Vec::with_capacity(widths_ref.len());
+                for (index, width) in widths_ref.iter().enumerate() {
+                    if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
+                        visibile_index.push(index);
+                    } else if x_offset < scroll_offset_x && x_offset + width >= scroll_offset_x {
+                        println!("first col visibile part {}", x_offset + width - scroll_offset_x);
+                        visibile_index.push(index);
+                    }
+                    x_offset += width;
+                }
+
                 add_body_contents(TableBody {
                     layout,
                     columns: columns_ref,
                     widths: widths_ref,
+                    visible_columns: visibile_index.as_slice(),
                     max_used_widths: max_used_widths_ref,
                     striped,
                     row_index: 0,
                     start_y: clip_rect.top(),
+                    start_x: clip_rect.left(),
                     end_y: clip_rect.bottom(),
+                    end_x: clip_rect.right(),
                     scroll_to_row: scroll_to_row.map(|(r, _)| r),
                     scroll_to_y_range: &mut scroll_to_y_range,
+                    scroll_offset_x,
                     hovered_row_index,
                     hovered_row_index_id,
                 });
@@ -1215,6 +1237,7 @@ pub struct TableBody<'a> {
 
     /// Current column widths.
     widths: &'a [f32],
+    visible_columns: &'a [usize],
 
     /// Accumulated maximum used widths for each column.
     max_used_widths: &'a mut [f32],
@@ -1222,7 +1245,9 @@ pub struct TableBody<'a> {
     striped: bool,
     row_index: usize,
     start_y: f32,
+    start_x: f32,
     end_y: f32,
+    end_x: f32,
 
     /// Look for this row to scroll to.
     scroll_to_row: Option<usize>,
@@ -1235,6 +1260,7 @@ pub struct TableBody<'a> {
 
     /// Used to store the hovered row index between frames.
     hovered_row_index_id: egui::Id,
+    pub scroll_offset_x: f32,
 }
 
 impl<'a> TableBody<'a> {
@@ -1254,6 +1280,24 @@ impl<'a> TableBody<'a> {
 
     fn scroll_offset_y(&self) -> f32 {
         self.start_y - self.layout.rect.top()
+    }
+
+    pub fn scroll_offset_x(&self) -> f32 {
+        self.start_x - self.layout.rect.left()
+    }
+
+    pub fn visible_columns(&self) -> Vec<usize> {
+        let mut x_offset = 0.0;
+        let mut visibile_index = Vec::with_capacity(self.widths.len());
+        for (index, width) in self.widths.iter().enumerate() {
+            if x_offset + width >= self.scroll_offset_x() && x_offset <= self.end_x {
+                visibile_index.push(index);
+            } else if x_offset < self.scroll_offset_x() && x_offset + width >= self.scroll_offset_x() {
+                visibile_index.push(index);
+            }
+            x_offset += width;
+        }
+        visibile_index
     }
 
     /// Return a vector containing all column widths for this table body.
@@ -1276,7 +1320,9 @@ impl<'a> TableBody<'a> {
             layout: &mut self.layout,
             columns: self.columns,
             widths: self.widths,
+            visible_columns: self.visible_columns,
             max_used_widths: self.max_used_widths,
+            start_x: self.start_x,
             row_index: self.row_index,
             col_index: 0,
             height,
@@ -1357,9 +1403,11 @@ impl<'a> TableBody<'a> {
                 layout: &mut self.layout,
                 columns: self.columns,
                 widths: self.widths,
+                visible_columns: self.visible_columns,
                 max_used_widths: self.max_used_widths,
                 row_index,
                 col_index: 0,
+                start_x: self.start_x,
                 height: row_height_sans_spacing,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1405,7 +1453,7 @@ impl<'a> TableBody<'a> {
     /// ```
     pub fn heterogeneous_rows(
         mut self,
-        heights: impl Iterator<Item = f32>,
+        heights: impl Iterator<Item=f32>,
         mut add_row_content: impl FnMut(TableRow<'_, '_>),
     ) {
         let spacing = self.layout.ui.spacing().item_spacing;
@@ -1438,9 +1486,11 @@ impl<'a> TableBody<'a> {
                     layout: &mut self.layout,
                     columns: self.columns,
                     widths: self.widths,
+                    visible_columns: self.visible_columns,
                     max_used_widths: self.max_used_widths,
                     row_index,
                     col_index: 0,
+                    start_x: self.start_x,
                     height: row_height,
                     striped: self.striped && (row_index + self.row_index) % 2 == 0,
                     hovered: self.hovered_row_index == Some(row_index),
@@ -1460,9 +1510,11 @@ impl<'a> TableBody<'a> {
                 layout: &mut self.layout,
                 columns: self.columns,
                 widths: self.widths,
+                visible_columns: self.visible_columns,
                 max_used_widths: self.max_used_widths,
                 row_index,
                 col_index: 0,
+                start_x: self.start_x,
                 height: row_height,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1542,9 +1594,12 @@ pub struct TableRow<'a, 'b> {
     layout: &'b mut StripLayout<'a>,
     columns: &'b [Column],
     widths: &'b [f32],
+    visible_columns: &'b [usize],
 
     /// grows during building with the maximum widths
     max_used_widths: &'b mut [f32],
+
+    start_x: f32,
 
     row_index: usize,
     col_index: usize,
@@ -1608,9 +1663,81 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         (used_rect, response)
     }
-    pub fn empty_col(&mut self) -> Rect {
-        let col_index = self.col_index;
+    pub fn cols<'aa>(&mut self, add_cell_contents: impl Fn(usize) -> Option<&'aa String>) {
+        let scroll_x = self.start_x - self.layout.rect.left();
+        let mut width = -self.start_x;
+        let mut last_index_offset = 0;
+        for (index, w) in self.widths.iter().enumerate() {
+            if self.visible_columns.is_empty() || index == self.visible_columns[0] {
+                break;
+            }
+            width += w;
+        }
+        self.layout.add_empty(
+            StripLayoutFlags{
+                clip: false,
+                striped: false,
+                hovered: false,
+                selected: false,
+            },
+            CellSize::Absolute(width),
+            CellSize::Absolute(self.height),
+        );
 
+        for col_index in self.visible_columns {
+            let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
+            let width = if let Some(width) = self.widths.get(*col_index) {
+                *width
+            } else {
+                panic!(
+                    "Added more `Table` columns than were pre-allocated ({} pre-allocated)",
+                    self.widths.len()
+                );
+                8.0 // anything will look wrong, so pick something that is obviously wrong
+            };
+            let width = CellSize::Absolute(width);
+            let height = CellSize::Absolute(self.height);
+
+
+            let value = add_cell_contents(*col_index);
+
+            let flags = StripLayoutFlags {
+                clip,
+                striped: self.striped,
+                hovered: self.hovered,
+                selected: self.selected,
+            };
+
+            if let Some(value) = value {
+
+                let (used_rect, response) = self.layout.add(
+                    flags,
+                    width,
+                    height,
+                    egui::Id::new((self.row_index, *col_index)),
+                    |ui| { ui.label(value); },
+                );
+
+
+                if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {
+                    *max_w = max_w.max(used_rect.width());
+                }
+
+                *self.response = Some(
+                    self.response
+                        .as_ref()
+                        .map_or(response.clone(), |r| r.union(response.clone())),
+                );
+            } else {
+                let used_rect = self.layout.add_empty(
+                    flags,
+                    width,
+                    height,
+                );
+            }
+        }
+    }
+    pub fn empty_col(&mut self, col_index: usize) -> Rect {
         let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
 
         let width = if let Some(width) = self.widths.get(col_index) {
