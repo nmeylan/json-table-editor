@@ -95,7 +95,7 @@ impl Table {
         let mut table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
-            .sense(Sense::hover())
+            .sense(Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0);
 
@@ -113,7 +113,7 @@ impl Table {
                         if ui.checkbox(&mut chcked, "").clicked() {
                             clicked_column = Some(column.name.clone());
                         }
-                        ui.strong(&column.name);
+                        ui.strong(&column.name)
                     });
                 }
                 if let Some(clicked_column) = clicked_column {

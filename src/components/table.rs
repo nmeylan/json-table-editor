@@ -161,7 +161,7 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 use eframe::epaint::Color32;
-use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id};
+use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Label, Widget};
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -277,7 +277,7 @@ impl<'l> StripLayout<'l> {
         width: CellSize,
         height: CellSize,
         child_ui_id_source: Id,
-        add_cell_contents: impl FnOnce(&mut Ui),
+        add_cell_contents: Option<impl FnOnce(&mut Ui) -> Response>,
     ) -> (Rect, Response) {
         let max_rect = self.cell_rect(&width, &height);
 
@@ -309,7 +309,7 @@ impl<'l> StripLayout<'l> {
             );
         }
 
-        let child_ui = self.cell(flags, max_rect, child_ui_id_source, add_cell_contents);
+        let (child_ui, child_response) = self.cell(flags, max_rect, child_ui_id_source, add_cell_contents);
 
         let used_rect = child_ui.min_rect();
 
@@ -323,8 +323,11 @@ impl<'l> StripLayout<'l> {
 
         self.ui.advance_cursor_after_rect(allocation_rect);
 
-        let response = child_ui.interact(max_rect, child_ui.id(), self.sense);
+        let mut response = child_ui.interact(max_rect, child_ui.id(), self.sense);
 
+        if let Some(child_response) = child_response {
+            response = response.union(child_response);
+        }
         (used_rect, response)
     }
 
@@ -335,7 +338,7 @@ impl<'l> StripLayout<'l> {
         &mut self,
         width: CellSize,
         height: CellSize,
-        color: Color32
+        color: Color32,
     ) -> Rect {
         let max_rect = self.cell_rect(&width, &height);
 
@@ -347,7 +350,6 @@ impl<'l> StripLayout<'l> {
             gapless_rect,
             egui::Rounding::ZERO,
             color,
-            // self.ui.visuals().faint_bg_color,
         );
 
         self.set_pos(max_rect);
@@ -388,8 +390,8 @@ impl<'l> StripLayout<'l> {
         flags: StripLayoutFlags,
         rect: Rect,
         child_ui_id_source: egui::Id,
-        add_cell_contents: impl FnOnce(&mut Ui),
-    ) -> Ui {
+        add_cell_contents: Option<impl FnOnce(&mut Ui) -> Response>,
+    ) -> (Ui, Option<Response>) {
         let mut child_ui =
             self.ui
                 .child_ui_with_id_source(rect, self.cell_layout, child_ui_id_source);
@@ -406,9 +408,13 @@ impl<'l> StripLayout<'l> {
             child_ui.style_mut().visuals.override_text_color = Some(stroke_color);
         }
 
-        add_cell_contents(&mut child_ui);
-
-        child_ui
+        let response = if let Some(add_cell_contents) = add_cell_contents {
+            let response = add_cell_contents(&mut child_ui);
+            Some(response)
+        } else {
+            None
+        };
+        (child_ui, response)
     }
 
     /// Allocate the rect in [`Self::ui`] so that the scrollview knows about our size
@@ -855,7 +861,7 @@ impl<'a> TableBuilder<'a> {
                 row_index: 0,
                 col_index: 0,
                 start_x: 0.0,
-                first_col_visible_width: 0.0,
+                first_col_visible_offset: 0.0,
                 height,
                 striped: false,
                 hovered: false,
@@ -1068,7 +1074,7 @@ impl<'a> Table<'a> {
                 let start_x = clip_rect.left();
                 let scroll_offset_x = start_x - layout.rect.left();
                 let mut visible_index = Vec::with_capacity(widths_ref.len());
-                let mut first_col_visible_width = -layout.ui.spacing().item_spacing[0];
+                let mut first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
                 let mut first_visible_seen = false;
                 for (index, width) in widths_ref.iter().enumerate() {
                     if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
@@ -1076,7 +1082,7 @@ impl<'a> Table<'a> {
                         visible_index.push(index);
                     }
                     if !first_visible_seen {
-                        first_col_visible_width += width + layout.ui.spacing().item_spacing[0];
+                        first_col_visible_offset += width + layout.ui.spacing().item_spacing[0];
                     }
                     x_offset += width + layout.ui.spacing().item_spacing[0];
                 }
@@ -1096,7 +1102,7 @@ impl<'a> Table<'a> {
                     scroll_to_row: scroll_to_row.map(|(r, _)| r),
                     scroll_to_y_range: &mut scroll_to_y_range,
                     scroll_offset_x,
-                    first_col_visible_width,
+                    first_col_visible_width: first_col_visible_offset,
                     hovered_row_index,
                     hovered_row_index_id,
                 });
@@ -1297,7 +1303,7 @@ impl<'a> TableBody<'a> {
             visible_columns: self.visible_columns,
             max_used_widths: self.max_used_widths,
             start_x: self.start_x,
-            first_col_visible_width: self.first_col_visible_width,
+            first_col_visible_offset: self.first_col_visible_width,
             row_index: self.row_index,
             col_index: 0,
             height,
@@ -1383,7 +1389,7 @@ impl<'a> TableBody<'a> {
                 row_index,
                 col_index: 0,
                 start_x: self.start_x,
-                first_col_visible_width: self.first_col_visible_width,
+                first_col_visible_offset: self.first_col_visible_width,
                 height: row_height_sans_spacing,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1467,7 +1473,7 @@ impl<'a> TableBody<'a> {
                     row_index,
                     col_index: 0,
                     start_x: self.start_x,
-                    first_col_visible_width: self.first_col_visible_width,
+                    first_col_visible_offset: self.first_col_visible_width,
                     height: row_height,
                     striped: self.striped && (row_index + self.row_index) % 2 == 0,
                     hovered: self.hovered_row_index == Some(row_index),
@@ -1492,7 +1498,7 @@ impl<'a> TableBody<'a> {
                 row_index,
                 col_index: 0,
                 start_x: self.start_x,
-                first_col_visible_width: self.first_col_visible_width,
+                first_col_visible_offset: self.first_col_visible_width,
                 height: row_height,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1578,7 +1584,7 @@ pub struct TableRow<'a, 'b> {
     max_used_widths: &'b mut [f32],
 
     start_x: f32,
-    first_col_visible_width: f32,
+    first_col_visible_offset: f32,
 
     row_index: usize,
     col_index: usize,
@@ -1596,7 +1602,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
     ///
     /// Returns the used space (`min_rect`) plus the [`Response`] of the whole cell.
     #[cfg_attr(debug_assertions, track_caller)]
-    pub fn col(&mut self, add_cell_contents: impl FnOnce(&mut Ui)) -> (Rect, Response) {
+    pub fn col(&mut self, add_cell_contents: impl FnOnce(&mut Ui) -> Response) -> (Rect, Response) {
         let col_index = self.col_index;
 
         let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
@@ -1627,7 +1633,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             width,
             height,
             egui::Id::new((self.row_index, col_index)),
-            add_cell_contents,
+            Some(add_cell_contents),
         );
 
         if let Some(max_w) = self.max_used_widths.get_mut(col_index) {
@@ -1643,14 +1649,12 @@ impl<'a, 'b> TableRow<'a, 'b> {
         (used_rect, response)
     }
     pub fn cols<'aa>(&mut self, add_cell_contents: impl Fn(usize) -> Option<&'aa String>) {
-        let scroll_x = self.start_x - self.layout.rect.left();
-        println!("{}", self.first_col_visible_width);
-        let mut width = self.first_col_visible_width;
+        let width = self.first_col_visible_offset;
 
         self.layout.add_empty(
             CellSize::Absolute(width),
             CellSize::Absolute(self.height),
-            Color32::GOLD
+            Color32::GOLD,
         );
 
         for col_index in self.visible_columns {
@@ -1676,70 +1680,34 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 selected: self.selected,
             };
 
-            if let Some(value) = value {
-
-                let (used_rect, response) = self.layout.add(
+            let (used_rect, response) =  if let Some(value) = value {
+                self.layout.add(
                     flags,
                     width,
                     height,
                     egui::Id::new((self.row_index, *col_index)),
-                    |ui| { ui.label(value); },
-                );
-
-
-                if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {
-                    *max_w = max_w.max(used_rect.width());
-                }
-
-                *self.response = Some(
-                    self.response
-                        .as_ref()
-                        .map_or(response.clone(), |r| r.union(response.clone())),
-                );
+                    Some(|ui: &mut Ui| { Label::new(value).sense(Sense::click()).ui(ui) }),
+                )
             } else {
-                let used_rect = self.layout.add_empty(
+                self.layout.add(
+                    flags,
                     width,
                     height,
-                    if col_index % 2 == 0 {Color32::BLUE} else {Color32::GREEN}
-                );
+                    egui::Id::new((self.row_index, *col_index)),
+                    None::<Box<dyn FnOnce(&mut Ui) -> Response>>,
+                )
+            };
+
+            if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {
+                *max_w = max_w.max(used_rect.width());
             }
-        }
-    }
-    pub fn empty_col(&mut self, col_index: usize) -> Rect {
-        let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
 
-        let width = if let Some(width) = self.widths.get(col_index) {
-            self.col_index += 1;
-            *width
-        } else {
-            panic!(
-                "Added more `Table` columns than were pre-allocated ({} pre-allocated)",
-                self.widths.len()
+            *self.response = Some(
+                self.response
+                    .as_ref()
+                    .map_or(response.clone(), |r| r.union(response.clone())),
             );
-            8.0 // anything will look wrong, so pick something that is obviously wrong
-        };
-
-        let width = CellSize::Absolute(width);
-        let height = CellSize::Absolute(self.height);
-
-        let flags = StripLayoutFlags {
-            clip,
-            striped: self.striped,
-            hovered: self.hovered,
-            selected: self.selected,
-        };
-
-        let used_rect = self.layout.add_empty(
-            width,
-            height,
-            Color32::BROWN
-        );
-
-        if let Some(max_w) = self.max_used_widths.get_mut(col_index) {
-            *max_w = max_w.max(used_rect.width());
         }
-
-        used_rect
     }
 
     /// Set the selection highlight state for cells added after a call to this function.
