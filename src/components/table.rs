@@ -333,9 +333,9 @@ impl<'l> StripLayout<'l> {
     /// Return the used space (`min_rect`) plus the [`Response`] of the whole cell.
     pub(crate) fn add_empty(
         &mut self,
-        flags: StripLayoutFlags,
         width: CellSize,
         height: CellSize,
+        color: Color32
     ) -> Rect {
         let max_rect = self.cell_rect(&width, &height);
 
@@ -343,30 +343,12 @@ impl<'l> StripLayout<'l> {
         let item_spacing = self.ui.spacing().item_spacing;
         let gapless_rect = max_rect.expand2(0.5 * item_spacing);
 
-        if flags.striped {
-            self.ui.painter().rect_filled(
-                gapless_rect,
-                egui::Rounding::ZERO,
-                Color32::BLACK,
-                // self.ui.visuals().faint_bg_color,
-            );
-        }
-
-        if flags.selected {
-            self.ui.painter().rect_filled(
-                gapless_rect,
-                egui::Rounding::ZERO,
-                self.ui.visuals().selection.bg_fill,
-            );
-        }
-
-        if flags.hovered && !flags.selected && self.sense.interactive() {
-            self.ui.painter().rect_filled(
-                gapless_rect,
-                egui::Rounding::ZERO,
-                self.ui.visuals().widgets.hovered.bg_fill,
-            );
-        }
+        self.ui.painter().rect_filled(
+            gapless_rect,
+            egui::Rounding::ZERO,
+            color,
+            // self.ui.visuals().faint_bg_color,
+        );
 
         self.set_pos(max_rect);
 
@@ -873,6 +855,7 @@ impl<'a> TableBuilder<'a> {
                 row_index: 0,
                 col_index: 0,
                 start_x: 0.0,
+                first_col_visible_width: 0.0,
                 height,
                 striped: false,
                 hovered: false,
@@ -1084,22 +1067,25 @@ impl<'a> Table<'a> {
                 let end_x = clip_rect.right();
                 let start_x = clip_rect.left();
                 let scroll_offset_x = start_x - layout.rect.left();
-                let mut visibile_index = Vec::with_capacity(widths_ref.len());
+                let mut visible_index = Vec::with_capacity(widths_ref.len());
+                let mut first_col_visible_width = -layout.ui.spacing().item_spacing[0];
+                let mut first_visible_seen = false;
                 for (index, width) in widths_ref.iter().enumerate() {
                     if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
-                        visibile_index.push(index);
-                    } else if x_offset < scroll_offset_x && x_offset + width >= scroll_offset_x {
-                        println!("first col visibile part {}", x_offset + width - scroll_offset_x);
-                        visibile_index.push(index);
+                        first_visible_seen = true;
+                        visible_index.push(index);
                     }
-                    x_offset += width;
+                    if !first_visible_seen {
+                        first_col_visible_width += width + layout.ui.spacing().item_spacing[0];
+                    }
+                    x_offset += width + layout.ui.spacing().item_spacing[0];
                 }
 
                 add_body_contents(TableBody {
                     layout,
                     columns: columns_ref,
                     widths: widths_ref,
-                    visible_columns: visibile_index.as_slice(),
+                    visible_columns: visible_index.as_slice(),
                     max_used_widths: max_used_widths_ref,
                     striped,
                     row_index: 0,
@@ -1110,6 +1096,7 @@ impl<'a> Table<'a> {
                     scroll_to_row: scroll_to_row.map(|(r, _)| r),
                     scroll_to_y_range: &mut scroll_to_y_range,
                     scroll_offset_x,
+                    first_col_visible_width,
                     hovered_row_index,
                     hovered_row_index_id,
                 });
@@ -1261,6 +1248,7 @@ pub struct TableBody<'a> {
     /// Used to store the hovered row index between frames.
     hovered_row_index_id: egui::Id,
     pub scroll_offset_x: f32,
+    pub first_col_visible_width: f32,
 }
 
 impl<'a> TableBody<'a> {
@@ -1286,20 +1274,6 @@ impl<'a> TableBody<'a> {
         self.start_x - self.layout.rect.left()
     }
 
-    pub fn visible_columns(&self) -> Vec<usize> {
-        let mut x_offset = 0.0;
-        let mut visibile_index = Vec::with_capacity(self.widths.len());
-        for (index, width) in self.widths.iter().enumerate() {
-            if x_offset + width >= self.scroll_offset_x() && x_offset <= self.end_x {
-                visibile_index.push(index);
-            } else if x_offset < self.scroll_offset_x() && x_offset + width >= self.scroll_offset_x() {
-                visibile_index.push(index);
-            }
-            x_offset += width;
-        }
-        visibile_index
-    }
-
     /// Return a vector containing all column widths for this table body.
     ///
     /// This is primarily meant for use with [`TableBody::heterogeneous_rows`] in cases where row
@@ -1323,6 +1297,7 @@ impl<'a> TableBody<'a> {
             visible_columns: self.visible_columns,
             max_used_widths: self.max_used_widths,
             start_x: self.start_x,
+            first_col_visible_width: self.first_col_visible_width,
             row_index: self.row_index,
             col_index: 0,
             height,
@@ -1408,6 +1383,7 @@ impl<'a> TableBody<'a> {
                 row_index,
                 col_index: 0,
                 start_x: self.start_x,
+                first_col_visible_width: self.first_col_visible_width,
                 height: row_height_sans_spacing,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1491,6 +1467,7 @@ impl<'a> TableBody<'a> {
                     row_index,
                     col_index: 0,
                     start_x: self.start_x,
+                    first_col_visible_width: self.first_col_visible_width,
                     height: row_height,
                     striped: self.striped && (row_index + self.row_index) % 2 == 0,
                     hovered: self.hovered_row_index == Some(row_index),
@@ -1515,6 +1492,7 @@ impl<'a> TableBody<'a> {
                 row_index,
                 col_index: 0,
                 start_x: self.start_x,
+                first_col_visible_width: self.first_col_visible_width,
                 height: row_height,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
@@ -1600,6 +1578,7 @@ pub struct TableRow<'a, 'b> {
     max_used_widths: &'b mut [f32],
 
     start_x: f32,
+    first_col_visible_width: f32,
 
     row_index: usize,
     col_index: usize,
@@ -1665,23 +1644,13 @@ impl<'a, 'b> TableRow<'a, 'b> {
     }
     pub fn cols<'aa>(&mut self, add_cell_contents: impl Fn(usize) -> Option<&'aa String>) {
         let scroll_x = self.start_x - self.layout.rect.left();
-        let mut width = -self.start_x;
-        let mut last_index_offset = 0;
-        for (index, w) in self.widths.iter().enumerate() {
-            if self.visible_columns.is_empty() || index == self.visible_columns[0] {
-                break;
-            }
-            width += w;
-        }
+        println!("{}", self.first_col_visible_width);
+        let mut width = self.first_col_visible_width;
+
         self.layout.add_empty(
-            StripLayoutFlags{
-                clip: false,
-                striped: false,
-                hovered: false,
-                selected: false,
-            },
             CellSize::Absolute(width),
             CellSize::Absolute(self.height),
+            Color32::GOLD
         );
 
         for col_index in self.visible_columns {
@@ -1693,7 +1662,6 @@ impl<'a, 'b> TableRow<'a, 'b> {
                     "Added more `Table` columns than were pre-allocated ({} pre-allocated)",
                     self.widths.len()
                 );
-                8.0 // anything will look wrong, so pick something that is obviously wrong
             };
             let width = CellSize::Absolute(width);
             let height = CellSize::Absolute(self.height);
@@ -1730,9 +1698,9 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 );
             } else {
                 let used_rect = self.layout.add_empty(
-                    flags,
                     width,
                     height,
+                    if col_index % 2 == 0 {Color32::BLUE} else {Color32::GREEN}
                 );
             }
         }
@@ -1762,9 +1730,9 @@ impl<'a, 'b> TableRow<'a, 'b> {
         };
 
         let used_rect = self.layout.add_empty(
-            flags,
             width,
             height,
+            Color32::BROWN
         );
 
         if let Some(max_w) = self.max_used_widths.get_mut(col_index) {
