@@ -1,4 +1,6 @@
-use egui::{Align, Sense, Ui};
+use std::cell::RefCell;
+use std::rc::Rc;
+use egui::{Align, Label, Sense, Ui, Widget, WidgetText};
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::flatten;
@@ -105,49 +107,62 @@ impl Table {
         table = table.columns(Column::initial(150.0).clip(true).resizable(true), self.column_selected.len());
         table
             .header(text_height * 2.0, |mut header| {
-                let mut clicked_column = None;
-                let mut pinned_column = false;
-                for column in self.column_selected.iter_mut() {
-                    header.col(|ui| {
+                let clicked_column: RefCell<Option<String>> = RefCell::new(None);
+                let mut pinned_column:  RefCell<Option<usize>> = RefCell::new(None);
+                let mut i:  RefCell<usize> = RefCell::new(0);
+                header.cols(true, |index| {
+                    let mut column = self.column_selected.get(index).unwrap();
+                    let name = column.name.clone();
+                    let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
+                    let label = Label::new(&name);
+                    *i.borrow_mut() = index;
+                    Some(Box::new(|ui: &mut Ui| {
+                        let mut chcked = self.non_null_columns.contains(&column.name);
                         let response = ui.vertical(|ui| {
-                            let response = ui.strong(&column.name).on_hover_ui(|ui| { ui.label(&column.name); });
+                            let response = ui.add(strong).on_hover_ui(|ui| { ui.add(label); });
 
                             ui.horizontal(|ui| {
-                                let mut chcked = self.non_null_columns.contains(&column.name);
                                 let button = egui::Button::new("📌").frame(false);
                                 if ui.add(button).clicked() {
                                     println!("pinning");
-                                    column.pin(true);
-                                    pinned_column = true;
+                                    *pinned_column.borrow_mut() = Some(*i.borrow());
                                 }
                                 if ui.checkbox(&mut chcked, "").clicked() {
-                                    clicked_column = Some(column.name.clone());
+                                    *clicked_column.borrow_mut() = Some(name);
                                 }
                             });
                             response
                         });
                         response.inner
-                    });
-                }
-                if pinned_column {
+                    }))
+                });
+
+                let pinned_column = pinned_column.borrow();
+                if let Some(pinned_column) = pinned_column.as_ref() {
+                    let mut column = self.column_selected.get_mut(*pinned_column).unwrap();
+                    column.pin(true);
                     self.column_selected.sort();
                 }
-                if let Some(clicked_column) = clicked_column {
-                    self.on_non_null_column_click(clicked_column);
+                let clicked_column = clicked_column.borrow();
+                if let Some(clicked_column) = clicked_column.as_ref() {
+                    self.on_non_null_column_click(clicked_column.clone());
                 }
             })
             .body(|mut body| {
                 body.rows(text_height, self.flatten_nodes.len(), |mut row| {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
-                        row.cols(|(index)| {
+                        row.cols(false, |(index)| {
                             let column = self.column_selected.get(index).unwrap();
                             let key = &column.name;
                             let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
-                                        return Some(value);
+                                        let label = Label::new(value).sense(Sense::click());
+                                        return Some(Box::new(|ui| {
+                                            label.ui(ui)
+                                        }));
                                     }
                                 }
                             }

@@ -847,21 +847,51 @@ impl<'a> TableBuilder<'a> {
         let first_frame_auto_size_columns = is_first_frame && columns.iter().any(|c| c.is_auto());
 
         let table_top = ui.cursor().top();
+        let clip_rect = ui.clip_rect();
 
+        let mut x_offset = 0.0;
         // Hide first-frame-jitters when auto-sizing.
         ui.add_visible_ui(!first_frame_auto_size_columns, |ui| {
             let mut layout = StripLayout::new(ui, CellDirection::Horizontal, cell_layout, sense);
             let mut response: Option<Response> = None;
+
+            let end_x = clip_rect.right();
+            let start_x = clip_rect.left();
+            let scroll_offset_x = start_x - layout.rect.left();
+            let mut visible_index = Vec::with_capacity(state.column_widths.len());
+            let mut first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
+            let mut first_visible_seen = false;
+            let mut last_visible_seen = false;
+            let mut remainder_with = 0.0;
+            for (index, width) in state.column_widths.iter().enumerate() {
+                if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
+                    first_visible_seen = true;
+                    visible_index.push(index);
+                } else {
+                    if first_visible_seen && !last_visible_seen {
+                        last_visible_seen = true;
+                    }
+                }
+                if !first_visible_seen {
+                    first_col_visible_offset += width + layout.ui.spacing().item_spacing[0];
+                }
+                x_offset += width + layout.ui.spacing().item_spacing[0];
+                if last_visible_seen {
+                    remainder_with += width + layout.ui.spacing().item_spacing[0];
+                }
+            }
+
             add_header_row(TableRow {
                 layout: &mut layout,
                 columns: &columns,
                 widths: &state.column_widths,
-                visible_columns: &[],
+                visible_columns: visible_index.as_slice(),
                 max_used_widths: &mut max_used_widths,
                 row_index: 0,
                 col_index: 0,
-                start_x: 0.0,
-                first_col_visible_offset: 0.0,
+                start_x: start_x,
+                first_col_visible_offset: first_col_visible_offset,
+                remainder_with,
                 height,
                 striped: false,
                 hovered: false,
@@ -1215,7 +1245,6 @@ impl<'a> Table<'a> {
 
             available_width -= *column_width + spacing_x;
         }
-
         state.store(ui, state_id);
     }
 }
@@ -1362,6 +1391,7 @@ impl<'a> TableBody<'a> {
                 hovered: self.hovered_row_index == Some(row_index),
                 selected: false,
                 response: &mut response,
+                remainder_with: 0.0,
             });
             self.capture_hover_state(&response, row_index);
         }
@@ -1446,6 +1476,7 @@ impl<'a> TableBody<'a> {
                     hovered: self.hovered_row_index == Some(row_index),
                     selected: false,
                     response: &mut response,
+                    remainder_with: 0.0,
                 });
                 self.capture_hover_state(&response, row_index);
                 break;
@@ -1471,6 +1502,7 @@ impl<'a> TableBody<'a> {
                 hovered: self.hovered_row_index == Some(row_index),
                 selected: false,
                 response: &mut response,
+                remainder_with: 0.0,
             });
             self.capture_hover_state(&response, row_index);
             cursor_y += (row_height + spacing.y) as f64;
@@ -1562,6 +1594,7 @@ pub struct TableRow<'a, 'b> {
     selected: bool,
 
     response: &'b mut Option<Response>,
+    pub remainder_with: f32,
 }
 
 impl<'a, 'b> TableRow<'a, 'b> {
@@ -1615,7 +1648,8 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         (used_rect, response)
     }
-    pub fn cols<'aa>(&mut self, add_cell_contents: impl Fn(usize) -> Option<&'aa String>) {
+    pub fn cols<'bb, F>(& mut self, is_header: bool, mut add_cell_contents: F)
+        where F: Fn(usize) -> Option<Box<dyn FnOnce(&mut Ui) -> Response + 'bb>>{
         let width = self.first_col_visible_offset;
 
         self.layout.add_empty(
@@ -1624,6 +1658,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             Color32::GOLD,
         );
 
+        let mut last_index = 0;
         for col_index in self.visible_columns {
             let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
             let width = if let Some(width) = self.widths.get(*col_index) {
@@ -1647,23 +1682,13 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 selected: self.selected,
             };
 
-            let (used_rect, response) =  if let Some(value) = value {
-                self.layout.add(
-                    flags,
-                    width,
-                    height,
-                    egui::Id::new((self.row_index, *col_index)),
-                    Some(|ui: &mut Ui| { Label::new(value).sense(Sense::click()).ui(ui) }),
-                )
-            } else {
-                self.layout.add(
-                    flags,
-                    width,
-                    height,
-                    egui::Id::new((self.row_index, *col_index)),
-                    None::<Box<dyn FnOnce(&mut Ui) -> Response>>,
-                )
-            };
+            let (used_rect, response) =  self.layout.add(
+                flags,
+                width,
+                height,
+                egui::Id::new((self.row_index, *col_index)),
+                value,
+            );
 
             if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {
                 *max_w = max_w.max(used_rect.width());
@@ -1673,6 +1698,14 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 self.response
                     .as_ref()
                     .map_or(response.clone(), |r| r.union(response.clone())),
+            );
+            last_index = *col_index;
+        }
+        if is_header && last_index < self.columns.len() - 1 {
+            self.layout.add_empty(
+                CellSize::Absolute(self.remainder_with),
+                CellSize::Absolute(self.height),
+                Color32::GOLD,
             );
         }
     }

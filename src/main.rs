@@ -2,6 +2,8 @@
 #![feature(trait_upcasting)]
 
 
+extern crate core;
+
 mod table;
 mod panels;
 mod components;
