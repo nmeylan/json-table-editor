@@ -1,9 +1,8 @@
-use std::collections::HashMap;
 use egui::{Align, Sense, Ui};
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::flatten;
-use crate::flatten::{Column, flatten, PointerKey, ValueType};
+use crate::flatten::{Column, PointerKey, ValueType};
 
 pub struct Table {
     all_columns: Vec<Column>,
@@ -103,18 +102,35 @@ impl Table {
             table = table.scroll_to_row(0, Some(Align::TOP));
             self.next_frame_reset_scroll = false;
         }
-        table = table.columns(Column::initial(100.0).clip(true).resizable(true), self.column_selected.len());
+        table = table.columns(Column::initial(150.0).clip(true).resizable(true), self.column_selected.len());
         table
-            .header(text_height, |mut header| {
+            .header(text_height * 2.0, |mut header| {
                 let mut clicked_column = None;
-                for column in self.column_selected.iter() {
-                    let (_, response) = header.col(|ui| {
-                        let mut chcked = self.non_null_columns.contains(&column.name);
-                        if ui.checkbox(&mut chcked, "").clicked() {
-                            clicked_column = Some(column.name.clone());
-                        }
-                        ui.strong(&column.name)
+                let mut pinned_column = false;
+                for column in self.column_selected.iter_mut() {
+                    header.col(|ui| {
+                        let response = ui.vertical(|ui| {
+                            let response = ui.strong(&column.name).on_hover_ui(|ui| { ui.label(&column.name); });
+
+                            ui.horizontal(|ui| {
+                                let mut chcked = self.non_null_columns.contains(&column.name);
+                                let button = egui::Button::new("📌").frame(false);
+                                if ui.add(button).clicked() {
+                                    println!("pinning");
+                                    column.pin(true);
+                                    pinned_column = true;
+                                }
+                                if ui.checkbox(&mut chcked, "").clicked() {
+                                    clicked_column = Some(column.name.clone());
+                                }
+                            });
+                            response
+                        });
+                        response.inner
                     });
+                }
+                if pinned_column {
+                    self.column_selected.sort();
                 }
                 if let Some(clicked_column) = clicked_column {
                     self.on_non_null_column_click(clicked_column);
@@ -125,23 +141,17 @@ impl Table {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
                         row.cols(|(index)| {
-                            // println!("visible {}", self.column_selected[index].name);
                             let column = self.column_selected.get(index).unwrap();
                             let key = &column.name;
                             let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
-                                    if matches!(pointer.value_type, ValueType::Null) {
-                                        return None;
-                                    } else {
+                                    if !matches!(pointer.value_type, ValueType::Null) {
                                         return Some(value);
                                     }
-                                } else {
-                                    return None;
                                 }
-                            } else {
-                                return None;
                             }
+                            None
                         });
                     }
                 });

@@ -1289,39 +1289,6 @@ impl<'a> TableBody<'a> {
         self.widths
     }
 
-    /// Add a single row with the given height.
-    ///
-    /// ⚠️ It is much more performant to use [`Self::rows`] or [`Self::heterogeneous_rows`],
-    /// as those functions will only render the visible rows.
-    pub fn row(&mut self, height: f32, add_row_content: impl FnOnce(TableRow<'a, '_>)) {
-        let mut response: Option<Response> = None;
-        let top_y = self.layout.cursor.y;
-        add_row_content(TableRow {
-            layout: &mut self.layout,
-            columns: self.columns,
-            widths: self.widths,
-            visible_columns: self.visible_columns,
-            max_used_widths: self.max_used_widths,
-            start_x: self.start_x,
-            first_col_visible_offset: self.first_col_visible_width,
-            row_index: self.row_index,
-            col_index: 0,
-            height,
-            striped: self.striped && self.row_index % 2 == 0,
-            hovered: self.hovered_row_index == Some(self.row_index),
-            selected: false,
-            response: &mut response,
-        });
-        self.capture_hover_state(&response, self.row_index);
-        let bottom_y = self.layout.cursor.y;
-
-        if Some(self.row_index) == self.scroll_to_row {
-            *self.scroll_to_y_range = Some(Rangef::new(top_y, bottom_y));
-        }
-
-        self.row_index += 1;
-    }
-
     /// Add many rows with same height.
     ///
     /// Is a lot more performant than adding each individual row as non visible rows must not be rendered.

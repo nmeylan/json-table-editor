@@ -57,6 +57,16 @@ pub enum ValueType {
 pub struct Column {
     pub(crate) name: String,
     pub(crate) depth: u8,
+    pinned: bool,
+}
+
+impl Column {
+    pub fn pinned(&self) -> bool {
+        self.pinned
+    }
+    pub fn pin(&mut self, pinned: bool) {
+        self.pinned = pinned;
+    }
 }
 
 impl Eq for Column {}
@@ -69,13 +79,14 @@ impl PartialEq<Self> for Column {
 
 impl PartialOrd<Self> for Column {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.name.cmp(&other.name))
+        Some(self.cmp(&other))
     }
 }
 
 impl Ord for Column {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        self.pinned.cmp(&other.pinned).reverse()
+            .then_with(|| self.name.cmp(&other.name))
     }
 }
 
@@ -112,6 +123,7 @@ pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut Pointer
         let column = Column {
             name: pointer.clone(),
             depth: depth as u8,
+            pinned: false,
         };
         if !unique_keys.contains(&column) {
             unique_keys.push(column);
