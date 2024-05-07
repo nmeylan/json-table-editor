@@ -162,6 +162,7 @@ impl From<Vec<Size>> for Sizing {
 
 use eframe::epaint::Color32;
 use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Label, Widget};
+use egui::scroll_area::ScrollAreaOutput;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -1035,7 +1036,7 @@ impl<'a> Table<'a> {
     }
 
     /// Create table body after adding a header row
-    pub fn body<F>(self, add_body_contents: F)
+    pub fn body<F>(self, add_body_contents: F) -> ScrollAreaOutput<()>
         where
             F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -1086,7 +1087,7 @@ impl<'a> Table<'a> {
         let widths_ref = &state.column_widths;
         let max_used_widths_ref = &mut max_used_widths;
 
-        scroll_area.show(ui, move |ui| {
+        let scroll_area_output = scroll_area.show(ui, move |ui| {
             let mut scroll_to_y_range = None;
 
             let clip_rect = ui.clip_rect();
@@ -1246,6 +1247,7 @@ impl<'a> Table<'a> {
             available_width -= *column_width + spacing_x;
         }
         state.store(ui, state_id);
+        scroll_area_output
     }
 }
 
@@ -1701,7 +1703,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             );
             last_index = *col_index;
         }
-        if is_header && last_index < self.columns.len() - 1 {
+        if self.columns.len() > 0 && is_header && last_index < self.columns.len() - 1 {
             self.layout.add_empty(
                 CellSize::Absolute(self.remainder_with),
                 CellSize::Absolute(self.height),

@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use egui::{Align, Label, Sense, Ui, Widget, WidgetText};
+use egui::{Align, Color32, Label, Sense, Ui, Widget, WidgetText};
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::flatten;
@@ -9,11 +9,14 @@ use crate::flatten::{Column, PointerKey, ValueType};
 pub struct Table {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
+    column_pinned: Vec<Column>,
     max_depth: usize,
     nodes: Vec<Value>,
+    scroll_y: f32,
     pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
     non_null_columns: Vec<String>,
     pub next_frame_reset_scroll: bool,
+    pub next_frame_sync_scroll: bool,
 }
 
 impl super::View for Table {
@@ -23,8 +26,19 @@ impl super::View for Table {
             .size(Size::remainder())
             .vertical(|mut strip| {
                 strip.cell(|ui| {
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        self.table_ui(ui);
+                    let parent_size_available = ui.available_rect_before_wrap().height();
+                    ui.horizontal(|ui| {
+                        ui.set_height(parent_size_available);
+                        ui.push_id("table-pinned-column", |ui| {
+                            ui.vertical(|ui| {
+                                self.table_ui(ui, true);
+                            })
+                        });
+                        ui.vertical(|ui| {
+                            egui::ScrollArea::horizontal().show(ui, |ui| {
+                                self.table_ui(ui, false);
+                            });
+                        });
                     });
                 });
             });
@@ -44,6 +58,9 @@ impl Table {
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
+            next_frame_sync_scroll: false,
+            column_pinned: vec![],
+            scroll_y: 0.0,
         }
     }
 
@@ -81,37 +98,42 @@ impl Table {
         all_columns.iter().filter(move |column: &&Column| column.depth <= depth)
     }
 
-    fn table_ui(&mut self, ui: &mut egui::Ui) {
+    fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) {
         let text_height = egui::TextStyle::Body
             .resolve(ui.style())
             .size
             .max(ui.spacing().interact_size.y);
 
 
-        self.draw_table(ui, text_height);
+        self.draw_table(ui, text_height, pinned);
     }
-
-    fn draw_table(&mut self, ui: &mut Ui, text_height: f32) {
+    fn draw_table(&mut self, ui: &mut Ui, text_height: f32, pinned_column_table: bool) {
         use crate::components::table::{Column, TableBuilder};
         let mut table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
             .sense(Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
-            .min_scrolled_height(0.0);
+            .min_scrolled_height(0.0)
+            ;
 
         if self.next_frame_reset_scroll {
             table = table.scroll_to_row(0, Some(Align::TOP));
             self.next_frame_reset_scroll = false;
         }
-        table = table.columns(Column::initial(150.0).clip(true).resizable(true), self.column_selected.len());
-        table
+        if pinned_column_table && self.next_frame_sync_scroll{
+            table = table.vertical_scroll_offset(self.scroll_y);
+            self.next_frame_sync_scroll = false;
+        }
+        table = table.columns(Column::initial(150.0).clip(true).resizable(true), if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() });
+        let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
-                let mut pinned_column:  RefCell<Option<usize>> = RefCell::new(None);
-                let mut i:  RefCell<usize> = RefCell::new(0);
+                let mut pinned_column: RefCell<Option<usize>> = RefCell::new(None);
+                let mut i: RefCell<usize> = RefCell::new(0);
                 header.cols(true, |index| {
-                    let mut column = self.column_selected.get(index).unwrap();
+                    let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
+                    let mut column = columns.get(index).unwrap();
                     let name = column.name.clone();
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
@@ -139,9 +161,8 @@ impl Table {
 
                 let pinned_column = pinned_column.borrow();
                 if let Some(pinned_column) = pinned_column.as_ref() {
-                    let mut column = self.column_selected.get_mut(*pinned_column).unwrap();
-                    column.pin(true);
-                    self.column_selected.sort();
+                    let column = self.column_selected.remove(*pinned_column);
+                    self.column_pinned.push(column);
                 }
                 let clicked_column = clicked_column.borrow();
                 if let Some(clicked_column) = clicked_column.as_ref() {
@@ -149,11 +170,12 @@ impl Table {
                 }
             })
             .body(|mut body| {
+                let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 body.rows(text_height, self.flatten_nodes.len(), |mut row| {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
                         row.cols(false, |(index)| {
-                            let column = self.column_selected.get(index).unwrap();
+                            let column = columns.get(index).unwrap();
                             let key = &column.name;
                             let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
                             if let Some((pointer, value)) = data {
@@ -171,6 +193,12 @@ impl Table {
                     }
                 });
             });
+        if !pinned_column_table {
+            if self.scroll_y != table_scroll_output.state.offset.y {
+                self.scroll_y = table_scroll_output.state.offset.y;
+                self.next_frame_sync_scroll = true;
+            }
+        }
     }
 
     fn on_non_null_column_click(&mut self, column: String) {
