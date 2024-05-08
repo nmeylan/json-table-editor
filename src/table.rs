@@ -124,10 +124,9 @@ impl Table {
             .size
             .max(ui.spacing().interact_size.y);
 
-
-        self.draw_table(ui, text_height, pinned);
+        self.draw_table(ui, text_height, 7.0, pinned);
     }
-    fn draw_table(&mut self, ui: &mut Ui, text_height: f32, pinned_column_table: bool) {
+    fn draw_table(&mut self, ui: &mut Ui, text_height: f32, text_width: f32, pinned_column_table: bool) {
         use crate::components::table::{Column, TableBuilder};
         let parent_height = ui.available_rect_before_wrap().height();
         let mut table = TableBuilder::new(ui)
@@ -146,7 +145,15 @@ impl Table {
         }
         table = table.vertical_scroll_offset(self.scroll_y);
 
-        table = table.columns(Column::initial(150.0).clip(true).resizable(true), if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() });
+        let columns_count = if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() };
+        let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
+        for i in 0..columns_count {
+            if pinned_column_table && i == 0 {
+                table = table.column(Column::initial(40.0).clip(true).resizable(true));
+                continue;
+            }
+            table = table.column(Column::initial((columns[i].name.len() + 3) as f32 * text_width).clip(true).resizable(true));
+        }
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
@@ -164,15 +171,18 @@ impl Table {
                         let response = ui.vertical(|ui| {
                             let response = ui.add(strong).on_hover_ui(|ui| { ui.add(label); });
 
-                            ui.horizontal(|ui| {
-                                let button = egui::Button::new("📌").frame(false);
-                                if ui.add(button).clicked() {
-                                    *pinned_column.borrow_mut() = Some(*i.borrow());
-                                }
-                                if ui.checkbox(&mut chcked, "").clicked() {
-                                    *clicked_column.borrow_mut() = Some(name);
-                                }
-                            });
+                            if !pinned_column_table || *i.borrow() > 0 {
+                                ui.horizontal(|ui| {
+                                    let button = egui::Button::new("📌").frame(false);
+                                    if ui.add(button).clicked() {
+                                        *pinned_column.borrow_mut() = Some(*i.borrow());
+                                    }
+                                    if ui.checkbox(&mut chcked, "").clicked() {
+                                        *clicked_column.borrow_mut() = Some(name);
+                                    }
+                                });
+                            }
+
                             response
                         });
                         response.inner
