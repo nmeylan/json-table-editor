@@ -15,6 +15,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::time::{Duration, Instant};
 use eframe::egui;
 use eframe::Theme::Light;
 use egui::{Color32, Context, Separator, TextEdit, Vec2};
@@ -81,6 +82,7 @@ impl MyApp {
         }
 
         let content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
+        let start = Instant::now();
         let mut v: Value = serde_json::from_str(&content).unwrap();
         let mut max_depth = 0;
         let depth = 1;
@@ -88,9 +90,12 @@ impl MyApp {
 
         let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
 
+        println!("Parse took {}ms",start.elapsed().as_millis());
+        let start = Instant::now();
         for node in root_node.as_array().unwrap().iter() {
             collect_keys(&node, "", depth, &mut max_depth, &mut count);
         }
+        println!("Collect max depth {}ms",start.elapsed().as_millis());
 
         // println!("{:?}", all_columns);
         Self {

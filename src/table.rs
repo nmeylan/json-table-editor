@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::time::Instant;
 use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
@@ -74,7 +75,9 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(nodes: Vec<Value>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+        let start = Instant::now();
         let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth, &vec![]);
+        println!("Flatten structure {}ms",start.elapsed().as_millis());
         all_columns.sort();
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
