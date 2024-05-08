@@ -1,5 +1,4 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use serde_json::Value;
 
@@ -114,6 +113,51 @@ pub fn flatten(values: &Vec<Value>, max_depth: u8, non_null_columns: &Vec<String
         }
     }
     (rows, unique_keys)
+}
+
+pub fn value_at(value: &Value, pointer: &str) -> Option<Value> {
+    let mut pointer_fragment: Vec<String> = Vec::with_capacity(10);
+    process_value_at(value, &mut pointer_fragment, pointer)
+}
+
+fn process_value_at(value: &Value, route: &mut PointerFragment, pointer_to_match: &str) -> Option<Value> {
+
+    match value {
+        Value::Array(arr) => {
+            let mut i = 0;
+            for val in arr {
+                let pointer = route.concat();
+                if pointer.eq(pointer_to_match) {
+                    return Some(value.clone());
+                }
+                route.push(format!("/{}", i));
+                i += 1;
+                if let Some(found) = process_value_at(val, route, pointer_to_match) {
+                    return Some(found);
+                }
+            }
+        }
+        Value::Object(obj) => {
+            let pointer = route.concat();
+            if pointer.eq(pointer_to_match) {
+                return Some(value.clone());
+            }
+            for (key, val) in obj {
+                route.push(format!("/{}", escape(key.as_str())));
+                if let Some(found) = process_value_at(val, route, pointer_to_match) {
+                    return Some(found);
+                }
+            }
+        }
+        _ => {
+            let pointer = route.concat();
+            if pointer.eq(pointer_to_match) {
+                return Some(value.clone());
+            }
+        }
+    }
+    route.pop();
+    None
 }
 
 pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut PointerFragment, target: &mut ValueMap, depth: i32, max_depth: i32) {

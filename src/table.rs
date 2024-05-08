@@ -1,11 +1,11 @@
 use std::cell::RefCell;
-use std::rc::Rc;
-use egui::{Align, Color32, Label, Sense, Ui, Widget, WidgetText};
+use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
-use crate::flatten;
-use crate::flatten::{Column, PointerKey, ValueType};
+use crate::{flatten, Window};
+use crate::flatten::{Column, PointerKey, value_at, ValueType};
+use crate::subtable_window::SubTable;
 
 pub struct Table {
     all_columns: Vec<Column>,
@@ -18,11 +18,15 @@ pub struct Table {
     non_null_columns: Vec<String>,
     pub next_frame_reset_scroll: bool,
     pub hovered_row_index: Option<usize>,
+    parent_pointer: String,
+    parent_value_type: ValueType,
+    windows: Vec<SubTable>,
 }
 
 impl super::View for Table {
     fn ui(&mut self, ui: &mut egui::Ui) {
         use egui_extras::{Size, StripBuilder};
+        self.windows(ui.ctx());
         StripBuilder::new(ui)
             .size(Size::remainder())
             .vertical(|mut strip| {
@@ -48,7 +52,7 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(nodes: Vec<Value>, depth: u8) -> Self {
+    pub fn new(nodes: Vec<Value>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth, &vec![]);
         all_columns.sort();
         Self {
@@ -63,7 +67,21 @@ impl Table {
             column_pinned: vec![],
             scroll_y: 0.0,
             hovered_row_index: None,
+            parent_pointer,
+            parent_value_type,
+            windows: vec![],
         }
+    }
+    pub fn windows(&mut self, ctx: &Context) {
+        let mut closed_windows = vec![];
+        for window in self.windows.iter_mut() {
+            let mut opened = true;
+            window.show(ctx, &mut opened);
+            if !opened {
+                closed_windows.push(window.name().clone());
+            }
+        }
+        self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) {
@@ -117,7 +135,7 @@ impl Table {
             .sense(Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0)
-            .scroll_bar_visibility(if pinned_column_table {ScrollBarVisibility::AlwaysHidden} else {ScrollBarVisibility::AlwaysVisible})
+            .scroll_bar_visibility(if pinned_column_table { ScrollBarVisibility::AlwaysHidden } else { ScrollBarVisibility::AlwaysVisible })
             ;
 
         if self.next_frame_reset_scroll {
@@ -175,10 +193,8 @@ impl Table {
                 let (hovered_row_index) = body.rows(text_height, self.flatten_nodes.len(), |mut row| {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
-                        row.cols(false, |(index)| {
-                            let column = columns.get(index).unwrap();
-                            let key = &column.name;
-                            let data = data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
+                        let response = row.cols(false, |(index)| {
+                            let data = Self::get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
@@ -191,6 +207,28 @@ impl Table {
                             }
                             None
                         });
+
+                        if let Some(index) = response.clicked_col_index {
+                            let data = Self::get_pointer(columns, data, index);
+                            if let Some((pointer, value)) = data {
+                                let is_array = matches!(pointer.value_type, ValueType::Array);
+                                let is_object = matches!(pointer.value_type, ValueType::Object);
+                                if is_array || is_object {
+                                    if let Some(root) = value_at(&self.nodes[row.index()], pointer.pointer.as_str()) {
+                                        let name = if matches!(self.parent_value_type, ValueType::Array) {
+                                            format!("{}{}{}", self.parent_pointer, row.index(), pointer.pointer)
+                                        } else {
+                                            format!("{}{}", self.parent_pointer, pointer.pointer)
+                                        };
+
+                                        self.windows.push(SubTable::new(name, root,
+                                                                        if is_array { ValueType::Array } else { ValueType::Object }))
+                                    } else {
+                                        println!("can't find root at {}", pointer.pointer)
+                                    }
+                                }
+                            }
+                        }
                     }
                 });
                 self.hovered_row_index = hovered_row_index;
@@ -198,6 +236,14 @@ impl Table {
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
         }
+    }
+
+    fn get_pointer<'a>(columns: &Vec<Column>, data: &&'a Vec<(PointerKey, Option<String>)>, index: usize) -> Option<&'a (PointerKey, Option<String>)> {
+        if let Some(column) = columns.get(index) {
+            let key = &column.name;
+            return data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
+        }
+        None
     }
 
     fn on_non_null_column_click(&mut self, column: String) {

@@ -8,6 +8,7 @@ mod table;
 mod panels;
 mod components;
 mod flatten;
+mod subtable_window;
 
 use std::{env, fs, io, mem};
 use std::cmp::Ordering;
@@ -18,6 +19,7 @@ use eframe::egui;
 use eframe::Theme::Light;
 use egui::{Context, Vec2};
 use serde_json::Value;
+use crate::flatten::ValueType;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::table::Table;
 
@@ -92,7 +94,7 @@ impl MyApp {
 
         // println!("{:?}", all_columns);
         Self {
-            table: Table::new(mem::take(root_node.as_array_mut().unwrap()), 1),
+            table: Table::new(mem::take(root_node.as_array_mut().unwrap()), 1, "/".to_string(), ValueType::Array),
             windows: vec![
                 Box::new(SelectColumnsPanel::default())
             ],

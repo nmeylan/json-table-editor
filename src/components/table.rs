@@ -1457,6 +1457,10 @@ pub struct TableRow<'a, 'b> {
     pub remainder_with: f32,
 }
 
+pub struct ColumnResponse {
+    pub clicked_col_index: Option<usize>,
+    pub double_clicked_col_index: Option<usize>,
+}
 impl<'a, 'b> TableRow<'a, 'b> {
     /// Add the contents of a column.
     ///
@@ -1508,7 +1512,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         (used_rect, response)
     }
-    pub fn cols<'bb, F>(& mut self, is_header: bool, mut add_cell_contents: F)
+    pub fn cols<'bb, F>(& mut self, is_header: bool, mut add_cell_contents: F) -> ColumnResponse
         where F: Fn(usize) -> Option<Box<dyn FnOnce(&mut Ui) -> Response + 'bb>>{
         let width = self.first_col_visible_offset;
 
@@ -1519,6 +1523,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
         );
 
         let mut last_index = 0;
+        let mut column_response = ColumnResponse { clicked_col_index: None, double_clicked_col_index: None };
         for col_index in self.visible_columns {
             let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
             let width = if let Some(width) = self.widths.get(*col_index) {
@@ -1553,7 +1558,12 @@ impl<'a, 'b> TableRow<'a, 'b> {
             if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {
                 *max_w = max_w.max(used_rect.width());
             }
-
+            if response.clicked() {
+                column_response.clicked_col_index = Some(*col_index);
+            }
+            if response.double_clicked() {
+                column_response.double_clicked_col_index = Some(*col_index);
+            }
             *self.response = Some(
                 self.response
                     .as_ref()
@@ -1568,6 +1578,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 Color32::GOLD,
             );
         }
+        column_response
     }
 
     /// Set the selection highlight state for cells added after a call to this function.
