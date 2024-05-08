@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use egui::{Align, Color32, Label, Sense, Ui, Widget, WidgetText};
+use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::flatten;
@@ -16,7 +17,7 @@ pub struct Table {
     pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
     non_null_columns: Vec<String>,
     pub next_frame_reset_scroll: bool,
-    pub next_frame_sync_scroll: bool,
+    pub hovered_row_index: Option<usize>,
 }
 
 impl super::View for Table {
@@ -34,6 +35,7 @@ impl super::View for Table {
                                 self.table_ui(ui, true);
                             })
                         });
+
                         ui.vertical(|ui| {
                             egui::ScrollArea::horizontal().show(ui, |ui| {
                                 self.table_ui(ui, false);
@@ -58,9 +60,9 @@ impl Table {
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
-            next_frame_sync_scroll: false,
             column_pinned: vec![],
             scroll_y: 0.0,
+            hovered_row_index: None,
         }
     }
 
@@ -115,16 +117,15 @@ impl Table {
             .sense(Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0)
+            .scroll_bar_visibility(if pinned_column_table {ScrollBarVisibility::AlwaysHidden} else {ScrollBarVisibility::AlwaysVisible})
             ;
 
         if self.next_frame_reset_scroll {
             table = table.scroll_to_row(0, Some(Align::TOP));
             self.next_frame_reset_scroll = false;
         }
-        if pinned_column_table && self.next_frame_sync_scroll{
-            table = table.vertical_scroll_offset(self.scroll_y);
-            self.next_frame_sync_scroll = false;
-        }
+        table = table.vertical_scroll_offset(self.scroll_y);
+
         table = table.columns(Column::initial(150.0).clip(true).resizable(true), if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() });
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
@@ -169,9 +170,9 @@ impl Table {
                     self.on_non_null_column_click(clicked_column.clone());
                 }
             })
-            .body(|mut body| {
+            .body(self.hovered_row_index, |mut body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                body.rows(text_height, self.flatten_nodes.len(), |mut row| {
+                let (hovered_row_index) = body.rows(text_height, self.flatten_nodes.len(), |mut row| {
                     let node = self.flatten_nodes.get(row.index());
                     if let Some(data) = node.as_ref() {
                         row.cols(false, |(index)| {
@@ -192,12 +193,10 @@ impl Table {
                         });
                     }
                 });
+                self.hovered_row_index = hovered_row_index;
             });
-        if !pinned_column_table {
-            if self.scroll_y != table_scroll_output.state.offset.y {
-                self.scroll_y = table_scroll_output.state.offset.y;
-                self.next_frame_sync_scroll = true;
-            }
+        if self.scroll_y != table_scroll_output.state.offset.y {
+            self.scroll_y = table_scroll_output.state.offset.y;
         }
     }
 

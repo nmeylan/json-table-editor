@@ -964,7 +964,7 @@ impl<'a> TableBuilder<'a> {
             scroll_options,
             sense,
         }
-            .body(add_body_contents);
+            .body(None, add_body_contents);
     }
 }
 
@@ -1036,7 +1036,7 @@ impl<'a> Table<'a> {
     }
 
     /// Create table body after adding a header row
-    pub fn body<F>(self, add_body_contents: F) -> ScrollAreaOutput<()>
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<()>
         where
             F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -1077,7 +1077,7 @@ impl<'a> Table<'a> {
             .min_scrolled_height(min_scrolled_height)
             .max_height(max_scroll_height)
             .auto_shrink(auto_shrink)
-            .scroll_bar_visibility(scroll_bar_visibility);
+            .scroll_bar_visibility(scroll_bar_visibility).animated(false);
 
         if let Some(scroll_offset_y) = scroll_offset_y {
             scroll_area = scroll_area.vertical_scroll_offset(scroll_offset_y);
@@ -1095,9 +1095,10 @@ impl<'a> Table<'a> {
             // Hide first-frame-jitters when auto-sizing.
             ui.add_visible_ui(!first_frame_auto_size_columns, |ui| {
                 let hovered_row_index_id = self.state_id.with("__table_hovered_row");
-                let hovered_row_index =
-                    ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
-
+                let mut hovered_row_index = ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
+                if hovered_row_index.is_none() {
+                    hovered_row_index = stored_hovered_row_index;
+                }
                 let layout = StripLayout::new(ui, CellDirection::Horizontal, cell_layout, sense);
 
                 let mut x_offset = 0.0;
@@ -1349,7 +1350,7 @@ impl<'a> TableBody<'a> {
         row_height_sans_spacing: f32,
         total_rows: usize,
         mut add_row_content: impl FnMut(TableRow<'_, '_>),
-    ) {
+    ) -> Option<usize> {
         let spacing = self.layout.ui.spacing().item_spacing;
         let row_height_with_spacing = row_height_sans_spacing + spacing.y;
 
@@ -1402,152 +1403,9 @@ impl<'a> TableBody<'a> {
             let skip_height = (total_rows - max_row) as f32 * row_height_with_spacing;
             self.add_buffer(skip_height - spacing.y);
         }
+        self.hovered_row_index
     }
 
-    /// Add rows with varying heights.
-    ///
-    /// This takes a very slight performance hit compared to [`TableBody::rows`] due to the need to
-    /// iterate over all row heights in to calculate the virtual table height above and below the
-    /// visible region, but it is many orders of magnitude more performant than adding individual
-    /// heterogeneously-sized rows using [`TableBody::row`] at the cost of the additional complexity
-    /// that comes with pre-calculating row heights and representing them as an iterator.
-    ///
-    /// ### Example
-    /// ```
-    /// # egui::__run_test_ui(|ui| {
-    /// use egui_extras::{TableBuilder, Column};
-    /// TableBuilder::new(ui)
-    ///     .column(Column::remainder().at_least(100.0))
-    ///     .body(|mut body| {
-    ///         let row_heights: Vec<f32> = vec![60.0, 18.0, 31.0, 240.0];
-    ///         body.heterogeneous_rows(row_heights.into_iter(), |mut row| {
-    ///             let row_index = row.index();
-    ///             let thick = row_index % 6 == 0;
-    ///             row.col(|ui| {
-    ///                 ui.centered_and_justified(|ui| {
-    ///                     ui.label(row_index.to_string());
-    ///                 });
-    ///             });
-    ///         });
-    ///     });
-    /// # });
-    /// ```
-    pub fn heterogeneous_rows(
-        mut self,
-        heights: impl Iterator<Item=f32>,
-        mut add_row_content: impl FnMut(TableRow<'_, '_>),
-    ) {
-        let spacing = self.layout.ui.spacing().item_spacing;
-        let mut enumerated_heights = heights.enumerate();
-
-        let max_height = self.end_y - self.start_y;
-        let scroll_offset_y = self.scroll_offset_y() as f64;
-
-        let scroll_to_y_range_offset = self.layout.cursor.y as f64;
-
-        let mut cursor_y: f64 = 0.0;
-
-        // Skip the invisible rows, and populate the first non-virtual row.
-        for (row_index, row_height) in &mut enumerated_heights {
-            let old_cursor_y = cursor_y;
-            cursor_y += (row_height + spacing.y) as f64;
-
-            if Some(row_index) == self.scroll_to_row {
-                *self.scroll_to_y_range = Some(Rangef::new(
-                    (scroll_to_y_range_offset + old_cursor_y) as f32,
-                    (scroll_to_y_range_offset + cursor_y) as f32,
-                ));
-            }
-
-            if cursor_y >= scroll_offset_y {
-                // This row is visible:
-                self.add_buffer(old_cursor_y as f32); // skip all the invisible rows
-                let mut response: Option<Response> = None;
-                add_row_content(TableRow {
-                    layout: &mut self.layout,
-                    columns: self.columns,
-                    widths: self.widths,
-                    visible_columns: self.visible_columns,
-                    max_used_widths: self.max_used_widths,
-                    row_index,
-                    col_index: 0,
-                    start_x: self.start_x,
-                    first_col_visible_offset: self.first_col_visible_width,
-                    height: row_height,
-                    striped: self.striped && (row_index + self.row_index) % 2 == 0,
-                    hovered: self.hovered_row_index == Some(row_index),
-                    selected: false,
-                    response: &mut response,
-                    remainder_with: 0.0,
-                });
-                self.capture_hover_state(&response, row_index);
-                break;
-            }
-        }
-
-        // populate visible rows:
-        for (row_index, row_height) in &mut enumerated_heights {
-            let top_y = cursor_y;
-            let mut response: Option<Response> = None;
-            add_row_content(TableRow {
-                layout: &mut self.layout,
-                columns: self.columns,
-                widths: self.widths,
-                visible_columns: self.visible_columns,
-                max_used_widths: self.max_used_widths,
-                row_index,
-                col_index: 0,
-                start_x: self.start_x,
-                first_col_visible_offset: self.first_col_visible_width,
-                height: row_height,
-                striped: self.striped && (row_index + self.row_index) % 2 == 0,
-                hovered: self.hovered_row_index == Some(row_index),
-                selected: false,
-                response: &mut response,
-                remainder_with: 0.0,
-            });
-            self.capture_hover_state(&response, row_index);
-            cursor_y += (row_height + spacing.y) as f64;
-
-            if Some(row_index) == self.scroll_to_row {
-                *self.scroll_to_y_range = Some(Rangef::new(
-                    (scroll_to_y_range_offset + top_y) as f32,
-                    (scroll_to_y_range_offset + cursor_y) as f32,
-                ));
-            }
-
-            if cursor_y > scroll_offset_y + max_height as f64 {
-                break;
-            }
-        }
-
-        // calculate height below the visible table range:
-        let mut height_below_visible: f64 = 0.0;
-        for (row_index, row_height) in enumerated_heights {
-            height_below_visible += (row_height + spacing.y) as f64;
-
-            let top_y = cursor_y;
-            cursor_y += (row_height + spacing.y) as f64;
-            if Some(row_index) == self.scroll_to_row {
-                *self.scroll_to_y_range = Some(Rangef::new(
-                    (scroll_to_y_range_offset + top_y) as f32,
-                    (scroll_to_y_range_offset + cursor_y) as f32,
-                ));
-            }
-        }
-
-        if self.scroll_to_row.is_some() && self.scroll_to_y_range.is_none() {
-            // Catch desire to scroll past the end:
-            *self.scroll_to_y_range =
-                Some(Rangef::point((scroll_to_y_range_offset + cursor_y) as f32));
-        }
-
-        if height_below_visible > 0.0 {
-            // we need to add a buffer to allow the table to
-            // accurately calculate the scrollbar position
-            self.add_buffer(height_below_visible as f32);
-        }
-    }
 
     // Create a table row buffer of the given height to represent the non-visible portion of the
     // table.
