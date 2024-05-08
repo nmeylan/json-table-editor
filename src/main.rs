@@ -17,7 +17,7 @@ use std::fmt::{Display, Formatter};
 use std::path::Path;
 use eframe::egui;
 use eframe::Theme::Light;
-use egui::{Context, Vec2};
+use egui::{Color32, Context, Separator, TextEdit, Vec2};
 use serde_json::Value;
 use crate::flatten::ValueType;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
@@ -126,15 +126,25 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            if ui.button("select columns").clicked() {
-                set_open(&mut self.open, SelectColumnsPanel_id, true);
-            }
-            let slider_response = ui.add(
-                egui::Slider::new(&mut self.depth, 1..=self.max_depth).text("Depth"),
-            );
-            if slider_response.changed() {
-                self.table.update_max_depth(self.depth);
-            }
+            ui.horizontal(|ui| {
+                if ui.button("select columns").clicked() {
+                    set_open(&mut self.open, SelectColumnsPanel_id, true);
+                }
+                ui.add(Separator::default().vertical());
+                let slider_response = ui.add(
+                    egui::Slider::new(&mut self.depth, 1..=self.max_depth).text("Depth"),
+                );
+                ui.add(Separator::default().vertical());
+                ui.label("Scroll to column: ");
+                let text_edit = TextEdit::singleline(&mut self.table.scroll_to_column).hint_text("Type name contains in column");
+                let response = ui.add(text_edit);
+                if response.changed() {
+                    self.table.next_frame_scroll_to_column = true;
+                }
+                if slider_response.changed() {
+                    self.table.update_max_depth(self.depth);
+                }
+            });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             self.table.ui(ui)

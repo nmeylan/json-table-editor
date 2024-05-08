@@ -1037,7 +1037,7 @@ impl<'a> Table<'a> {
     }
 
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<()>
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
         where
             F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -1091,6 +1091,7 @@ impl<'a> Table<'a> {
         let number_of_columns = widths_ref.len();
 
         let scroll_area_output = scroll_area.show(ui, move |ui| {
+            let mut columns_offset =  Vec::with_capacity(number_of_columns);
             let mut scroll_to_y_range = None;
 
             let clip_rect = ui.clip_rect();
@@ -1112,6 +1113,7 @@ impl<'a> Table<'a> {
                 let mut first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
                 let mut first_visible_seen = false;
                 for (index, width) in widths_ref.iter().enumerate() {
+                    columns_offset.push(x_offset);
                     if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
                         first_visible_seen = true;
                         visible_index.push(index);
@@ -1154,6 +1156,7 @@ impl<'a> Table<'a> {
                 let align = scroll_to_row.and_then(|(_, a)| a);
                 ui.scroll_to_rect(rect, align);
             }
+            columns_offset
         });
 
         let bottom = ui.min_rect().bottom();

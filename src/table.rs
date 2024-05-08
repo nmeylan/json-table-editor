@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer, Ui, Widget, WidgetText};
+use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
@@ -16,11 +16,15 @@ pub struct Table {
     scroll_y: f32,
     pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
     non_null_columns: Vec<String>,
-    pub next_frame_reset_scroll: bool,
     pub hovered_row_index: Option<usize>,
+    columns_offset: Vec<f32>,
     parent_pointer: String,
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
+    pub scroll_to_column: String,
+
+    pub next_frame_reset_scroll: bool,
+    pub next_frame_scroll_to_column: bool,
 }
 
 impl super::View for Table {
@@ -41,7 +45,24 @@ impl super::View for Table {
                         });
 
                         ui.vertical(|ui| {
-                            egui::ScrollArea::horizontal().show(ui, |ui| {
+                            let mut scroll_to_x = None;
+                            if self.next_frame_scroll_to_column {
+                                self.next_frame_scroll_to_column = false;
+                                let index = self.column_selected.iter().position(|c| {
+                                    c.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase())
+                                });
+                                if let Some(index) = index {
+                                    if let Some(offset) = self.columns_offset.get(index) {
+                                        scroll_to_x = Some(*offset);
+                                    }
+                                }
+                            }
+
+                            let mut scroll_area = egui::ScrollArea::horizontal();
+                            if let Some(offset) = scroll_to_x {
+                                scroll_area = scroll_area.scroll_offset(Vec2{x: offset, y: 0.0});
+                            }
+                            let mut scroll_area_output = scroll_area.show(ui, |ui| {
                                 self.table_ui(ui, false);
                             });
                         });
@@ -67,9 +88,12 @@ impl Table {
             column_pinned: vec![Column::new("#".to_string())],
             scroll_y: 0.0,
             hovered_row_index: None,
+            columns_offset: vec![],
             parent_pointer,
             parent_value_type,
             windows: vec![],
+            scroll_to_column: "".to_string(),
+            next_frame_scroll_to_column: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -259,6 +283,9 @@ impl Table {
             });
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
+        }
+        if !pinned_column_table {
+            self.columns_offset = table_scroll_output.inner;
         }
         if request_repaint {
             ui.ctx().request_repaint();
