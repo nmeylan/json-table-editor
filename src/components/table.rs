@@ -161,6 +161,7 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 use eframe::epaint::Color32;
+use eframe::epaint::text::layout;
 use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Label, Widget};
 use egui::scroll_area::ScrollAreaOutput;
 

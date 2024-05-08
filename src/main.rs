@@ -126,7 +126,6 @@ impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.label("top panel");
             if ui.button("select columns").clicked() {
                 set_open(&mut self.open, SelectColumnsPanel_id, true);
             }

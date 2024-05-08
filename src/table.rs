@@ -129,12 +129,14 @@ impl Table {
     }
     fn draw_table(&mut self, ui: &mut Ui, text_height: f32, pinned_column_table: bool) {
         use crate::components::table::{Column, TableBuilder};
+        let parent_height = ui.available_rect_before_wrap().height();
         let mut table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
             .sense(Sense::click())
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0)
+            .max_scroll_height(parent_height)
             .scroll_bar_visibility(if pinned_column_table { ScrollBarVisibility::AlwaysHidden } else { ScrollBarVisibility::AlwaysVisible })
             ;
 
