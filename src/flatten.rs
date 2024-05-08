@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use serde_json::Value;
 
@@ -9,6 +10,7 @@ type ValueMap = Vec<(PointerKey, Option<String>)>;
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
+    pub index: usize,
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -26,16 +28,11 @@ impl Hash for PointerKey {
 }
 
 impl PointerKey {
-    pub fn from_pointer(pointer: String, value_type: ValueType) -> Self {
+    pub fn from_pointer(pointer: String, value_type: ValueType, index: usize) -> Self {
         Self {
             pointer,
             value_type,
-        }
-    }
-    pub fn wrap(pointer: String) -> Self {
-        Self {
-            pointer,
-            value_type: ValueType::None,
+            index,
         }
     }
 }
@@ -56,15 +53,14 @@ pub enum ValueType {
 pub struct Column {
     pub(crate) name: String,
     pub(crate) depth: u8,
-    pinned: bool,
 }
 
 impl Column {
-    pub fn pinned(&self) -> bool {
-        self.pinned
-    }
-    pub fn pin(&mut self, pinned: bool) {
-        self.pinned = pinned;
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            depth: 0,
+        }
     }
 }
 
@@ -84,18 +80,19 @@ impl PartialOrd<Self> for Column {
 
 impl Ord for Column {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.pinned.cmp(&other.pinned).reverse()
-            .then_with(|| self.name.cmp(&other.name))
+        self.name.cmp(&other.name)
     }
 }
 
 pub fn flatten(values: &Vec<Value>, max_depth: u8, non_null_columns: &Vec<String>) -> (Vec<Vec<(PointerKey, Option<String>)>>, Vec<Column>) {
     let mut rows = Vec::with_capacity(values.len());
     let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+    let mut i = 0;
     for value in values {
         let mut columns: Vec<(PointerKey, Option<String>)> =  Vec::with_capacity(100);
+        columns.push((PointerKey::from_pointer("#".to_string(), ValueType::Number, i), Some(format!("{}", i))));
         let mut pointer_fragment: Vec<String> = Vec::with_capacity(max_depth as usize);
-        process(value, &mut unique_keys, &mut pointer_fragment, &mut columns, 0, max_depth as i32);
+        process(value, &mut unique_keys, &mut pointer_fragment, &mut columns, 0, max_depth as i32, i);
         let mut should_add_row = true;
         for non_null_column in non_null_columns {
             if let Some((_, value)) = columns.iter().find(|(p, _)| p.pointer.eq(non_null_column)) {
@@ -111,6 +108,7 @@ pub fn flatten(values: &Vec<Value>, max_depth: u8, non_null_columns: &Vec<String
         if should_add_row {
             rows.push(columns);
         }
+        i += 1;
     }
     (rows, unique_keys)
 }
@@ -160,14 +158,13 @@ fn process_value_at(value: &Value, route: &mut PointerFragment, pointer_to_match
     None
 }
 
-pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut PointerFragment, target: &mut ValueMap, depth: i32, max_depth: i32) {
+pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut PointerFragment, target: &mut ValueMap, depth: i32, max_depth: i32, count: usize) {
     let pointer = route.concat();
 
     if !pointer.is_empty() {
         let column = Column {
             name: pointer.clone(),
             depth: depth as u8,
-            pinned: false,
         };
         if !unique_keys.contains(&column) {
             unique_keys.push(column);
@@ -175,28 +172,28 @@ pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut Pointer
     }
     match value {
         Value::Null => {
-            target.push((PointerKey::from_pointer(pointer, ValueType::Null), None));
+            target.push((PointerKey::from_pointer(pointer, ValueType::Null, count), None));
         }
         Value::Bool(b) => {
-            target.push((PointerKey::from_pointer(pointer, ValueType::Bool), format!("{}", value).into()));
+            target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), format!("{}", value).into()));
         }
         Value::Number(n) => {
-            target.push((PointerKey::from_pointer(pointer, ValueType::Number), format!("{}", value).into()));
+            target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), format!("{}", value).into()));
         }
         Value::String(s) => {
-            target.push((PointerKey::from_pointer(pointer, ValueType::String), format!("{}", value).into()));
+            target.push((PointerKey::from_pointer(pointer, ValueType::String, count), format!("{}", value).into()));
         }
         Value::Array(arr) => {
-            target.push((PointerKey::from_pointer(pointer, ValueType::Array), format!("{}", value).into()));
+            target.push((PointerKey::from_pointer(pointer, ValueType::Array, count), format!("{}", value).into()));
         }
         Value::Object(obj) => {
             if depth < max_depth {
                 for (key, val) in obj {
                     route.push(format!("/{}", escape(key.as_str())));
-                    process(val, unique_keys, route, target, depth + 1, max_depth);
+                    process(val, unique_keys, route, target, depth + 1, max_depth, count);
                 }
             } else {
-                target.push((PointerKey::from_pointer(route.concat(), ValueType::Object), format!("{}", value).into()));
+                target.push((PointerKey::from_pointer(route.concat(), ValueType::Object, count), format!("{}", value).into()));
             }
         }
     }

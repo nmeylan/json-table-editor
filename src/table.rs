@@ -64,7 +64,7 @@ impl Table {
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
-            column_pinned: vec![],
+            column_pinned: vec![Column::new("#".to_string())],
             scroll_y: 0.0,
             hovered_row_index: None,
             parent_pointer,
@@ -167,7 +167,6 @@ impl Table {
                             ui.horizontal(|ui| {
                                 let button = egui::Button::new("📌").frame(false);
                                 if ui.add(button).clicked() {
-                                    println!("pinning");
                                     *pinned_column.borrow_mut() = Some(*i.borrow());
                                 }
                                 if ui.checkbox(&mut chcked, "").clicked() {
@@ -193,9 +192,11 @@ impl Table {
             .body(self.hovered_row_index, |mut body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let (hovered_row_index) = body.rows(text_height, self.flatten_nodes.len(), |mut row| {
-                    let node = self.flatten_nodes.get(row.index());
+                    let row_index = row.index();
+                    let node = self.flatten_nodes.get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |(index)| {
+
                             let data = Self::get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
@@ -213,12 +214,13 @@ impl Table {
                         if let Some(index) = response.clicked_col_index {
                             let data = Self::get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
+                                let row_index = pointer.index;
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
-                                    if let Some(root) = value_at(&self.nodes[row.index()], pointer.pointer.as_str()) {
+                                    if let Some(root) = value_at(&self.nodes[row_index], pointer.pointer.as_str()) {
                                         let name = if matches!(self.parent_value_type, ValueType::Array) {
-                                            format!("{}{}{}", self.parent_pointer, row.index(), pointer.pointer)
+                                            format!("{}{}{}", self.parent_pointer, row_index, pointer.pointer)
                                         } else {
                                             format!("{}{}", self.parent_pointer, pointer.pointer)
                                         };
@@ -226,7 +228,7 @@ impl Table {
                                         self.windows.push(SubTable::new(name, root,
                                                                         if is_array { ValueType::Array } else { ValueType::Object }))
                                     } else {
-                                        println!("can't find root at {}", pointer.pointer)
+                                        println!("can't find root at {} {}", row_index, pointer.pointer)
                                     }
                                 }
                             }
