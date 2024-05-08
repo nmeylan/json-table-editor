@@ -1,4 +1,7 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![cfg_attr(
+    not(debug_assertions),
+    windows_subsystem = "windows"
+)] // hide console window on Windows in release
 #![feature(trait_upcasting)]
 
 
@@ -9,12 +12,14 @@ mod panels;
 mod components;
 mod flatten;
 mod subtable_window;
+mod parser;
 
 use std::{env, fs, io, mem};
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashSet};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
+use std::process::exit;
 use std::time::{Duration, Instant};
 use eframe::egui;
 use eframe::Theme::Light;
@@ -22,6 +27,7 @@ use egui::{Color32, Context, Separator, TextEdit, Vec2};
 use serde_json::Value;
 use crate::flatten::ValueType;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
+use crate::parser::{JSONParser, my_lexer, ParseOptions};
 use crate::table::Table;
 
 /// Something to view in the demo windows
@@ -54,7 +60,7 @@ fn main() {
     let options = eframe::NativeOptions {
         default_theme: Light,
         persist_window: false,
-        viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 {x: 1900.0, y: 1200.0}).with_maximized(true),
+        viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
         ..eframe::NativeOptions::default()
     };
     eframe::run_native("Empty app", options, Box::new(|cc| {
@@ -71,7 +77,6 @@ struct MyApp {
 }
 
 
-
 impl MyApp {
     fn new() -> Self {
         let args: Vec<_> = env::args().collect();
@@ -82,6 +87,24 @@ impl MyApp {
         }
 
         let content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
+
+        // let mut lexer = Lexer::new(content.as_str());
+        // let tokens = lexer.lex().unwrap();
+        // // 55034885 tokens
+        // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
+        // let start = Instant::now();
+        // let mut lexer = my_lexer::Lexer::new(content.as_bytes());
+        // let tokens = lexer.lex();
+        // 55034885 tokens
+        // 50565637
+        // println!("{:?}", tokens);
+        // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
+        let start = Instant::now();
+        let mut parser = JSONParser::new(content.as_str());
+        let vec1 = parser.parse(ParseOptions::default()).unwrap();
+        // println!("{:?}", vec1);
+        println!("Custom parser took {}ms", start.elapsed().as_millis());
+        exit(0);
         let start = Instant::now();
         let mut v: Value = serde_json::from_str(&content).unwrap();
         let mut max_depth = 0;
@@ -90,12 +113,12 @@ impl MyApp {
 
         let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
 
-        println!("Parse took {}ms",start.elapsed().as_millis());
+        println!("Parse took {}ms", start.elapsed().as_millis());
         let start = Instant::now();
         for node in root_node.as_array().unwrap().iter() {
             collect_keys(&node, "", depth, &mut max_depth, &mut count);
         }
-        println!("Collect max depth {}ms",start.elapsed().as_millis());
+        println!("Collect max depth {}ms", start.elapsed().as_millis());
 
         // println!("{:?}", all_columns);
         Self {
@@ -117,6 +140,7 @@ impl MyApp {
         }
     }
 }
+
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
     if is_open {
         if !open.contains(key) {
