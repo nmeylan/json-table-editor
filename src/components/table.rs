@@ -1088,6 +1088,8 @@ impl<'a> Table<'a> {
         let widths_ref = &state.column_widths;
         let max_used_widths_ref = &mut max_used_widths;
 
+        let number_of_columns = widths_ref.len();
+
         let scroll_area_output = scroll_area.show(ui, move |ui| {
             let mut scroll_to_y_range = None;
 
@@ -1106,7 +1108,7 @@ impl<'a> Table<'a> {
                 let end_x = clip_rect.right();
                 let start_x = clip_rect.left();
                 let scroll_offset_x = start_x - layout.rect.left();
-                let mut visible_index = Vec::with_capacity(widths_ref.len());
+                let mut visible_index = Vec::with_capacity(number_of_columns);
                 let mut first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
                 let mut first_visible_seen = false;
                 for (index, width) in widths_ref.iter().enumerate() {
@@ -1234,7 +1236,7 @@ impl<'a> Table<'a> {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
                 }
 
-                let stroke = if resize_response.dragged() {
+                let mut stroke = if resize_response.dragged() {
                     ui.style().visuals.widgets.active.bg_stroke
                 } else if resize_hover {
                     ui.style().visuals.widgets.hovered.bg_stroke
@@ -1242,6 +1244,10 @@ impl<'a> Table<'a> {
                     // ui.visuals().widgets.inactive.bg_stroke
                     ui.visuals().widgets.noninteractive.bg_stroke
                 };
+                if i == number_of_columns - 1 {
+                    stroke.color = Color32::DARK_GRAY;
+                    stroke.width = 2.0;
+                }
 
                 ui.painter().line_segment([p0, p1], stroke);
             };

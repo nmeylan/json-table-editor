@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Widget, WidgetText};
+use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer, Ui, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
@@ -32,7 +32,7 @@ impl super::View for Table {
             .vertical(|mut strip| {
                 strip.cell(|ui| {
                     let parent_size_available = ui.available_rect_before_wrap().height();
-                    ui.horizontal(|ui| {
+                    ui.horizontal(|mut ui| {
                         ui.set_height(parent_size_available);
                         ui.push_id("table-pinned-column", |ui| {
                             ui.vertical(|ui| {
@@ -154,6 +154,7 @@ impl Table {
             }
             table = table.column(Column::initial((columns[i].name.len() + 3) as f32 * text_width).clip(true).resizable(true));
         }
+        let mut request_repaint = false;
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
@@ -206,7 +207,6 @@ impl Table {
                     let node = self.flatten_nodes.get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |(index)| {
-
                             let data = Self::get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
@@ -240,15 +240,21 @@ impl Table {
                                     } else {
                                         println!("can't find root at {} {}", row_index, pointer.pointer)
                                     }
-                                }
+                                } else {}
                             }
                         }
                     }
                 });
-                self.hovered_row_index = hovered_row_index;
+                if self.hovered_row_index != hovered_row_index {
+                    self.hovered_row_index = hovered_row_index;
+                    request_repaint = true;
+                }
             });
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
+        }
+        if request_repaint {
+            ui.ctx().request_repaint();
         }
     }
 
