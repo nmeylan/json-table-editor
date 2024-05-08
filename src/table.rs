@@ -191,9 +191,16 @@ impl Table {
                 });
 
                 let pinned_column = pinned_column.borrow();
+
                 if let Some(pinned_column) = pinned_column.as_ref() {
-                    let column = self.column_selected.remove(*pinned_column);
-                    self.column_pinned.push(column);
+                    if pinned_column_table {
+                        let column = self.column_pinned.remove(*pinned_column);
+                        self.column_selected.push(column);
+                        self.column_selected.sort();
+                    } else {
+                        let column = self.column_selected.remove(*pinned_column);
+                        self.column_pinned.push(column);
+                    }
                 }
                 let clicked_column = clicked_column.borrow();
                 if let Some(clicked_column) = clicked_column.as_ref() {
