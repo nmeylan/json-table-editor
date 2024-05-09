@@ -1,14 +1,49 @@
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::time::Instant;
 use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 
-
 use crate::{concat_string, Window};
-use crate::flatten::{Column};
 use crate::parser::{JsonArrayEntries, JSONParser};
 use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
+
+#[derive(Clone, Debug)]
+pub struct Column {
+    pub(crate) name: String,
+    pub(crate) depth: u8,
+}
+
+
+impl Column {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            depth: 0,
+        }
+    }
+}
+
+impl Eq for Column {}
+
+impl PartialEq<Self> for Column {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+    }
+}
+
+impl PartialOrd<Self> for Column {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Column {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
 
 pub struct Table {
     all_columns: Vec<Column>,

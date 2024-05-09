@@ -1,7 +1,7 @@
 
-use crate::flatten::Column;
 use crate::parser::my_lexer::Lexer;
 use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
+use crate::table::Column;
 
 pub mod parser;
 pub mod my_lexer;

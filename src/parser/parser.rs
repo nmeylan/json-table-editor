@@ -2,7 +2,6 @@
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
-use crate::flatten::Column;
 use crate::parser::my_lexer::{Lexer};
 use crate::parser::{ParseOptions, Token};
 
@@ -11,7 +10,6 @@ pub struct Parser<'a> {
     current_token: Option<Token<'a>>,
     state_seen_start_parse_at: bool,
     pub max_depth: usize,
-    pub unique_fields: Vec<Column>,
     root_value_type: ValueType,
     root_array_len: usize,
 }
@@ -110,7 +108,7 @@ pub struct ParseResult {
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, unique_fields: Vec::with_capacity(1000), root_value_type: ValueType::None, root_array_len: 0 }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, root_value_type: ValueType::None, root_array_len: 0 }
     }
 
     pub fn parse(&mut self, parse_option: &ParseOptions, depth: u8, prefix: Option<String>) -> Result<ParseResult, String> {
@@ -547,7 +545,6 @@ mod tests {
         println!("{:?}", vec);
         assert_eq!(vec[0].0.pointer, "/skills");
         assert_eq!(vec[0].0.value_type, ValueType::Array);
-        assert_eq!(parser.parser.unique_fields[0].name, "/description");
     }
 
 

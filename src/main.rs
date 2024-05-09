@@ -3,7 +3,6 @@ extern crate core;
 mod table;
 mod panels;
 mod components;
-mod flatten;
 mod subtable_window;
 mod parser;
 
@@ -17,7 +16,6 @@ use std::time::{Instant};
 use eframe::egui;
 use eframe::Theme::Light;
 use egui::{Context, Separator, TextEdit, Vec2};
-use serde_json::Value;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::parser::{JSONParser, ParseOptions};
 use crate::parser::parser::ValueType;
@@ -180,22 +178,6 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             self.table.ui(ui)
         });
-    }
-}
-
-fn collect_keys(node: &Value, parent: &str, depth: i32, max_depth: &mut i32, count: &mut usize) {
-    if *max_depth < depth {
-        *max_depth = depth;
-    }
-    if let Some(object) = node.as_object() {
-        for (k, v) in object.iter() {
-            let key = if parent.is_empty() {
-                k.to_string()
-            } else {
-                format!("{}.{}", parent, k)
-            };
-            collect_keys(v, key.as_str(), depth + 1, max_depth, count);
-        }
     }
 }
 

@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use std::hash::{Hash, Hasher};
-use serde_json::Value;
 
 type PointerFragment = Vec<String>;
 type ValueMap = Vec<(PointerKey, Option<String>)>;
@@ -48,41 +47,6 @@ pub enum ValueType {
     None,
 }
 
-
-#[derive(Clone, Debug)]
-pub struct Column {
-    pub(crate) name: String,
-    pub(crate) depth: u8,
-}
-
-impl Column {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            depth: 0,
-        }
-    }
-}
-
-impl Eq for Column {}
-
-impl PartialEq<Self> for Column {
-    fn eq(&self, other: &Self) -> bool {
-        self.name.eq(&other.name)
-    }
-}
-
-impl PartialOrd<Self> for Column {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Column {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
-    }
-}
 
 pub fn flatten(values: &Vec<Value>, max_depth: u8, non_null_columns: &Vec<String>) -> (Vec<Vec<(PointerKey, Option<String>)>>, Vec<Column>) {
     let mut rows = Vec::with_capacity(values.len());

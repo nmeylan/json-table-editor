@@ -1,6 +1,5 @@
 use std::mem;
 use egui::{Context, Ui};
-use serde_json::Value;
 use crate::parser::parser::ValueType;
 use crate::table::Table;
 use crate::View;
@@ -11,12 +10,12 @@ pub struct SubTable {
 }
 
 impl SubTable {
-    pub fn new(name: String, mut root: Value, parent_value_type: ValueType) -> Self {
-        let _nodes = if let Some(nodes) = root.as_array_mut() {
-            mem::take(nodes)
-        } else {
-            vec![root]
-        };
+    pub fn new(name: String, mut root: Vec<usize>, parent_value_type: ValueType) -> Self {
+        // let _nodes = if let Some(nodes) = root.as_array_mut() {
+        //     mem::take(nodes)
+        // } else {
+        //     vec![root]
+        // };
         Self {
             name: name.clone(),
             table: Table::new(vec![], vec![], 10, name, parent_value_type),

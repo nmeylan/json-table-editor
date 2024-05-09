@@ -10,8 +10,6 @@ eframe = "0.27.2"
 egui_glow = "0.27.2"
 egui = "0.27.2"
 egui_extras = "0.27.2"
-serde_json = "1.0"
-text-editor = {git = "https://github.com/nmeylan/text-editor", rev = "5808089"}
 simdutf8 = "0.1.4"
 
 #[patch."https://github.com/nmeylan/text-editor"]
