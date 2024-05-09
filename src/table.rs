@@ -15,7 +15,6 @@ pub struct Column {
     pub(crate) depth: u8,
 }
 
-
 impl Column {
     pub fn new(name: String) -> Self {
         Self {
@@ -112,8 +111,6 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
-        let start = Instant::now();
-        println!("Flatten structure {}ms", start.elapsed().as_millis());
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
@@ -218,6 +215,7 @@ impl Table {
             table = table.column(Column::initial((columns[i].name.len() + 3) as f32 * text_width).clip(true).resizable(true));
         }
         let mut request_repaint = false;
+        let mut click_on_array_row_index: Option<(usize, PointerKey)> = None;
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
@@ -301,23 +299,10 @@ impl Table {
                         if let Some(index) = response.clicked_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
-                                let _row_index = pointer.index;
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
-                                    todo!("click array")
-                                    // if let Some(root) = value_at(&self.nodes[row_index], pointer.pointer.as_str()) {
-                                    //     let name = if matches!(self.parent_value_type, ValueType::Array) {
-                                    //         format!("{}{}{}", self.parent_pointer, row_index, pointer.pointer)
-                                    //     } else {
-                                    //         format!("{}{}", self.parent_pointer, pointer.pointer)
-                                    //     };
-                                    //
-                                    //     self.windows.push(SubTable::new(name, root,
-                                    //                                     if is_array { ValueType::Array } else { ValueType::Object }))
-                                    // } else {
-                                    //     println!("can't find root at {} {}", row_index, pointer.pointer)
-                                    // }
+                                    click_on_array_row_index = Some((row_index, pointer.clone()));
                                 } 
                             }
                         }
@@ -328,6 +313,18 @@ impl Table {
                     request_repaint = true;
                 }
             });
+
+        if let Some((row_index, pointer))= click_on_array_row_index {
+            let json_array_entries = &self.nodes()[row_index];
+            if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
+                let content = value.clone().unwrap();
+                self.windows.push(SubTable::new(pointer.pointer, content,
+                                                if matches!(pointer.value_type, ValueType::Array) { ValueType::Array } else { ValueType::Object }))
+            } else {
+                println!("can't find root at {} {}", row_index, pointer.pointer)
+            }
+        }
+
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
         }

@@ -1,7 +1,8 @@
 use std::mem;
 use egui::{Context, Ui};
+use crate::parser::{JsonArrayEntries, JSONParser, ParseOptions};
 use crate::parser::parser::ValueType;
-use crate::table::Table;
+use crate::table::{Column, Table};
 use crate::View;
 
 pub struct SubTable {
@@ -10,15 +11,14 @@ pub struct SubTable {
 }
 
 impl SubTable {
-    pub fn new(name: String, mut root: Vec<usize>, parent_value_type: ValueType) -> Self {
-        // let _nodes = if let Some(nodes) = root.as_array_mut() {
-        //     mem::take(nodes)
-        // } else {
-        //     vec![root]
-        // };
+    pub fn new(name: String, content: String, parent_value_type: ValueType) -> Self {
+        let mut parser = JSONParser::new(content.as_str());
+        let options = ParseOptions::default().parse_array(true).prefix(name.clone()).max_depth(10);
+        let result = parser.parse(options.clone()).unwrap();
+        let (nodes, columns) = JSONParser::as_array(result).unwrap();
         Self {
             name: name.clone(),
-            table: Table::new(vec![], vec![], 10, name, parent_value_type),
+            table: Table::new(nodes, columns, 10, name, parent_value_type),
         }
     }
     pub(crate) fn name(&self) -> &String {

@@ -15,6 +15,7 @@ pub struct ParseOptions {
     pub parse_array: bool,
     pub max_depth: usize,
     pub start_parse_at: Option<String>,
+    pub prefix: Option<String>,
 }
 
 impl Default for ParseOptions {
@@ -23,6 +24,7 @@ impl Default for ParseOptions {
             parse_array: true,
             max_depth: 10,
             start_parse_at: None,
+            prefix: None,
         }
     }
 }
@@ -41,6 +43,10 @@ impl ParseOptions {
         self.max_depth = max_depth;
         self
     }
+    pub fn prefix(mut self, prefix: String) -> Self {
+        self.prefix = Some(prefix);
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +61,10 @@ impl JsonArrayEntries {
     }
     pub fn index(&self) -> usize {
         self.index
+    }
+
+    pub fn find_node_at(&self, pointer: &str) -> Option<&(PointerKey, Option<String>)> {
+        self.entries().iter().find(|(p, _)| p.pointer.eq(pointer))
     }
 }
 
@@ -80,10 +90,10 @@ impl<'a> JSONParser<'a> {
         Self { parser }
     }
     pub fn parse(&mut self, options: ParseOptions) -> Result<ParseResult, String> {
-        self.parser.parse(&options, 1, None)
+        self.parser.parse(&options, 1)
     }
 
-    pub fn change_depth(previous_parse_result: ParseResult, parse_options: ParseOptions) -> Result<ParseResult, String> {
+    pub fn change_depth(previous_parse_result: ParseResult, mut parse_options: ParseOptions) -> Result<ParseResult, String> {
         if previous_parse_result.parsing_max_depth < parse_options.max_depth {
             let previous_len = previous_parse_result.json.len();
             let mut new_flat_json_structure = FlatJsonValue::with_capacity(previous_len + (parse_options.max_depth - previous_parse_result.parsing_max_depth) * (previous_len / 3));
@@ -93,7 +103,8 @@ impl<'a> JSONParser<'a> {
                 } else if let Some(mut v) = v {
                     let lexer = Lexer::new(unsafe { v.as_bytes_mut() });
                     let mut parser = Parser::new(lexer);
-                    let res = parser.parse(&parse_options, k.depth + 1, Some(k.pointer))?;
+                    parse_options.prefix =  Some(k.pointer);
+                    let res = parser.parse(&parse_options, k.depth + 1)?;
                     new_flat_json_structure.extend(res.json);
                 }
             }
@@ -103,6 +114,7 @@ impl<'a> JSONParser<'a> {
                 parsing_max_depth: parse_options.max_depth,
                 root_value_type: previous_parse_result.root_value_type,
                 started_parsing_at: previous_parse_result.started_parsing_at,
+                parsing_prefix: previous_parse_result.parsing_prefix,
                 root_array_len: previous_parse_result.root_array_len,
             })
         } else if previous_parse_result.parsing_max_depth > parse_options.max_depth {
@@ -130,6 +142,9 @@ impl<'a> JSONParser<'a> {
                     let _i = i.to_string();
                     let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                         let prefix = concat_string!(started_parsing_at, "/", _i);
+                        (k.pointer.starts_with(&prefix), prefix.len())
+                    } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
+                        let prefix = concat_string!(prefix, "/", _i);
                         (k.pointer.starts_with(&prefix), prefix.len())
                     } else {
                         let prefix = concat_string!("/", _i);
@@ -179,7 +194,7 @@ impl<'a> JSONParser<'a> {
             let mut should_add_row = true;
             for pointer in non_null_columns {
                 let pointer_to_find = concat_string!(prefix, "/", row.index().to_string(), pointer);
-                if let Some((_, value)) = row.entries().iter().find(|(p, _)| p.pointer.eq(&pointer_to_find)) {
+                if let Some((_, value)) = row.find_node_at(&pointer_to_find) {
                     if value.is_none() {
                         should_add_row = false;
                         break;
