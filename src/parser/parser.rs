@@ -170,20 +170,9 @@ impl<'a> Parser<'a> {
                                 i += 1;
                             }
                         } else {
-                            let mut square_close_count = 1;
-                            while let Some(ref token) = self.current_token {
-                                // mettre dans le lexer
-                                // consume until matching ]
-                                if matches!(token, Token::SquareOpen) {
-                                    square_close_count += 1;
-                                }
-                                if matches!(token, Token::SquareClose) {
-                                    if square_close_count == 1 {
-                                        break;
-                                    } else {
-                                        square_close_count += 1;
-                                    }
-                                }
+                            if let Some(array_str) = self.lexer.consume_string_until() {
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, count), Some(array_str.to_string())));
+                                break;
                             }
                         }
 
@@ -528,7 +517,7 @@ mod tests {
         }"#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default()).unwrap();
+        let vec = parser.parse(ParseOptions::default().parse_array(false)).unwrap();
         println!("{:?}", vec);
     }
 }

@@ -22,7 +22,7 @@ impl Default for ParseOptions {
     }
 }
 impl ParseOptions {
-    fn parse_array(mut self, parse_array: bool) -> Self {
+    pub(crate) fn parse_array(mut self, parse_array: bool) -> Self {
         self.parse_array = parse_array;
         self
     }

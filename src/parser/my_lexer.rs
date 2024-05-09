@@ -69,6 +69,27 @@ impl<'a> Lexer<'a> {
             reader: SliceRead::new(input),
         }
     }
+
+    pub fn consume_string_until(&mut self) -> Option<&'a str> {
+        let mut square_close_count = 1;
+        self.reader.skip_whitespace();
+        let start = self.reader.index - 1;
+        while !self.reader.is_at_end() {
+            match self.reader.next()? {
+                b'[' => square_close_count += 1,
+                b']' => {
+                    if square_close_count == 1 {
+                        self.reader.index -= 1;
+                        return Some(simdutf8::basic::from_utf8(&self.reader.slice[start..self.reader.index]).ok()?);
+                    } else {
+                        square_close_count -= 1;
+                    }
+                },
+                _ => {}
+            }
+        }
+        None
+    }
     #[inline]
     pub fn next_token(&mut self) -> Option<Token<'a>> {
         self.reader.skip_whitespace();
