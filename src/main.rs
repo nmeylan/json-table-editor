@@ -106,7 +106,7 @@ impl MyApp {
         //     let val = v.as_ref().unwrap();
         //     println!("{:?} {}", k.pointer, &(val[0..(val.len().min(10))]));
         // }
-        println!("Custom parser took {}ms", start.elapsed().as_millis());
+        println!("Custom parser took {}ms, max depth {}", start.elapsed().as_millis(), parser.parser.max_depth);
         exit(0);
         let start = Instant::now();
         let mut v: Value = serde_json::from_str(&content).unwrap();

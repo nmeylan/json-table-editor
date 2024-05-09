@@ -8,6 +8,7 @@ pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Option<Token<'a>>,
     state_seen_start_parse_at: bool,
+    pub max_depth: usize,
 }
 
 #[derive(Debug)]
@@ -68,7 +69,7 @@ pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None, state_seen_start_parse_at: false }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0 }
     }
 
     pub fn parse(&mut self, parse_option: ParseOptions) -> Result<FlatJsonValue, String> {
@@ -78,7 +79,7 @@ impl<'a> Parser<'a> {
             if matches!(current_token, Token::CurlyOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
-                self.process(&mut pointer_fragment, &mut values, 0, i, &parse_option)?;
+                self.process(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
                 if let Some(ref start_parse_at) = parse_option.start_parse_at {
                     for (k, _) in &mut values {
                         k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
@@ -92,7 +93,7 @@ impl<'a> Parser<'a> {
             if  matches!(current_token, Token::SquareOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
-                self.parse_value(&mut pointer_fragment, &mut values, 0, i, &parse_option)?;
+                self.parse_value(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
                 if let Some(ref start_parse_at) = parse_option.start_parse_at {
                     for (k, _) in &mut values {
                         k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
@@ -110,7 +111,10 @@ impl<'a> Parser<'a> {
 
     }
 
-    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
+    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: usize, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
+        if self.max_depth < depth {
+            self.max_depth = depth;
+        }
         self.next_token();
         while let Some(ref token) = self.current_token {
             match token {
@@ -154,10 +158,10 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
+    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: usize, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
         match self.current_token {
             Some(ref token) => match token {
-                Token::CurlyOpen => { self.process(route, target, depth, count, parse_option) }
+                Token::CurlyOpen => { self.process(route, target, depth + 1, count, parse_option) }
                 Token::SquareOpen => {
                     self.next_token();
                     while let Some(ref token) = self.current_token {
