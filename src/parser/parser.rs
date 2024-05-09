@@ -70,6 +70,14 @@ impl PointerKey {
             index: 0,
         }
     }
+    pub fn from_pointer_and_index(pointer: String, value_type: ValueType, depth: u8, index: usize) -> Self {
+        Self {
+            pointer,
+            value_type,
+            depth,
+            index,
+        }
+    }
 }
 
 #[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
@@ -206,7 +214,7 @@ impl<'a> Parser<'a> {
                         self.process(route, target, depth, count, parse_option)
                     } else {
                         if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth as u8), Some(object_str.to_string())));
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth as u8), Some(object_str.to_string().replace('\n', "").replace(' ', ""))));
                             Ok(())
                         } else {
                             Ok(())
@@ -248,7 +256,7 @@ impl<'a> Parser<'a> {
                             }
                         } else {
                             if let Some(array_str) = self.lexer.consume_string_until_end_of_array() {
-                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth as u8), Some(array_str.to_string())));
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth as u8), Some(array_str.to_string().replace('\n', "").replace(' ', ""))));
                                 break;
                             }
                         }

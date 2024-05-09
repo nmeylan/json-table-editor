@@ -1,7 +1,7 @@
 use std::mem;
 use crate::flatten::Column;
 use crate::parser::my_lexer::Lexer;
-use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, ValueType};
+use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
 
 pub mod parser;
 pub mod my_lexer;
@@ -43,7 +43,7 @@ impl ParseOptions {
     }
 }
 
-
+#[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
     ($($s:expr),+) => {{
@@ -76,8 +76,8 @@ impl<'a> JSONParser<'a> {
                 if !matches!(k.value_type, ValueType::Object) || k.depth > parse_options.max_depth as u8 {
                     new_flat_json_structure.push((k, v));
                 } else {
-                    if let Some(v) = v {
-                        let lexer = Lexer::new(v.as_bytes());
+                    if let Some(mut v) = v {
+                        let lexer = Lexer::new(unsafe { v.as_bytes_mut() });
                         let mut parser = Parser::new(lexer);
                         let res = parser.parse(&parse_options, k.depth + 1, Some(k.pointer))?;
                         new_flat_json_structure.extend(res.json);
@@ -110,6 +110,7 @@ impl<'a> JSONParser<'a> {
         let mut estimated_capacity = 1;
         for i in (0..previous_parse_result.root_array_len).rev() {
             let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
+            let mut is_first_entry = true;
             loop {
                 if j > 0 && previous_parse_result.json.len() > 0 {
                     let (k, v) = &previous_parse_result.json[j];
@@ -133,6 +134,11 @@ impl<'a> JSONParser<'a> {
                         }
                     }
                     if match_prefix {
+                        if is_first_entry {
+                            is_first_entry = false;
+                            let prefix = &k.pointer[0..prefix_len];
+                            flat_json_values.push((PointerKey::from_pointer_and_index(concat_string!(prefix, "/#"), ValueType::Number, k.depth, i), Some(i.to_string())));
+                        }
                         let (mut k, v) = previous_parse_result.json.pop().unwrap();
                         k.index = i;
                         flat_json_values.push((k, v));
@@ -150,7 +156,7 @@ impl<'a> JSONParser<'a> {
                 estimated_capacity = j / 10;
             }
         }
-
+        res.reverse();
         Ok((res, unique_keys))
     }
 }

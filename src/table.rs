@@ -4,7 +4,7 @@ use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer,
 use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
-use crate::{flatten, Window};
+use crate::{concat_string, flatten, Window};
 use crate::flatten::{Column, value_at};
 use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
@@ -61,7 +61,7 @@ impl super::View for Table {
 
                             let mut scroll_area = egui::ScrollArea::horizontal();
                             if let Some(offset) = scroll_to_x {
-                                scroll_area = scroll_area.scroll_offset(Vec2{x: offset, y: 0.0});
+                                scroll_area = scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
                             }
                             let mut scroll_area_output = scroll_area.show(ui, |ui| {
                                 self.table_ui(ui, false);
@@ -76,7 +76,7 @@ impl super::View for Table {
 impl Table {
     pub fn new(nodes: Vec<FlatJsonValue>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let start = Instant::now();
-        println!("Flatten structure {}ms",start.elapsed().as_millis());
+        println!("Flatten structure {}ms", start.elapsed().as_millis());
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
@@ -85,7 +85,7 @@ impl Table {
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
-            column_pinned: vec![Column::new("#".to_string())],
+            column_pinned: vec![Column::new("/#".to_string())],
             scroll_y: 0.0,
             hovered_row_index: None,
             columns_offset: vec![],
@@ -240,7 +240,14 @@ impl Table {
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |(index)| {
                             let data = self.get_pointer(columns, data, index);
+
                             if let Some((pointer, value)) = data {
+                                if pinned_column_table && index == 0 {
+                                    let label = Label::new(pointer.index.to_string()).sense(Sense::click());
+                                    return Some(Box::new(|ui| {
+                                        label.ui(ui)
+                                    }));
+                                }
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
                                         let label = Label::new(value).sense(Sense::click());
@@ -260,6 +267,7 @@ impl Table {
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
+                                    todo!("click array")
                                     // if let Some(root) = value_at(&self.nodes[row_index], pointer.pointer.as_str()) {
                                     //     let name = if matches!(self.parent_value_type, ValueType::Array) {
                                     //         format!("{}{}{}", self.parent_pointer, row_index, pointer.pointer)
@@ -297,7 +305,7 @@ impl Table {
         if let Some(column) = columns.get(index) {
             let key = &column.name;
             return data.iter().find(|(pointer, _)| {
-                let key = format!("{}/{}{}", self.parent_pointer, pointer.index, key);
+                let key = concat_string!(self.parent_pointer, "/", pointer.index.to_string(), key);
                 pointer.pointer.eq(&key)
             });
         }
@@ -314,6 +322,7 @@ impl Table {
                 self.non_null_columns.push(column);
             }
         }
+        todo!("on_non_null_column_click");
         // let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
         // self.flatten_nodes = flatten_nodes;
         self.next_frame_reset_scroll = true;

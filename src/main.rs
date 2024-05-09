@@ -86,7 +86,7 @@ impl MyApp {
             println!("Opening {}", args[1].as_str());
         }
 
-        let content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
+        let mut content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
 
         // let mut lexer = Lexer::new(content.as_str());
         // let tokens = lexer.lex().unwrap();
@@ -100,11 +100,11 @@ impl MyApp {
         // println!("{:?}", tokens);
         // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
         let start = Instant::now();
-        let mut parser = JSONParser::new(content.as_str());
+        let mut parser = JSONParser::new(content.as_mut_str());
         let options = ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1);
         let result = parser.parse(options.clone()).unwrap();
 
-        let max_depth = result.max_json_depth;
+        let max_depth = 10;
         println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
         let (result1, columns) = JSONParser::as_array(result).unwrap();
