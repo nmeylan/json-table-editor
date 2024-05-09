@@ -1,4 +1,4 @@
-use crate::parser::{JSONParser, Token};
+use crate::parser::{Token};
 
 pub struct SliceRead<'a> {
     slice: &'a [u8],

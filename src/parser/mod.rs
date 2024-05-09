@@ -1,4 +1,4 @@
-use std::mem;
+
 use crate::flatten::Column;
 use crate::parser::my_lexer::Lexer;
 use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
@@ -90,13 +90,11 @@ impl<'a> JSONParser<'a> {
             for (k, v) in previous_parse_result.json {
                 if !matches!(k.value_type, ValueType::Object) || k.depth > parse_options.max_depth as u8 {
                     new_flat_json_structure.push((k, v));
-                } else {
-                    if let Some(mut v) = v {
-                        let lexer = Lexer::new(unsafe { v.as_bytes_mut() });
-                        let mut parser = Parser::new(lexer);
-                        let res = parser.parse(&parse_options, k.depth + 1, Some(k.pointer))?;
-                        new_flat_json_structure.extend(res.json);
-                    }
+                } else if let Some(mut v) = v {
+                    let lexer = Lexer::new(unsafe { v.as_bytes_mut() });
+                    let mut parser = Parser::new(lexer);
+                    let res = parser.parse(&parse_options, k.depth + 1, Some(k.pointer))?;
+                    new_flat_json_structure.extend(res.json);
                 }
             }
             Ok(ParseResult {
@@ -127,8 +125,8 @@ impl<'a> JSONParser<'a> {
             let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
             let mut is_first_entry = true;
             loop {
-                if j > 0 && previous_parse_result.json.len() > 0 {
-                    let (k, v) = &previous_parse_result.json[j];
+                if j > 0 && !previous_parse_result.json.is_empty() {
+                    let (k, _v) = &previous_parse_result.json[j];
                     let _i = i.to_string();
                     let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                         let prefix = concat_string!(started_parsing_at, "/", _i);
@@ -137,7 +135,7 @@ impl<'a> JSONParser<'a> {
                         let prefix = concat_string!("/", _i);
                         (k.pointer.starts_with(&prefix), prefix.len())
                     };
-                    if k.pointer.len() > 0 {
+                    if !k.pointer.is_empty() {
                         // println!("{}({}). - {} {}", i, match_prefix, j, k.pointer);
                         let key = &k.pointer[prefix_len..k.pointer.len()];
                         let column = Column {

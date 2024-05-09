@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::fmt::format;
+
 use std::hash::{Hash, Hasher};
 use serde_json::Value;
 
@@ -74,7 +74,7 @@ impl PartialEq<Self> for Column {
 
 impl PartialOrd<Self> for Column {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -174,16 +174,16 @@ pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut Pointer
         Value::Null => {
             target.push((PointerKey::from_pointer(pointer, ValueType::Null, count), None));
         }
-        Value::Bool(b) => {
+        Value::Bool(_b) => {
             target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), format!("{}", value).into()));
         }
-        Value::Number(n) => {
+        Value::Number(_n) => {
             target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), format!("{}", value).into()));
         }
-        Value::String(s) => {
+        Value::String(_s) => {
             target.push((PointerKey::from_pointer(pointer, ValueType::String, count), format!("{}", value).into()));
         }
-        Value::Array(arr) => {
+        Value::Array(_arr) => {
             target.push((PointerKey::from_pointer(pointer, ValueType::Array, count), format!("{}", value).into()));
         }
         Value::Object(obj) => {
@@ -200,11 +200,11 @@ pub fn process(value: &Value, unique_keys: &mut Vec<Column>, route: &mut Pointer
     route.pop();
 }
 
-fn escape<'a>(value: &'a str) -> String {
-    value.replace("~", "~0").replace("/", "~1")
+fn escape(value: &str) -> String {
+    value.replace('~', "~0").replace('/', "~1")
 }
 
 #[allow(dead_code)]
-fn unescape<'a>(value: &'a str) -> String {
+fn unescape(value: &str) -> String {
     value.replace("~1", "/").replace("~0", "~")
 }

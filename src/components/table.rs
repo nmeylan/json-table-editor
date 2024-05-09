@@ -35,7 +35,7 @@ impl Size {
 
     /// Relative size relative to all available space. Values must be in range `0.0..=1.0`.
     pub fn relative(fraction: f32) -> Self {
-        egui::egui_assert!(0.0 <= fraction && fraction <= 1.0);
+        egui::egui_assert!((0.0..=1.0).contains(&fraction));
         Self::Relative {
             fraction,
             range: Rangef::new(0.0, f32::INFINITY),
@@ -107,7 +107,7 @@ impl Sizing {
             .map(|&size| match size {
                 Size::Absolute { initial, .. } => initial,
                 Size::Relative { fraction, range } => {
-                    assert!(0.0 <= fraction && fraction <= 1.0);
+                    assert!((0.0..=1.0).contains(&fraction));
                     range.clamp(length * fraction)
                 }
                 Size::Remainder { .. } => {
@@ -161,8 +161,8 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 use eframe::epaint::Color32;
-use eframe::epaint::text::layout;
-use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Label, Widget};
+
+use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Widget};
 use egui::scroll_area::ScrollAreaOutput;
 
 #[derive(Clone, Copy)]
@@ -869,10 +869,8 @@ impl<'a> TableBuilder<'a> {
                 if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
                     first_visible_seen = true;
                     visible_index.push(index);
-                } else {
-                    if first_visible_seen && !last_visible_seen {
-                        last_visible_seen = true;
-                    }
+                } else if first_visible_seen && !last_visible_seen {
+                    last_visible_seen = true;
                 }
                 if !first_visible_seen {
                     first_col_visible_offset += width + layout.ui.spacing().item_spacing[0];
@@ -891,8 +889,8 @@ impl<'a> TableBuilder<'a> {
                 max_used_widths: &mut max_used_widths,
                 row_index: 0,
                 col_index: 0,
-                start_x: start_x,
-                first_col_visible_offset: first_col_visible_offset,
+                start_x,
+                first_col_visible_offset,
                 remainder_with,
                 height,
                 striped: false,
@@ -1522,7 +1520,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         (used_rect, response)
     }
-    pub fn cols<'bb, F>(& mut self, is_header: bool, mut add_cell_contents: F) -> ColumnResponse
+    pub fn cols<'bb, F>(& mut self, is_header: bool, add_cell_contents: F) -> ColumnResponse
         where F: Fn(usize) -> Option<Box<dyn FnOnce(&mut Ui) -> Response + 'bb>>{
         let width = self.first_col_visible_offset;
 
@@ -1581,7 +1579,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             );
             last_index = *col_index;
         }
-        if self.columns.len() > 0 && is_header && last_index < self.columns.len() - 1 {
+        if !self.columns.is_empty() && is_header && last_index < self.columns.len() - 1 {
             self.layout.add_empty(
                 CellSize::Absolute(self.remainder_with),
                 CellSize::Absolute(self.height),

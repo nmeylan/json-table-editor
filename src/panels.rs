@@ -1,21 +1,14 @@
 use egui::{Context, Ui};
 
 pub const SelectColumnsPanel_id: &str = "Select columns to display";
+#[derive(Default)]
 pub struct SelectColumnsPanel {
     enabled: bool,
     visible: bool,
     selected_columns: Vec<String>,
 }
 
-impl Default for SelectColumnsPanel {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            visible: false,
-            selected_columns: vec![],
-        }
-    }
-}
+
 
 impl super::Window for SelectColumnsPanel {
     fn name(&self) -> &'static str {
@@ -42,7 +35,7 @@ impl super::View for SelectColumnsPanel {
             egui::Grid::new("select_columns_grid")
                 .num_columns(2)
                 .spacing([40.0, 4.0])
-                .show(ui, |ui| {
+                .show(ui, |_ui| {
 
                 });
         });

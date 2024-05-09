@@ -1,10 +1,3 @@
-#![cfg_attr(
-    not(debug_assertions),
-    windows_subsystem = "windows"
-)] // hide console window on Windows in release
-#![feature(trait_upcasting)]
-
-
 extern crate core;
 
 mod table;
@@ -14,19 +7,19 @@ mod flatten;
 mod subtable_window;
 mod parser;
 
-use std::{env, fs, io, mem};
-use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashSet};
-use std::fmt::{Display, Formatter};
+use std::{env, fs};
+
+use std::collections::{BTreeSet};
+
 use std::path::Path;
-use std::process::exit;
-use std::time::{Duration, Instant};
+
+use std::time::{Instant};
 use eframe::egui;
 use eframe::Theme::Light;
-use egui::{Color32, Context, Separator, TextEdit, Vec2};
+use egui::{Context, Separator, TextEdit, Vec2};
 use serde_json::Value;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
-use crate::parser::{JSONParser, my_lexer, ParseOptions};
+use crate::parser::{JSONParser, ParseOptions};
 use crate::parser::parser::ValueType;
 use crate::table::Table;
 
@@ -63,7 +56,7 @@ fn main() {
         viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
         ..eframe::NativeOptions::default()
     };
-    eframe::run_native("Empty app", options, Box::new(|cc| {
+    eframe::run_native("Empty app", options, Box::new(|_cc| {
         Box::new(MyApp::new())
     }));
 }
@@ -133,7 +126,7 @@ impl MyApp {
         Self {
             table: Table::new(result1, columns, 1, "/skills".to_string(), ValueType::Array),
             windows: vec![
-                Box::new(SelectColumnsPanel::default())
+                Box::<SelectColumnsPanel>::default()
             ],
             max_depth: max_depth as u8,
             open: Default::default(),
@@ -161,7 +154,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {

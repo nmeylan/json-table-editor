@@ -1,11 +1,11 @@
 use std::cell::RefCell;
 use std::time::Instant;
-use egui::{Align, Color32, Context, Label, Sense, Separator, Stroke, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
-use serde_json::Value;
-use crate::components::table::TableBuilder;
-use crate::{concat_string, flatten, Window};
-use crate::flatten::{Column, value_at};
+
+
+use crate::{concat_string, Window};
+use crate::flatten::{Column};
 use crate::parser::{JsonArrayEntries, JSONParser};
 use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
@@ -39,7 +39,7 @@ impl super::View for Table {
             .vertical(|mut strip| {
                 strip.cell(|ui| {
                     let parent_size_available = ui.available_rect_before_wrap().height();
-                    ui.horizontal(|mut ui| {
+                    ui.horizontal(|ui| {
                         ui.set_height(parent_size_available);
                         ui.push_id("table-pinned-column", |ui| {
                             ui.vertical(|ui| {
@@ -65,7 +65,7 @@ impl super::View for Table {
                             if let Some(offset) = scroll_to_x {
                                 scroll_area = scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
                             }
-                            let mut scroll_area_output = scroll_area.show(ui, |ui| {
+                            let _scroll_area_output = scroll_area.show(ui, |ui| {
                                 self.table_ui(ui, false);
                             });
                         });
@@ -111,7 +111,7 @@ impl Table {
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
 
-    pub fn update_selected_columns(&mut self, depth: u8) {
+    pub fn update_selected_columns(&mut self, _depth: u8) {
         todo!("update_selected_columns not implemented")
         // let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth, &self.non_null_columns);
         // all_columns.sort();
@@ -127,7 +127,7 @@ impl Table {
 
     fn selected_columns(all_columns: &Vec<Column>, depth: u8) -> Vec<Column> {
         let mut column_selected: Vec<Column> = vec![];
-        for col in Self::visible_columns(&all_columns, depth) {
+        for col in Self::visible_columns(all_columns, depth) {
             match col.name.as_str() {
                 // "id" => column_selected.push(i),
                 // "name" => column_selected.push(i),
@@ -186,11 +186,11 @@ impl Table {
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
-                let mut pinned_column: RefCell<Option<usize>> = RefCell::new(None);
-                let mut i: RefCell<usize> = RefCell::new(0);
+                let pinned_column: RefCell<Option<usize>> = RefCell::new(None);
+                let i: RefCell<usize> = RefCell::new(0);
                 header.cols(true, |index| {
                     let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                    let mut column = columns.get(index).unwrap();
+                    let column = columns.get(index).unwrap();
                     let name = column.name.clone();
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
@@ -235,13 +235,13 @@ impl Table {
                     self.on_non_null_column_click(clicked_column.clone());
                 }
             })
-            .body(self.hovered_row_index, |mut body| {
+            .body(self.hovered_row_index, |body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                let (hovered_row_index) = body.rows(text_height, self.nodes().len(), |mut row| {
+                let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
                     let node = self.nodes().get(row_index);
                     if let Some(data) = node.as_ref() {
-                        let response = row.cols(false, |(index)| {
+                        let response = row.cols(false, |index| {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
@@ -265,8 +265,8 @@ impl Table {
 
                         if let Some(index) = response.clicked_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
-                            if let Some((pointer, value)) = data {
-                                let row_index = pointer.index;
+                            if let Some((pointer, _value)) = data {
+                                let _row_index = pointer.index;
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
@@ -283,7 +283,7 @@ impl Table {
                                     // } else {
                                     //     println!("can't find root at {} {}", row_index, pointer.pointer)
                                     // }
-                                } else {}
+                                } 
                             }
                         }
                     }
@@ -318,12 +318,10 @@ impl Table {
     fn on_non_null_column_click(&mut self, column: String) {
         if self.non_null_columns.is_empty() {
             self.non_null_columns.push(column);
+        } else if self.non_null_columns.contains(&column) {
+            self.non_null_columns.retain(|c| !c.eq(&column));
         } else {
-            if self.non_null_columns.contains(&column) {
-                self.non_null_columns.retain(|c| !c.eq(&column));
-            } else {
-                self.non_null_columns.push(column);
-            }
+            self.non_null_columns.push(column);
         }
         if !self.non_null_columns.is_empty() {
             self.filtered_nodes = JSONParser::filter_non_null_column(&self.nodes, &self.parent_pointer, &self.non_null_columns);

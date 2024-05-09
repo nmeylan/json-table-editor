@@ -12,7 +12,7 @@ pub struct SubTable {
 
 impl SubTable {
     pub fn new(name: String, mut root: Value, parent_value_type: ValueType) -> Self {
-        let nodes = if let Some(nodes) = root.as_array_mut() {
+        let _nodes = if let Some(nodes) = root.as_array_mut() {
             mem::take(nodes)
         } else {
             vec![root]
