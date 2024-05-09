@@ -16,7 +16,7 @@ pub struct Parser<'a> {
     root_array_len: usize,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
@@ -98,6 +98,7 @@ impl Default for ValueType {
 }
 
 type PointerFragment = Vec<String>;
+
 pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
 
 pub struct ParseResult {

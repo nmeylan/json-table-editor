@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::{concat_string, flatten, Window};
 use crate::flatten::{Column, value_at};
+use crate::parser::{JsonArrayEntries, JSONParser};
 use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
 
@@ -14,7 +15,8 @@ pub struct Table {
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
     max_depth: usize,
-    nodes: Vec<FlatJsonValue>,
+    nodes: Vec<JsonArrayEntries>,
+    filtered_nodes: Vec<JsonArrayEntries>,
     scroll_y: f32,
     non_null_columns: Vec<String>,
     pub hovered_row_index: Option<usize>,
@@ -74,7 +76,7 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(nodes: Vec<FlatJsonValue>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let start = Instant::now();
         println!("Flatten structure {}ms", start.elapsed().as_millis());
         Self {
@@ -94,6 +96,7 @@ impl Table {
             windows: vec![],
             scroll_to_column: "".to_string(),
             next_frame_scroll_to_column: false,
+            filtered_nodes: vec![],
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -234,12 +237,12 @@ impl Table {
             })
             .body(self.hovered_row_index, |mut body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                let (hovered_row_index) = body.rows(text_height, self.nodes.len(), |mut row| {
+                let (hovered_row_index) = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
-                    let node = self.nodes.get(row_index);
+                    let node = self.nodes().get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |(index)| {
-                            let data = self.get_pointer(columns, data, index);
+                            let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
                                 if pinned_column_table && index == 0 {
@@ -261,7 +264,7 @@ impl Table {
                         });
 
                         if let Some(index) = response.clicked_col_index {
-                            let data = self.get_pointer(columns, data, index);
+                            let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, value)) = data {
                                 let row_index = pointer.index;
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
@@ -301,11 +304,11 @@ impl Table {
         }
     }
 
-    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValue, index: usize) -> Option<&'a (PointerKey, Option<String>)> {
+    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValue, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
         if let Some(column) = columns.get(index) {
             let key = &column.name;
+            let key = concat_string!(self.parent_pointer, "/", row_index.to_string(), key);
             return data.iter().find(|(pointer, _)| {
-                let key = concat_string!(self.parent_pointer, "/", pointer.index.to_string(), key);
                 pointer.pointer.eq(&key)
             });
         }
@@ -322,9 +325,22 @@ impl Table {
                 self.non_null_columns.push(column);
             }
         }
-        todo!("on_non_null_column_click");
+        if !self.non_null_columns.is_empty() {
+            self.filtered_nodes = JSONParser::filter_non_null_column(&self.nodes, &self.parent_pointer, &self.non_null_columns);
+        } else {
+            self.filtered_nodes.clear();
+        }
         // let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
         // self.flatten_nodes = flatten_nodes;
         self.next_frame_reset_scroll = true;
+    }
+
+    #[inline]
+    fn nodes(&self) -> &Vec<JsonArrayEntries> {
+        if self.non_null_columns.is_empty() {
+            &self.nodes
+        } else {
+            &self.filtered_nodes
+        }
     }
 }

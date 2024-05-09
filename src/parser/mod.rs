@@ -43,6 +43,21 @@ impl ParseOptions {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct JsonArrayEntries {
+    entries: FlatJsonValue,
+    index: usize,
+}
+
+impl JsonArrayEntries {
+    pub fn entries(&self) -> &FlatJsonValue {
+        &self.entries
+    }
+    pub fn index(&self) -> usize {
+        self.index
+    }
+}
+
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
@@ -100,12 +115,12 @@ impl<'a> JSONParser<'a> {
         }
     }
 
-    pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<FlatJsonValue>, Vec<Column>), String> {
+    pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<JsonArrayEntries>, Vec<Column>), String> {
         if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
             return Err("Parsed json root is not an array".to_string());
         }
         let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
-        let mut res: Vec<FlatJsonValue> = Vec::with_capacity(previous_parse_result.root_array_len);
+        let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(previous_parse_result.root_array_len);
         let mut j = previous_parse_result.json.len() - 1;
         let mut estimated_capacity = 1;
         for i in (0..previous_parse_result.root_array_len).rev() {
@@ -145,12 +160,12 @@ impl<'a> JSONParser<'a> {
                     } else {
                         break;
                     }
-                    j -=1;
+                    j -= 1;
                 } else {
                     break;
                 }
             }
-            res.push(flat_json_values);
+            res.push(JsonArrayEntries { entries: flat_json_values, index: i });
 
             if i == 10 {
                 estimated_capacity = j / 10;
@@ -158,6 +173,30 @@ impl<'a> JSONParser<'a> {
         }
         res.reverse();
         Ok((res, unique_keys))
+    }
+
+    pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntries>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntries> {
+        let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(previous_parse_result.len());
+        for row in previous_parse_result {
+            let mut should_add_row = true;
+            for pointer in non_null_columns {
+                let pointer_to_find = concat_string!(prefix, "/", row.index().to_string(), pointer);
+                if let Some((_, value)) = row.entries().iter().find(|(p, _)| p.pointer.eq(&pointer_to_find)) {
+                    if value.is_none() {
+                        should_add_row = false;
+                        break;
+                    }
+                } else {
+                    should_add_row = false;
+                    break;
+                }
+            }
+
+            if should_add_row {
+                res.push(row.clone());
+            }
+        }
+        res
     }
 }
 
