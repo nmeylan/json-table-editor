@@ -72,8 +72,8 @@ impl<'a> Lexer<'a> {
 
     pub fn consume_string_until_end_of_array(&mut self) -> Option<&'a str> {
         let mut square_close_count = 1;
-        self.reader.skip_whitespace();
         let start = self.reader.index - 1;
+        self.reader.skip_whitespace();
         while !self.reader.is_at_end() {
             match self.reader.next()? {
                 b'[' => square_close_count += 1,
@@ -93,14 +93,14 @@ impl<'a> Lexer<'a> {
 
     pub fn consume_string_until_end_of_object(&mut self) -> Option<&'a str> {
         let mut square_close_count = 1;
-        self.reader.skip_whitespace();
         let start = self.reader.index - 1;
+        self.reader.skip_whitespace();
         while !self.reader.is_at_end() {
             match self.reader.next()? {
                 b'{' => square_close_count += 1,
                 b'}' => {
                     if square_close_count == 1 {
-                        let value = simdutf8::basic::from_utf8(&self.reader.slice[start..self.reader.index - 1]).ok()?;
+                        let value = simdutf8::basic::from_utf8(&self.reader.slice[start..self.reader.index]).ok()?;
                         return Some(value);
                     } else {
                         square_close_count -= 1;

@@ -101,9 +101,13 @@ impl MyApp {
         // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_str());
-        let result = parser.parse(ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1)).unwrap();
+        let options = ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1);
+        let result = parser.parse(options.clone()).unwrap();
 
         println!("Custom parser took {}ms, max depth {}, {}", start.elapsed().as_millis(), result.max_json_depth, result.json.len());
+        let start = Instant::now();
+        let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
+        println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());
         exit(0);
         let start = Instant::now();
         let mut v: Value = serde_json::from_str(&content).unwrap();

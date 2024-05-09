@@ -17,6 +17,7 @@ pub struct Parser<'a> {
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
+    pub depth: u8,
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -45,10 +46,11 @@ macro_rules! concat_string {
 }
 
 impl PointerKey {
-    pub fn from_pointer(pointer: String, value_type: ValueType) -> Self {
+    pub fn from_pointer(pointer: String, value_type: ValueType, depth: u8) -> Self {
         Self {
             pointer,
-            value_type
+            value_type,
+            depth,
         }
     }
 }
@@ -78,40 +80,41 @@ impl<'a> Parser<'a> {
         Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, unique_fields: Vec::with_capacity(1000) }
     }
 
-    pub fn parse(&mut self, parse_option: ParseOptions) -> Result<ParseResult, String> {
-        let mut values: Vec<(PointerKey, Option<String>)> = Vec::with_capacity(1_000_000);
+    pub fn parse(&mut self, parse_option: &ParseOptions, depth: u8, prefix: Option<String>) -> Result<ParseResult, String> {
+        let mut values: Vec<(PointerKey, Option<String>)> = Vec::with_capacity(10000);
         self.next_token();
         if let Some(current_token) = self.current_token.as_ref() {
             if matches!(current_token, Token::CurlyOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
+                prefix.map(|p| pointer_fragment.push(p));
                 let mut i = 0;
-                self.process(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
+                self.process(&mut pointer_fragment, &mut values, depth, i, &parse_option)?;
                 return Ok(ParseResult {
                     json: values,
                     max_json_depth: self.max_depth,
                     parsing_max_depth: parse_option.max_depth,
-                })
+                });
             }
-            if  matches!(current_token, Token::SquareOpen) {
+            if matches!(current_token, Token::SquareOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
+                prefix.map(|p| pointer_fragment.push(p));
                 let mut i = 0;
-                self.parse_value(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
+                self.parse_value(&mut pointer_fragment, &mut values, depth, i, &parse_option, false)?;
                 return Ok(ParseResult {
                     json: values,
                     max_json_depth: self.max_depth,
                     parsing_max_depth: parse_option.max_depth,
-                })
+                });
             }
             return Err(format!("Expected json to start with {{ or [ but started with {:?}", current_token));
         } else {
             return Err("Json is empty".to_string());
         }
-
     }
 
-    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: usize, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
-        if self.max_depth < depth {
-            self.max_depth = depth;
+    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: u8, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
+        if self.max_depth < depth as usize {
+            self.max_depth = depth as usize;
         }
         self.next_token();
         while let Some(ref token) = self.current_token {
@@ -132,7 +135,7 @@ impl<'a> Parser<'a> {
             } else {
                 return Err("Expected ':' after object key".to_string());
             }
-            self.parse_value(route, target, depth, count, parse_option)?;
+            self.parse_value(route, target, depth, count, parse_option, true)?;
             self.next_token();
 
 
@@ -142,12 +145,12 @@ impl<'a> Parser<'a> {
                 }
                 Some(ref token) if matches!(token, Token::CurlyClose) => {
                     route.pop();
-                    break
-                },
+                    break;
+                }
                 Some(ref token) if matches!(token, Token::SquareClose) => {
                     route.pop();
-                    break
-                },
+                    break;
+                }
                 None => break,
                 _ => return Err(format!("Expected ',' or '}}' or ']' after object value, got: {:?}", self.current_token)),
             }
@@ -156,15 +159,20 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: usize, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
+    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: u8, count: usize, parse_option: &ParseOptions, from_object: bool) -> Result<(), String> {
         match self.current_token {
             Some(ref token) => match token {
                 Token::CurlyOpen => {
-                    if depth < parse_option.max_depth {
-                        self.process(route, target, depth + 1, count, parse_option)
+                    let depth = if from_object {
+                        depth + 1
+                    } else {
+                        depth
+                    };
+                    if depth <= parse_option.max_depth as u8 {
+                        self.process(route, target, depth, count, parse_option)
                     } else {
                         if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object), Some(object_str.to_string())));
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth as u8), Some(object_str.to_string())));
                             Ok(())
                         } else {
                             Ok(())
@@ -178,9 +186,9 @@ impl<'a> Parser<'a> {
                             route.pop();
                             break;
                         }
-                        if parse_option.parse_array || (parse_option.start_parse_at.is_some() && !self.state_seen_start_parse_at && parse_option.start_parse_at.as_ref().unwrap().eq(&Self::concat_route(route))){
+                        if parse_option.parse_array || (parse_option.start_parse_at.is_some() && !self.state_seen_start_parse_at && parse_option.start_parse_at.as_ref().unwrap().eq(&Self::concat_route(route))) {
                             route.push("/0".to_string());
-                            self.parse_value(route, target, depth, count, parse_option);
+                            self.parse_value(route, target, depth, count, parse_option, false);
                             route.pop();
                             self.next_token();
                             let mut i = 1;
@@ -194,7 +202,7 @@ impl<'a> Parser<'a> {
                                 self.next_token();
                                 if let Some(ref token) = self.current_token {
                                     route.push(format!("/{}", i));
-                                    self.parse_value(route, target, depth, count, parse_option);
+                                    self.parse_value(route, target, depth, count, parse_option, false);
                                     route.pop();
                                 } else {
                                     break;
@@ -204,11 +212,10 @@ impl<'a> Parser<'a> {
                             }
                         } else {
                             if let Some(array_str) = self.lexer.consume_string_until_end_of_array() {
-                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array), Some(array_str.to_string())));
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth as u8), Some(array_str.to_string())));
                                 break;
                             }
                         }
-
                     }
                     Ok(())
                 }
@@ -217,10 +224,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::String), Some(value)));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::String, depth as u8), Some(value)));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::String), Some(value)));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::String, depth as u8), Some(value)));
                     }
                     Ok(())
                 }
@@ -229,10 +236,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::Number), Some(value)));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Number, depth as u8), Some(value)));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Number), Some(value)));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Number, depth as u8), Some(value)));
                     }
                     Ok(())
                 }
@@ -241,10 +248,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::Bool), Some(value.to_string())));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth as u8), Some(value.to_string())));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool), Some(value.to_string())));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth as u8), Some(value.to_string())));
                     }
                     Ok(())
                 }
@@ -271,7 +278,7 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::{JSONParser, my_lexer, ParseOptions};
+    use crate::parser::{JSONParser, ParseOptions};
     use crate::parser::parser::ValueType;
 
 
@@ -301,19 +308,22 @@ mod tests {
         assert_eq!(vec[3].0.value_type, ValueType::Bool);
         assert_eq!(vec[3].1, Some("true".to_string()));
     }
+
     #[test]
     fn max_depth_object() {
         let json = r#"{"nested": {"a1": "a","b": {"a2": "a","c": {"a3": "a"}}}"#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().max_depth(1)).unwrap().json;
+        let result1 = parser.parse(ParseOptions::default().max_depth(1)).unwrap();
+        let vec = &result1.json;
         println!("{:?}", vec);
         assert_eq!(vec.len(), 1);
         assert_eq!(vec[0].0.pointer, "/nested");
         assert_eq!(vec[0].0.value_type, ValueType::Object);
-        assert_eq!(vec[0].1, Some("{\"a1\": \"a\",\"b\": {\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+        assert_eq!(vec[0].1, Some("{\"a1\": \"a\",\"b\": {\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}}".to_string()));
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().max_depth(2)).unwrap().json;
+        let result2 = parser.parse(ParseOptions::default().max_depth(2)).unwrap();
+        let vec = &result2.json;
         println!("{:?}", vec);
         assert_eq!(vec.len(), 2);
         assert_eq!(vec[0].0.pointer, "/nested/a1");
@@ -321,8 +331,28 @@ mod tests {
         assert_eq!(vec[0].1, Some("a".to_string()));
         assert_eq!(vec[1].0.pointer, "/nested/b");
         assert_eq!(vec[1].0.value_type, ValueType::Object);
-        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}".to_string()));
+        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+        let result3 = JSONParser::change_depth(result1, ParseOptions::default().max_depth(2)).unwrap();
+        let vec = &result3.json;
+        println!("{:?}", vec);
+        assert_eq!(vec.len(), 2);
+        assert_eq!(vec[0].0.pointer, "/nested/a1");
+        assert_eq!(vec[0].0.value_type, ValueType::String);
+        assert_eq!(vec[0].1, Some("a".to_string()));
+        assert_eq!(vec[1].0.pointer, "/nested/b");
+        assert_eq!(vec[1].0.value_type, ValueType::Object);
+        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+    }
 
+    #[test]
+    fn max_depth_object2() {
+        let json = r#"{"skills": [{"description": "Bash", "bonusToTarget": [{"level":1,"value":2}], "copyflags": {
+        "plagiarism": true,"reproduce": true}, "bonusToSelf": [{"level":1,"value":2}]}, {"description": "Bash", "copyflags": {"plagiarism": true,"reproduce": true}}]"#;
+
+        let mut parser = JSONParser::new(json);
+        let result1 = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap();
+        let vec = &result1.json;
+        println!("{:?}", vec);
     }
 
     #[test]
@@ -401,6 +431,7 @@ mod tests {
         assert_eq!(vec[2].0.value_type, ValueType::Number);
         assert_eq!(vec[2].1, Some("3".to_string()));
     }
+
     #[test]
     fn array() {
         let json = r#"
@@ -534,6 +565,10 @@ mod tests {
       "maxLevel": 10,
       "name": "SM_SWORD",
       "type": "Weapon",
+      "copyflags": {
+        "plagiarism": true,
+        "reproduce": true
+      },
       "bonusToSelf": [
         {
           "level": 1,
@@ -622,7 +657,7 @@ mod tests {
         }"#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills")).unwrap().json;
+        let vec = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap().json;
         println!("{:?}", vec);
     }
 }
