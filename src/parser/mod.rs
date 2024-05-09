@@ -1,5 +1,5 @@
 use crate::parser::my_lexer::Lexer;
-use crate::parser::parser::{FlatJsonValue, Parser};
+use crate::parser::parser::{FlatJsonValue, Parser, ParseResult};
 
 pub mod parser;
 pub mod my_lexer;
@@ -46,7 +46,7 @@ impl<'a> JSONParser<'a> {
 
         Self { parser }
     }
-    pub fn parse(&mut self, options: ParseOptions) -> Result<FlatJsonValue, String> {
+    pub fn parse(&mut self, options: ParseOptions) -> Result<ParseResult, String> {
         self.parser.parse(options)
     }
 }
