@@ -104,7 +104,7 @@ impl MyApp {
         let options = ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1);
         let result = parser.parse(options.clone()).unwrap();
 
-        println!("Custom parser took {}ms, max depth {}, {}", start.elapsed().as_millis(), result.max_json_depth, result.json.len());
+        println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), result.max_json_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
         let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
         println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());

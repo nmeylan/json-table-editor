@@ -1,3 +1,4 @@
+use std::fmt::Pointer;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
@@ -11,6 +12,8 @@ pub struct Parser<'a> {
     state_seen_start_parse_at: bool,
     pub max_depth: usize,
     pub unique_fields: Vec<Column>,
+    root_value_type: ValueType,
+    root_array_len: usize,
 }
 
 #[derive(Debug)]
@@ -33,6 +36,17 @@ impl Hash for PointerKey {
         self.pointer.hash(state);
     }
 }
+impl PointerKey {
+    pub fn parent(&self) -> PointerKey {
+        let index = self.pointer.rfind('/').unwrap_or(0);
+        Self {
+            pointer: self.pointer[0..index].to_string(),
+            value_type: ValueType::Object,
+            depth: self.depth.max(0),
+        }
+    }
+}
+
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
     ($($s:expr),+) => {{
@@ -55,7 +69,7 @@ impl PointerKey {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Debug)]
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
 pub enum ValueType {
     Array,
     Object,
@@ -73,11 +87,14 @@ pub struct ParseResult {
     pub json: FlatJsonValue,
     pub max_json_depth: usize,
     pub parsing_max_depth: usize,
+    pub root_value_type: ValueType,
+    pub started_parsing_at: Option<String>,
+    pub root_array_len: usize,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, unique_fields: Vec::with_capacity(1000) }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, unique_fields: Vec::with_capacity(1000), root_value_type: ValueType::None, root_array_len: 0 }
     }
 
     pub fn parse(&mut self, parse_option: &ParseOptions, depth: u8, prefix: Option<String>) -> Result<ParseResult, String> {
@@ -88,22 +105,30 @@ impl<'a> Parser<'a> {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 prefix.map(|p| pointer_fragment.push(p));
                 let mut i = 0;
+                self.root_value_type = ValueType::Object;
                 self.process(&mut pointer_fragment, &mut values, depth, i, &parse_option)?;
                 return Ok(ParseResult {
                     json: values,
                     max_json_depth: self.max_depth,
                     parsing_max_depth: parse_option.max_depth,
+                    root_value_type: self.root_value_type,
+                    root_array_len: self.root_array_len,
+                    started_parsing_at: parse_option.start_parse_at.clone()
                 });
             }
             if matches!(current_token, Token::SquareOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 prefix.map(|p| pointer_fragment.push(p));
                 let mut i = 0;
+                self.root_value_type = ValueType::Array;
                 self.parse_value(&mut pointer_fragment, &mut values, depth, i, &parse_option, false)?;
                 return Ok(ParseResult {
                     json: values,
                     max_json_depth: self.max_depth,
                     parsing_max_depth: parse_option.max_depth,
+                    root_value_type: self.root_value_type,
+                    root_array_len: self.root_array_len,
+                    started_parsing_at: parse_option.start_parse_at.clone()
                 });
             }
             return Err(format!("Expected json to start with {{ or [ but started with {:?}", current_token));
@@ -194,8 +219,10 @@ impl<'a> Parser<'a> {
                             let mut i = 1;
                             while let Some(ref token) = self.current_token {
                                 if !matches!(token, Token::Comma) {
-                                    if !parse_option.parse_array {
+                                    if !self.state_seen_start_parse_at {
                                         self.state_seen_start_parse_at = true;
+                                        self.root_value_type = ValueType::Array;
+                                        self.root_array_len = i;
                                     }
                                     break;
                                 }
@@ -399,8 +426,10 @@ mod tests {
         "#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default()).unwrap().json;
+        let res = parser.parse(ParseOptions::default()).unwrap();
+        let vec = res.json;
         println!("{:?}", vec);
+        assert_eq!(res.root_array_len, 3);
         assert_eq!(vec[0].0.pointer, "/0");
         assert_eq!(vec[0].0.value_type, ValueType::Number);
         assert_eq!(vec[0].1, Some("1".to_string()));
@@ -448,6 +477,7 @@ mod tests {
         let vec = parser.parse(ParseOptions::default()).unwrap().json;
         println!("{:?}", vec);
         assert_eq!(vec[0].0.pointer, "/skills/0/description");
+        assert_eq!(vec[0].0.parent().pointer, "/skills/0");
         assert_eq!(vec[0].0.value_type, ValueType::String);
         assert_eq!(vec[0].1, Some("Basic Skill".to_string()));
         assert_eq!(vec[1].0.pointer, "/skills/1/description");
@@ -657,7 +687,9 @@ mod tests {
         }"#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap().json;
+        let res = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap();
+        let vec = res.json;
+        println!("{:?}", res.root_array_len);
         println!("{:?}", vec);
     }
 }

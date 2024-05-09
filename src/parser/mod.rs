@@ -72,6 +72,9 @@ impl<'a> JSONParser<'a> {
                 json: new_flat_json_structure,
                 max_json_depth: previous_parse_result.max_json_depth,
                 parsing_max_depth: parse_options.max_depth,
+                root_value_type: previous_parse_result.root_value_type,
+                started_parsing_at: previous_parse_result.started_parsing_at,
+                root_array_len: previous_parse_result.root_array_len,
             })
         } else if previous_parse_result.parsing_max_depth > parse_options.max_depth {
             // serialization
@@ -80,6 +83,14 @@ impl<'a> JSONParser<'a> {
             Ok(previous_parse_result)
         }
     }
+
+    // pub fn as_array(previous_parse_result: ParseResult) -> Result<Vec<FlatJsonValue>, String> {
+    //     if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
+    //         return Err("Parsed json root is not an array".to_string());
+    //     }
+    //     let res = Vec::with_capacity(10000);
+    //
+    // }
 }
 
 
