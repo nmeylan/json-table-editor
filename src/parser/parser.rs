@@ -1,6 +1,7 @@
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
+use crate::flatten::Column;
 use crate::parser::my_lexer::{Lexer};
 use crate::parser::{ParseOptions, Token};
 
@@ -9,13 +10,13 @@ pub struct Parser<'a> {
     current_token: Option<Token<'a>>,
     state_seen_start_parse_at: bool,
     pub max_depth: usize,
+    pub unique_fields: Vec<Column>,
 }
 
 #[derive(Debug)]
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
-    pub index: usize,
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -44,11 +45,10 @@ macro_rules! concat_string {
 }
 
 impl PointerKey {
-    pub fn from_pointer(pointer: String, value_type: ValueType, index: usize) -> Self {
+    pub fn from_pointer(pointer: String, value_type: ValueType) -> Self {
         Self {
             pointer,
-            value_type,
-            index,
+            value_type
         }
     }
 }
@@ -69,7 +69,7 @@ pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0 }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, unique_fields: Vec::with_capacity(1000) }
     }
 
     pub fn parse(&mut self, parse_option: ParseOptions) -> Result<FlatJsonValue, String> {
@@ -80,28 +80,12 @@ impl<'a> Parser<'a> {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
                 self.process(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
-                if let Some(ref start_parse_at) = parse_option.start_parse_at {
-                    for (k, _) in &mut values {
-                        k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
-                        if k.pointer.len() == 0 {
-                            k.pointer = "/".to_string();
-                        }
-                    }
-                }
                 return Ok(values)
             }
             if  matches!(current_token, Token::SquareOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
                 self.parse_value(&mut pointer_fragment, &mut values, 1, i, &parse_option)?;
-                if let Some(ref start_parse_at) = parse_option.start_parse_at {
-                    for (k, _) in &mut values {
-                        k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
-                        if k.pointer.len() == 0 {
-                            k.pointer = "/".to_string();
-                        }
-                    }
-                }
                 return Ok(values)
             }
             return Err(format!("Expected json to start with {{ or [ but started with {:?}", current_token));
@@ -161,7 +145,18 @@ impl<'a> Parser<'a> {
     fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: usize, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
         match self.current_token {
             Some(ref token) => match token {
-                Token::CurlyOpen => { self.process(route, target, depth + 1, count, parse_option) }
+                Token::CurlyOpen => {
+                    if depth < parse_option.max_depth {
+                        self.process(route, target, depth + 1, count, parse_option)
+                    } else {
+                        if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object), Some(object_str.to_string())));
+                            Ok(())
+                        } else {
+                            Ok(())
+                        }
+                    }
+                }
                 Token::SquareOpen => {
                     self.next_token();
                     while let Some(ref token) = self.current_token {
@@ -194,8 +189,8 @@ impl<'a> Parser<'a> {
                                 i += 1;
                             }
                         } else {
-                            if let Some(array_str) = self.lexer.consume_string_until() {
-                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, count), Some(array_str.to_string())));
+                            if let Some(array_str) = self.lexer.consume_string_until_end_of_array() {
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array), Some(array_str.to_string())));
                                 break;
                             }
                         }
@@ -208,10 +203,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::String, count), Some(value)));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::String), Some(value)));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::String, count), Some(value)));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::String), Some(value)));
                     }
                     Ok(())
                 }
@@ -220,10 +215,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), Some(value)));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Number), Some(value)));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), Some(value)));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Number), Some(value)));
                     }
                     Ok(())
                 }
@@ -232,10 +227,10 @@ impl<'a> Parser<'a> {
                     let pointer = Self::concat_route(route);
                     if let Some(ref start_parse_at) = parse_option.start_parse_at {
                         if pointer.starts_with(start_parse_at) {
-                            target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), Some(value.to_string())));
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Bool), Some(value.to_string())));
                         }
                     } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), Some(value.to_string())));
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool), Some(value.to_string())));
                     }
                     Ok(())
                 }
@@ -291,6 +286,29 @@ mod tests {
         assert_eq!(vec[3].0.pointer, "/aaa");
         assert_eq!(vec[3].0.value_type, ValueType::Bool);
         assert_eq!(vec[3].1, Some("true".to_string()));
+    }
+    #[test]
+    fn max_depth_object() {
+        let json = r#"{"nested": {"a1": "a","b": {"a2": "a","c": {"a3": "a"}}}"#;
+
+        let mut parser = JSONParser::new(json);
+        let vec = parser.parse(ParseOptions::default().max_depth(1)).unwrap();
+        println!("{:?}", vec);
+        assert_eq!(vec.len(), 1);
+        assert_eq!(vec[0].0.pointer, "/nested");
+        assert_eq!(vec[0].0.value_type, ValueType::Object);
+        assert_eq!(vec[0].1, Some("{\"a1\": \"a\",\"b\": {\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+        let mut parser = JSONParser::new(json);
+        let vec = parser.parse(ParseOptions::default().max_depth(2)).unwrap();
+        println!("{:?}", vec);
+        assert_eq!(vec.len(), 2);
+        assert_eq!(vec[0].0.pointer, "/nested/a1");
+        assert_eq!(vec[0].0.value_type, ValueType::String);
+        assert_eq!(vec[0].1, Some("a".to_string()));
+        assert_eq!(vec[1].0.pointer, "/nested/b");
+        assert_eq!(vec[1].0.value_type, ValueType::Object);
+        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}".to_string()));
+
     }
 
     #[test]
@@ -442,6 +460,7 @@ mod tests {
         println!("{:?}", vec);
         assert_eq!(vec[0].0.pointer, "/skills");
         assert_eq!(vec[0].0.value_type, ValueType::Array);
+        assert_eq!(parser.parser.unique_fields[0].name, "/description");
     }
 
 
