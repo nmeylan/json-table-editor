@@ -133,7 +133,8 @@ impl<'a> JSONParser<'a> {
                         }
                     }
                     if match_prefix {
-                        let (k, v) = previous_parse_result.json.pop().unwrap();
+                        let (mut k, v) = previous_parse_result.json.pop().unwrap();
+                        k.index = i;
                         flat_json_values.push((k, v));
                     } else {
                         break;

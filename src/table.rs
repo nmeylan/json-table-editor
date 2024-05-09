@@ -5,7 +5,8 @@ use egui::scroll_area::ScrollBarVisibility;
 use serde_json::Value;
 use crate::components::table::TableBuilder;
 use crate::{flatten, Window};
-use crate::flatten::{Column, PointerKey, value_at, ValueType};
+use crate::flatten::{Column, value_at};
+use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
 
 pub struct Table {
@@ -13,9 +14,8 @@ pub struct Table {
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
     max_depth: usize,
-    nodes: Vec<Value>,
+    nodes: Vec<FlatJsonValue>,
     scroll_y: f32,
-    pub flatten_nodes: Vec<Vec<(PointerKey, Option<String>)>>,
     non_null_columns: Vec<String>,
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
@@ -74,15 +74,12 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(nodes: Vec<Value>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(nodes: Vec<FlatJsonValue>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let start = Instant::now();
-        let (flatten_nodes, mut all_columns) = flatten::flatten(&nodes, depth, &vec![]);
         println!("Flatten structure {}ms",start.elapsed().as_millis());
-        all_columns.sort();
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
-            flatten_nodes,
             max_depth: depth as usize,
             nodes,
             non_null_columns: vec![],
@@ -112,12 +109,13 @@ impl Table {
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) {
-        let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth, &self.non_null_columns);
-        all_columns.sort();
-        self.all_columns = all_columns;
-        self.flatten_nodes = flatten_nodes;
-        let column_selected = Self::selected_columns(&self.all_columns, depth);
-        self.column_selected = column_selected;
+        todo!("update_selected_columns not implemented")
+        // let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth, &self.non_null_columns);
+        // all_columns.sort();
+        // self.all_columns = all_columns;
+        // self.flatten_nodes = flatten_nodes;
+        // let column_selected = Self::selected_columns(&self.all_columns, depth);
+        // self.column_selected = column_selected;
     }
     pub fn update_max_depth(&mut self, depth: u8) {
         self.max_depth = depth as usize;
@@ -236,12 +234,12 @@ impl Table {
             })
             .body(self.hovered_row_index, |mut body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                let (hovered_row_index) = body.rows(text_height, self.flatten_nodes.len(), |mut row| {
+                let (hovered_row_index) = body.rows(text_height, self.nodes.len(), |mut row| {
                     let row_index = row.index();
-                    let node = self.flatten_nodes.get(row_index);
+                    let node = self.nodes.get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |(index)| {
-                            let data = Self::get_pointer(columns, data, index);
+                            let data = self.get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
@@ -256,24 +254,24 @@ impl Table {
                         });
 
                         if let Some(index) = response.clicked_col_index {
-                            let data = Self::get_pointer(columns, data, index);
+                            let data = self.get_pointer(columns, data, index);
                             if let Some((pointer, value)) = data {
                                 let row_index = pointer.index;
                                 let is_array = matches!(pointer.value_type, ValueType::Array);
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
-                                    if let Some(root) = value_at(&self.nodes[row_index], pointer.pointer.as_str()) {
-                                        let name = if matches!(self.parent_value_type, ValueType::Array) {
-                                            format!("{}{}{}", self.parent_pointer, row_index, pointer.pointer)
-                                        } else {
-                                            format!("{}{}", self.parent_pointer, pointer.pointer)
-                                        };
-
-                                        self.windows.push(SubTable::new(name, root,
-                                                                        if is_array { ValueType::Array } else { ValueType::Object }))
-                                    } else {
-                                        println!("can't find root at {} {}", row_index, pointer.pointer)
-                                    }
+                                    // if let Some(root) = value_at(&self.nodes[row_index], pointer.pointer.as_str()) {
+                                    //     let name = if matches!(self.parent_value_type, ValueType::Array) {
+                                    //         format!("{}{}{}", self.parent_pointer, row_index, pointer.pointer)
+                                    //     } else {
+                                    //         format!("{}{}", self.parent_pointer, pointer.pointer)
+                                    //     };
+                                    //
+                                    //     self.windows.push(SubTable::new(name, root,
+                                    //                                     if is_array { ValueType::Array } else { ValueType::Object }))
+                                    // } else {
+                                    //     println!("can't find root at {} {}", row_index, pointer.pointer)
+                                    // }
                                 } else {}
                             }
                         }
@@ -295,10 +293,13 @@ impl Table {
         }
     }
 
-    fn get_pointer<'a>(columns: &Vec<Column>, data: &&'a Vec<(PointerKey, Option<String>)>, index: usize) -> Option<&'a (PointerKey, Option<String>)> {
+    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValue, index: usize) -> Option<&'a (PointerKey, Option<String>)> {
         if let Some(column) = columns.get(index) {
             let key = &column.name;
-            return data.iter().find(|(pointer, _)| pointer.pointer.eq(key));
+            return data.iter().find(|(pointer, _)| {
+                let key = format!("{}/{}{}", self.parent_pointer, pointer.index, key);
+                pointer.pointer.eq(&key)
+            });
         }
         None
     }
@@ -313,8 +314,8 @@ impl Table {
                 self.non_null_columns.push(column);
             }
         }
-        let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
-        self.flatten_nodes = flatten_nodes;
+        // let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
+        // self.flatten_nodes = flatten_nodes;
         self.next_frame_reset_scroll = true;
     }
 }

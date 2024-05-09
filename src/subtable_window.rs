@@ -1,7 +1,7 @@
 use std::mem;
 use egui::{Context, Ui};
 use serde_json::Value;
-use crate::flatten::ValueType;
+use crate::parser::parser::ValueType;
 use crate::table::Table;
 use crate::View;
 
@@ -19,7 +19,7 @@ impl SubTable {
         };
         Self {
             name: name.clone(),
-            table: Table::new(nodes, 10, name, parent_value_type),
+            table: Table::new(vec![], vec![], 10, name, parent_value_type),
         }
     }
     pub(crate) fn name(&self) -> &String {

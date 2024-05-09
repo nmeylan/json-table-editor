@@ -21,6 +21,7 @@ pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
     pub depth: u8,
+    pub index: usize
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -43,6 +44,7 @@ impl PointerKey {
             pointer: self.pointer[0..index].to_string(),
             value_type: ValueType::Object,
             depth: self.depth.max(0),
+            index: 0,
         }
     }
 }
@@ -65,6 +67,7 @@ impl PointerKey {
             pointer,
             value_type,
             depth,
+            index: 0,
         }
     }
 }

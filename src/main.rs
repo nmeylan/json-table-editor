@@ -25,9 +25,9 @@ use eframe::egui;
 use eframe::Theme::Light;
 use egui::{Color32, Context, Separator, TextEdit, Vec2};
 use serde_json::Value;
-use crate::flatten::ValueType;
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::parser::{JSONParser, my_lexer, ParseOptions};
+use crate::parser::parser::ValueType;
 use crate::table::Table;
 
 /// Something to view in the demo windows
@@ -104,33 +104,34 @@ impl MyApp {
         let options = ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1);
         let result = parser.parse(options.clone()).unwrap();
 
-        println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), result.max_json_depth, result.json.len(), result.root_array_len);
+        let max_depth = result.max_json_depth;
+        println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
-        let result1 = JSONParser::as_array(result).unwrap();
-        println!("Transformation to array took {}ms, root array len {}", start.elapsed().as_millis(), result1.len());
+        let (result1, columns) = JSONParser::as_array(result).unwrap();
+        println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
 
 
         // let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
         // println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());
-        exit(0);
-        let start = Instant::now();
-        let mut v: Value = serde_json::from_str(&content).unwrap();
-        let mut max_depth = 0;
-        let depth = 1;
-        let mut count = 0usize;
-
-        let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
-
-        println!("Parse took {}ms", start.elapsed().as_millis());
-        let start = Instant::now();
-        for node in root_node.as_array().unwrap().iter() {
-            collect_keys(&node, "", depth, &mut max_depth, &mut count);
-        }
-        println!("Collect max depth {}ms", start.elapsed().as_millis());
+        // exit(0);
+        // let start = Instant::now();
+        // let mut v: Value = serde_json::from_str(&content).unwrap();
+        // let mut max_depth = 0;
+        // let depth = 1;
+        // let mut count = 0usize;
+        //
+        // let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
+        //
+        // println!("Parse took {}ms", start.elapsed().as_millis());
+        // let start = Instant::now();
+        // for node in root_node.as_array().unwrap().iter() {
+        //     collect_keys(&node, "", depth, &mut max_depth, &mut count);
+        // }
+        // println!("Collect max depth {}ms", start.elapsed().as_millis());
 
         // println!("{:?}", all_columns);
         Self {
-            table: Table::new(mem::take(root_node.as_array_mut().unwrap()), 1, "/".to_string(), ValueType::Array),
+            table: Table::new(result1, columns, 1, "/skills".to_string(), ValueType::Array),
             windows: vec![
                 Box::new(SelectColumnsPanel::default())
             ],
