@@ -101,8 +101,11 @@ impl MyApp {
         // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_str());
-        let vec1 = parser.parse(ParseOptions::default().parse_array(false)).unwrap();
-        // println!("{:?}", vec1);
+        let vec1 = parser.parse(ParseOptions::default().start_parse_at("/skills").parse_array(false)).unwrap();
+        // for (k, v) in &vec1 {
+        //     let val = v.as_ref().unwrap();
+        //     println!("{:?} {}", k.pointer, &(val[0..(val.len().min(10))]));
+        // }
         println!("Custom parser took {}ms", start.elapsed().as_millis());
         exit(0);
         let start = Instant::now();

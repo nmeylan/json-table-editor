@@ -7,6 +7,7 @@ use crate::parser::{ParseOptions, Token};
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Option<Token<'a>>,
+    state_seen_start_parse_at: bool,
 }
 
 #[derive(Debug)]
@@ -67,23 +68,39 @@ pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false }
     }
 
-    pub fn parse(&mut self, parse_array: ParseOptions) -> Result<FlatJsonValue, String> {
+    pub fn parse(&mut self, parse_option: ParseOptions) -> Result<FlatJsonValue, String> {
         let mut values: Vec<(PointerKey, Option<String>)> = Vec::with_capacity(1_000_000);
         self.next_token();
         if let Some(current_token) = self.current_token.as_ref() {
             if matches!(current_token, Token::CurlyOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
-                self.process(&mut pointer_fragment, &mut values, 0, i, parse_array.parse_array)?;
+                self.process(&mut pointer_fragment, &mut values, 0, i, &parse_option)?;
+                if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                    for (k, _) in &mut values {
+                        k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
+                        if k.pointer.len() == 0 {
+                            k.pointer = "/".to_string();
+                        }
+                    }
+                }
                 return Ok(values)
             }
             if  matches!(current_token, Token::SquareOpen) {
                 let mut pointer_fragment: Vec<String> = Vec::with_capacity(128);
                 let mut i = 0;
-                self.parse_value(&mut pointer_fragment, &mut values, 0, i, parse_array.parse_array)?;
+                self.parse_value(&mut pointer_fragment, &mut values, 0, i, &parse_option)?;
+                if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                    for (k, _) in &mut values {
+                        k.pointer = k.pointer[start_parse_at.len()..k.pointer.len()].to_string();
+                        if k.pointer.len() == 0 {
+                            k.pointer = "/".to_string();
+                        }
+                    }
+                }
                 return Ok(values)
             }
             return Err(format!("Expected json to start with {{ or [ but started with {:?}", current_token));
@@ -93,7 +110,7 @@ impl<'a> Parser<'a> {
 
     }
 
-    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_array: bool) -> Result<(), String> {
+    fn process(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
         self.next_token();
         while let Some(ref token) = self.current_token {
             match token {
@@ -113,7 +130,7 @@ impl<'a> Parser<'a> {
             } else {
                 return Err("Expected ':' after object key".to_string());
             }
-            self.parse_value(route, target, depth, count, parse_array)?;
+            self.parse_value(route, target, depth, count, parse_option)?;
             self.next_token();
 
 
@@ -137,10 +154,10 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_array: bool) -> Result<(), String> {
+    fn parse_value(&mut self, route: &mut PointerFragment, target: &mut FlatJsonValue, depth: i32, count: usize, parse_option: &ParseOptions) -> Result<(), String> {
         match self.current_token {
             Some(ref token) => match token {
-                Token::CurlyOpen => { self.process(route, target, depth, count, parse_array) }
+                Token::CurlyOpen => { self.process(route, target, depth, count, parse_option) }
                 Token::SquareOpen => {
                     self.next_token();
                     while let Some(ref token) = self.current_token {
@@ -148,20 +165,23 @@ impl<'a> Parser<'a> {
                             route.pop();
                             break;
                         }
-                        if parse_array {
+                        if parse_option.parse_array || (parse_option.start_parse_at.is_some() && !self.state_seen_start_parse_at && parse_option.start_parse_at.as_ref().unwrap().eq(&Self::concat_route(route))){
                             route.push("/0".to_string());
-                            self.parse_value(route, target, depth, count, parse_array);
+                            self.parse_value(route, target, depth, count, parse_option);
                             route.pop();
                             self.next_token();
                             let mut i = 1;
                             while let Some(ref token) = self.current_token {
                                 if !matches!(token, Token::Comma) {
+                                    if !parse_option.parse_array {
+                                        self.state_seen_start_parse_at = true;
+                                    }
                                     break;
                                 }
                                 self.next_token();
                                 if let Some(ref token) = self.current_token {
                                     route.push(format!("/{}", i));
-                                    self.parse_value(route, target, depth, count, parse_array);
+                                    self.parse_value(route, target, depth, count, parse_option);
                                     route.pop();
                                 } else {
                                     break;
@@ -181,20 +201,38 @@ impl<'a> Parser<'a> {
                 }
                 Token::String(value) => {
                     let value = value.to_string();
-                    // self.next_token();
-                    target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::String, count), Some(value)));
+                    let pointer = Self::concat_route(route);
+                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                        if pointer.starts_with(start_parse_at) {
+                            target.push((PointerKey::from_pointer(pointer, ValueType::String, count), Some(value)));
+                        }
+                    } else {
+                        target.push((PointerKey::from_pointer(pointer, ValueType::String, count), Some(value)));
+                    }
                     Ok(())
                 }
                 Token::Number(value) => {
                     let value = value.to_string();
-                    // self.next_token();
-                    target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Number, count), Some(value)));
+                    let pointer = Self::concat_route(route);
+                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                        if pointer.starts_with(start_parse_at) {
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), Some(value)));
+                        }
+                    } else {
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Number, count), Some(value)));
+                    }
                     Ok(())
                 }
                 Token::Boolean(value) => {
                     let value = *value;
-                    // self.next_token();
-                    target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Bool, count), Some(value.to_string())));
+                    let pointer = Self::concat_route(route);
+                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                        if pointer.starts_with(start_parse_at) {
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), Some(value.to_string())));
+                        }
+                    } else {
+                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool, count), Some(value.to_string())));
+                    }
                     Ok(())
                 }
                 _ => return Err(format!("Unexpected token: {:?}", token))
@@ -351,6 +389,36 @@ mod tests {
         assert_eq!(vec[2].0.pointer, "/skills/2/description");
         assert_eq!(vec[2].0.value_type, ValueType::String);
         assert_eq!(vec[2].1, Some("Bash".to_string()));
+    }
+
+    #[test]
+    fn array_with_start_parse_at() {
+        let json = r#"
+            {
+                "skills": [
+                    {"description": "Basic Skill", "inner": [2]},
+                    {"description": "Heal", "inner": [3]},
+                    {"description": "Bash", "inner": [1]}
+                ]
+            }
+        "#;
+
+        let mut parser = JSONParser::new(json);
+        let vec = parser.parse(ParseOptions::default().start_parse_at("/skills").parse_array(false)).unwrap();
+        println!("{:?}", vec);
+        assert_eq!(vec.len(), 6);
+        assert_eq!(vec[0].0.pointer, "/0/description");
+        assert_eq!(vec[0].0.value_type, ValueType::String);
+        assert_eq!(vec[1].0.pointer, "/0/inner");
+        assert_eq!(vec[1].0.value_type, ValueType::Array);
+        assert_eq!(vec[2].0.pointer, "/1/description");
+        assert_eq!(vec[2].0.value_type, ValueType::String);
+        assert_eq!(vec[3].0.pointer, "/1/inner");
+        assert_eq!(vec[3].0.value_type, ValueType::Array);
+        assert_eq!(vec[4].0.pointer, "/2/description");
+        assert_eq!(vec[4].0.value_type, ValueType::String);
+        assert_eq!(vec[5].0.pointer, "/2/inner");
+        assert_eq!(vec[5].0.value_type, ValueType::Array);
     }
 
     #[test]
@@ -517,7 +585,7 @@ mod tests {
         }"#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().parse_array(false)).unwrap();
+        let vec = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills")).unwrap();
         println!("{:?}", vec);
     }
 }

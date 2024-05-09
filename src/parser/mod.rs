@@ -11,6 +11,7 @@ pub struct JSONParser<'a> {
 pub struct ParseOptions {
     pub parse_array: bool,
     pub depth: usize,
+    pub start_parse_at: Option<String>,
 }
 
 impl Default for ParseOptions {
@@ -18,12 +19,18 @@ impl Default for ParseOptions {
         Self {
             parse_array: true,
             depth: 10,
+            start_parse_at: None,
         }
     }
 }
 impl ParseOptions {
-    pub(crate) fn parse_array(mut self, parse_array: bool) -> Self {
+    pub fn parse_array(mut self, parse_array: bool) -> Self {
         self.parse_array = parse_array;
+        self
+    }
+
+    pub fn start_parse_at(mut self, pointer: &str) -> Self {
+        self.start_parse_at = Some(pointer.to_string());
         self
     }
 }

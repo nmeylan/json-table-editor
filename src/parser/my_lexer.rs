@@ -79,8 +79,8 @@ impl<'a> Lexer<'a> {
                 b'[' => square_close_count += 1,
                 b']' => {
                     if square_close_count == 1 {
-                        self.reader.index -= 1;
-                        return Some(simdutf8::basic::from_utf8(&self.reader.slice[start..self.reader.index]).ok()?);
+                        let value = simdutf8::basic::from_utf8(&self.reader.slice[start..self.reader.index - 1]).ok()?;
+                        return Some(value);
                     } else {
                         square_close_count -= 1;
                     }
