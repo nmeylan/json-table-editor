@@ -16,7 +16,7 @@ pub struct Parser<'a> {
     root_array_len: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
@@ -78,6 +78,12 @@ pub enum ValueType {
     Bool,
     Null,
     None,
+}
+
+impl Default for ValueType {
+    fn default() -> Self {
+        ValueType::None
+    }
 }
 
 type PointerFragment = Vec<String>;

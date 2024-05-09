@@ -106,8 +106,12 @@ impl MyApp {
 
         println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), result.max_json_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
-        let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
-        println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());
+        let result1 = JSONParser::as_array(result).unwrap();
+        println!("Transformation to array took {}ms, root array len {}", start.elapsed().as_millis(), result1.len());
+
+
+        // let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
+        // println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());
         exit(0);
         let start = Instant::now();
         let mut v: Value = serde_json::from_str(&content).unwrap();

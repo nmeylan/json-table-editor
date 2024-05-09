@@ -1,3 +1,5 @@
+use std::mem;
+use crate::flatten::Column;
 use crate::parser::my_lexer::Lexer;
 use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, ValueType};
 
@@ -40,6 +42,20 @@ impl ParseOptions {
         self
     }
 }
+
+
+macro_rules! concat_string {
+    () => { String::with_capacity(0) };
+    ($($s:expr),+) => {{
+        use std::ops::AddAssign;
+        let mut len = 0;
+        $(len.add_assign(AsRef::<str>::as_ref(&$s).len());)+
+        let mut buf = String::with_capacity(len);
+        $(buf.push_str($s.as_ref());)+
+        buf
+    }};
+}
+
 
 impl<'a> JSONParser<'a> {
     pub fn new(input: &'a str) -> Self {
@@ -84,13 +100,58 @@ impl<'a> JSONParser<'a> {
         }
     }
 
-    // pub fn as_array(previous_parse_result: ParseResult) -> Result<Vec<FlatJsonValue>, String> {
-    //     if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
-    //         return Err("Parsed json root is not an array".to_string());
-    //     }
-    //     let res = Vec::with_capacity(10000);
-    //
-    // }
+    pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<FlatJsonValue>, Vec<Column>), String> {
+        if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
+            return Err("Parsed json root is not an array".to_string());
+        }
+        let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+        let mut res: Vec<FlatJsonValue> = Vec::with_capacity(previous_parse_result.root_array_len);
+        let mut j = previous_parse_result.json.len() - 1;
+        let mut estimated_capacity = 1;
+        for i in (0..previous_parse_result.root_array_len).rev() {
+            let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
+            loop {
+                if j > 0 && previous_parse_result.json.len() > 0 {
+                    let (k, v) = &previous_parse_result.json[j];
+                    let _i = i.to_string();
+                    let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+                        let prefix = concat_string!(started_parsing_at, "/", _i);
+                        (k.pointer.starts_with(&prefix), prefix.len())
+                    } else {
+                        let prefix = concat_string!("/", _i);
+                        (k.pointer.starts_with(&prefix), prefix.len())
+                    };
+                    if k.pointer.len() > 0 {
+                        // println!("{}({}). - {} {}", i, match_prefix, j, k.pointer);
+                        let key = &k.pointer[prefix_len..k.pointer.len()];
+                        let column = Column {
+                            name: key.to_string(),
+                            depth: k.depth,
+                        };
+                        if !unique_keys.contains(&column) {
+                            unique_keys.push(column);
+                        }
+                    }
+                    if match_prefix {
+                        let (k, v) = previous_parse_result.json.pop().unwrap();
+                        flat_json_values.push((k, v));
+                    } else {
+                        break;
+                    }
+                    j -=1;
+                } else {
+                    break;
+                }
+            }
+            res.push(flat_json_values);
+
+            if i == 10 {
+                estimated_capacity = j / 10;
+            }
+        }
+
+        Ok((res, unique_keys))
+    }
 }
 
 
