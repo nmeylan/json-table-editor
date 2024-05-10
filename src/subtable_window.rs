@@ -18,7 +18,7 @@ impl SubTable {
         let (nodes, columns) = JSONParser::as_array(result).unwrap();
         Self {
             name: name.clone(),
-            table: Table::new(nodes, columns, 10, name, parent_value_type),
+            table: Table::new(None, nodes, columns, 10, name, parent_value_type),
         }
     }
     pub(crate) fn name(&self) -> &String {

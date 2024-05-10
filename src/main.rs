@@ -84,6 +84,7 @@ impl MyApp {
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(1);
         let result = parser.parse(options.clone()).unwrap();
 
+        let parse_result = result.clone_except_json();
         let max_depth = 10;
         println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
@@ -92,7 +93,7 @@ impl MyApp {
 
 
         Self {
-            table: Table::new(result1, columns, 1, "/skills".to_string(), ValueType::Array),
+            table: Table::new(Some(parse_result), result1, columns, 1, "/skills".to_string(), ValueType::Array),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],

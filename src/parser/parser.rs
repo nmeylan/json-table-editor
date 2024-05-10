@@ -97,6 +97,7 @@ type PointerFragment = Vec<String>;
 
 pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
 
+#[derive(Clone)]
 pub struct ParseResult {
     pub json: FlatJsonValue,
     pub max_json_depth: usize,
@@ -105,6 +106,20 @@ pub struct ParseResult {
     pub started_parsing_at: Option<String>,
     pub parsing_prefix: Option<String>,
     pub root_array_len: usize,
+}
+
+impl ParseResult {
+    pub fn clone_except_json(&self) -> Self {
+        Self {
+            json: Default::default(),
+            max_json_depth: self.max_json_depth,
+            parsing_max_depth: self.parsing_max_depth,
+            root_value_type: Default::default(),
+            started_parsing_at: self.started_parsing_at.clone(),
+            parsing_prefix: self.parsing_prefix.clone(),
+            root_array_len: self.root_array_len,
+        }
+    }
 }
 
 impl<'a> Parser<'a> {

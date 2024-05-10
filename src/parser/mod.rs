@@ -66,6 +66,7 @@ impl JsonArrayEntries {
     pub fn find_node_at(&self, pointer: &str) -> Option<&(PointerKey, Option<String>)> {
         self.entries().iter().find(|(p, _)| p.pointer.eq(pointer))
     }
+
 }
 
 #[macro_export]
@@ -93,6 +94,52 @@ impl<'a> JSONParser<'a> {
         self.parser.parse(&options, 1)
     }
 
+    pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Vec<JsonArrayEntries>, depth: usize) -> Result<(Vec<JsonArrayEntries>, Vec<Column>), String> {
+        let len = json_array.len();
+        let mut new_json_array = Vec::with_capacity(json_array.len());
+        let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+        for i in (0..len).rev() {
+            let mut parse_result = previous_parse_result.clone_except_json();
+            parse_result.json = json_array.pop().unwrap().entries;
+            let mut options = ParseOptions::default().parse_array(false).max_depth(depth);
+            let result = Self::change_depth(parse_result, options)?;
+            let mut vec = result.json;
+
+            for j in 0..vec.len() {
+                let (k, _v) = &mut vec[j];
+                let _i = i.to_string();
+                let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+                    let prefix = concat_string!(started_parsing_at, "/", _i);
+                    prefix.len()
+                } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
+                    let prefix = concat_string!(prefix, "/", _i);
+                    prefix.len()
+                } else {
+                    let prefix = concat_string!("/", _i);
+                    prefix.len()
+                };
+                if !k.pointer.is_empty() {
+                    if k.pointer.len() <= prefix_len {
+                        println!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
+                        continue;
+                    }
+                    let key = &k.pointer[prefix_len..k.pointer.len()];
+                    let column = Column {
+                        name: key.to_string(),
+                        depth: k.depth,
+                    };
+                    if !unique_keys.contains(&column) && !column.name.contains("#") {
+                        unique_keys.push(column);
+                    }
+                }
+                k.index = i;
+            }
+            new_json_array.push(JsonArrayEntries { entries: vec, index: i });
+        }
+        new_json_array.reverse();
+        Ok((new_json_array, unique_keys))
+    }
+
     pub fn change_depth(previous_parse_result: ParseResult, mut parse_options: ParseOptions) -> Result<ParseResult, String> {
         if previous_parse_result.parsing_max_depth < parse_options.max_depth {
             let previous_len = previous_parse_result.json.len();
@@ -101,7 +148,8 @@ impl<'a> JSONParser<'a> {
                 if !matches!(k.value_type, ValueType::Object) || k.depth > parse_options.max_depth as u8 {
                     new_flat_json_structure.push((k, v));
                 } else if let Some(mut v) = v {
-                    let lexer = Lexer::new(unsafe { v.as_bytes_mut() });
+                    new_flat_json_structure.push((k.clone(), Some(v.clone())));
+                    let lexer = Lexer::new(v.as_bytes());
                     let mut parser = Parser::new(lexer);
                     parse_options.prefix =  Some(k.pointer);
                     let res = parser.parse(&parse_options, k.depth + 1)?;
@@ -151,7 +199,6 @@ impl<'a> JSONParser<'a> {
                         (k.pointer.starts_with(&prefix), prefix.len())
                     };
                     if !k.pointer.is_empty() {
-                        // println!("{}({}). - {} {}", i, match_prefix, j, k.pointer);
                         let key = &k.pointer[prefix_len..k.pointer.len()];
                         let column = Column {
                             name: key.to_string(),

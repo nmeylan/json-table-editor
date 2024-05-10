@@ -1,12 +1,13 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::mem;
 use std::time::Instant;
 use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 
 use crate::{concat_string, Window};
 use crate::parser::{JsonArrayEntries, JSONParser};
-use crate::parser::parser::{FlatJsonValue, PointerKey, ValueType};
+use crate::parser::parser::{FlatJsonValue, ParseResult, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -49,6 +50,7 @@ pub struct Table {
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
     max_depth: usize,
+    parse_result: Option<ParseResult>,
     nodes: Vec<JsonArrayEntries>,
     filtered_nodes: Vec<JsonArrayEntries>,
     scroll_y: f32,
@@ -110,12 +112,13 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(parse_result: Option<ParseResult>, nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
             max_depth: depth as usize,
             nodes,
+            parse_result,
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
@@ -143,14 +146,13 @@ impl Table {
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
 
-    pub fn update_selected_columns(&mut self, _depth: u8) {
-        todo!("update_selected_columns not implemented")
-        // let (flatten_nodes, mut all_columns) = flatten::flatten(&self.nodes, depth, &self.non_null_columns);
-        // all_columns.sort();
-        // self.all_columns = all_columns;
-        // self.flatten_nodes = flatten_nodes;
-        // let column_selected = Self::selected_columns(&self.all_columns, depth);
-        // self.column_selected = column_selected;
+    pub fn update_selected_columns(&mut self, depth: u8) {
+        let previous_parse_result = self.parse_result.clone().unwrap();
+        let (new_json_array, new_columns) = JSONParser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
+        self.all_columns = new_columns;
+        let column_selected = Self::selected_columns(&self.all_columns, depth);
+        self.column_selected = column_selected;
+        self.nodes = new_json_array;
     }
     pub fn update_max_depth(&mut self, depth: u8) {
         self.max_depth = depth as usize;
