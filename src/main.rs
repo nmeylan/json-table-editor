@@ -80,6 +80,9 @@ impl MyApp {
 
         let path = Path::new(args[1].as_str());
         let mut content = fs::read_to_string(path).unwrap();
+        let start = Instant::now();
+        content = content.replace('\n', "");
+        println!("took {}ms to replace LF", start.elapsed().as_millis());
 
         let metadata1 = fs::metadata(path).unwrap();
 
