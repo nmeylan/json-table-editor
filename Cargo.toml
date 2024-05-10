@@ -6,10 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-eframe = "0.27.2"
-egui_glow = "0.27.2"
-egui = "0.27.2"
-egui_extras = "0.27.2"
+eframe = { version = "0.27.2", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11"] }
+egui = { version = "0.27.2", default-features = false, features = [] }
+egui_extras = { version = "0.27.2", default-features = false, features = [] }
 simdutf8 = "0.1.4"
 
 #[patch."https://github.com/nmeylan/text-editor"]

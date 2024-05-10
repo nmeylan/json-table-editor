@@ -14,7 +14,7 @@ use std::path::Path;
 use std::process::exit;
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
-use eframe::egui;
+use eframe::NativeOptions;
 use eframe::Theme::Light;
 use egui::{Context, Separator, TextEdit, Vec2};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
@@ -49,7 +49,7 @@ struct Pos<T> {
 
 
 fn main() {
-    let options = eframe::NativeOptions {
+    let options = NativeOptions {
         default_theme: Light,
         persist_window: false,
         viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
