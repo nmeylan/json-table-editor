@@ -12,7 +12,7 @@ use std::collections::{BTreeSet};
 
 use std::path::Path;
 use std::process::exit;
-
+use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::egui;
 use eframe::Theme::Light;
@@ -61,6 +61,7 @@ fn main() {
 }
 
 struct MyApp {
+    frame_history: FrameHistory,
     table: Table,
     windows: Vec<Box<dyn Window>>,
     open: BTreeSet<String>,
@@ -108,6 +109,7 @@ impl MyApp {
 
 
         Self {
+            frame_history: FrameHistory::default(),
             table: Table::new(Some(parse_result), result1, columns, 1, "/skills".to_string(), ValueType::Array),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
@@ -138,7 +140,13 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        self.frame_history
+            .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
+        ctx.send_viewport_cmd_to(
+            ctx.parent_viewport_id(),
+            egui::ViewportCommand::Title(self.frame_history.fps().to_string()),
+        );
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {

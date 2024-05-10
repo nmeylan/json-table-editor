@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::time::Instant;
-use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 
 use crate::{concat_string, Window};
@@ -249,6 +249,7 @@ impl Table {
         }
         let mut request_repaint = false;
         let mut click_on_array_row_index: Option<(usize, PointerKey)> = None;
+        let mut hovered_on_array_row_index: Option<(usize, PointerKey)> = None;
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_column: RefCell<Option<String>> = RefCell::new(None);
@@ -339,6 +340,14 @@ impl Table {
                                 }
                             }
                         }
+                        if let Some(index) = response.hovered_col_index {
+                            let data = self.get_pointer(columns, &data.entries(), index, data.index());
+                            if let Some((pointer, _value)) = data {
+                                if matches!(pointer.value_type, ValueType::Array) || matches!(pointer.value_type, ValueType::Object){
+                                    hovered_on_array_row_index = Some((row_index, pointer.clone()));
+                                }
+                            }
+                        }
                     }
                 });
                 if self.hovered_row_index != hovered_row_index {
@@ -347,6 +356,9 @@ impl Table {
                 }
             });
 
+        if let Some(_) = hovered_on_array_row_index {
+            ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
+        }
         if let Some((row_index, pointer)) = click_on_array_row_index {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {

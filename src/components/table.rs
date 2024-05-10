@@ -1468,6 +1468,7 @@ pub struct TableRow<'a, 'b> {
 pub struct ColumnResponse {
     pub clicked_col_index: Option<usize>,
     pub double_clicked_col_index: Option<usize>,
+    pub hovered_col_index: Option<usize>,
 }
 impl<'a, 'b> TableRow<'a, 'b> {
     /// Add the contents of a column.
@@ -1531,7 +1532,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
         );
 
         let mut last_index = 0;
-        let mut column_response = ColumnResponse { clicked_col_index: None, double_clicked_col_index: None };
+        let mut column_response = ColumnResponse { clicked_col_index: None, double_clicked_col_index: None, hovered_col_index: None };
         for col_index in self.visible_columns {
             let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
             let width = if let Some(width) = self.widths.get(*col_index) {
@@ -1571,6 +1572,9 @@ impl<'a, 'b> TableRow<'a, 'b> {
             }
             if response.double_clicked() {
                 column_response.double_clicked_col_index = Some(*col_index);
+            }
+            if response.hovered() {
+                column_response.hovered_col_index = Some(*col_index);
             }
             *self.response = Some(
                 self.response
