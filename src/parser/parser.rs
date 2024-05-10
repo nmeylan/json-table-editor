@@ -1,8 +1,9 @@
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
+use crate::concat_string;
 use crate::parser::lexer::{Lexer};
-use crate::parser::{ParseOptions, Token};
+use crate::parser::{FlatJsonValue, ParseOptions, ParseResult, PointerFragment, PointerKey, Token, ValueType};
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -13,113 +14,6 @@ pub struct Parser<'a> {
     root_array_len: usize,
 }
 
-#[derive(Debug, Default, Clone)]
-pub struct PointerKey {
-    pub pointer: String,
-    pub value_type: ValueType,
-    pub depth: u8,
-    pub index: usize,
-}
-
-impl PartialEq<Self> for PointerKey {
-    fn eq(&self, other: &Self) -> bool {
-        self.pointer.eq(&other.pointer)
-    }
-}
-
-impl Eq for PointerKey {}
-
-impl Hash for PointerKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pointer.hash(state);
-    }
-}
-
-impl PointerKey {
-    pub fn parent(&self) -> PointerKey {
-        let index = self.pointer.rfind('/').unwrap_or(0);
-        Self {
-            pointer: self.pointer[0..index].to_string(),
-            value_type: ValueType::Object,
-            depth: self.depth.max(0),
-            index: 0,
-        }
-    }
-}
-
-macro_rules! concat_string {
-    () => { String::with_capacity(0) };
-    ($($s:expr),+) => {{
-        use std::ops::AddAssign;
-        let mut len = 0;
-        $(len.add_assign(AsRef::<str>::as_ref(&$s).len());)+
-        let mut buf = String::with_capacity(len);
-        $(buf.push_str($s.as_ref());)+
-        buf
-    }};
-}
-
-impl PointerKey {
-    pub fn from_pointer(pointer: String, value_type: ValueType, depth: u8) -> Self {
-        Self {
-            pointer,
-            value_type,
-            depth,
-            index: 0,
-        }
-    }
-    pub fn from_pointer_and_index(pointer: String, value_type: ValueType, depth: u8, index: usize) -> Self {
-        Self {
-            pointer,
-            value_type,
-            depth,
-            index,
-        }
-    }
-}
-
-#[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
-#[derive(Default)]
-pub enum ValueType {
-    Array,
-    Object,
-    Number,
-    String,
-    Bool,
-    Null,
-    #[default]
-    None,
-}
-
-
-type PointerFragment = Vec<String>;
-
-pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
-
-#[derive(Clone)]
-pub struct ParseResult {
-    pub json: FlatJsonValue,
-    pub max_json_depth: usize,
-    pub parsing_max_depth: usize,
-    pub root_value_type: ValueType,
-    pub started_parsing_at: Option<String>,
-    pub parsing_prefix: Option<String>,
-    pub root_array_len: usize,
-}
-
-impl ParseResult {
-    pub fn clone_except_json(&self) -> Self {
-        Self {
-            json: Default::default(),
-            max_json_depth: self.max_json_depth,
-            parsing_max_depth: self.parsing_max_depth,
-            root_value_type: Default::default(),
-            started_parsing_at: self.started_parsing_at.clone(),
-            parsing_prefix: self.parsing_prefix.clone(),
-            root_array_len: self.root_array_len,
-        }
-    }
-}
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
@@ -219,23 +113,18 @@ impl<'a> Parser<'a> {
         match self.current_token {
             Some(ref token) => match token {
                 Token::CurlyOpen => {
-                    let depth = if from_object {
-                        depth + 1
-                    } else {
-                        depth
-                    };
-                    if depth > 1 {
+                    if depth <= parse_option.max_depth as u8 {
                         let start = self.lexer.reader_index();
                         if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string())));
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth), Some(object_str.to_string())));
                             self.lexer.set_reader_index(start);
-                            self.process(route, target, depth, count, parse_option);
+                            self.process(route, target, depth + 1, count, parse_option);
                             Ok(())
                         } else {
                             Ok(())
                         }
                     } else  {
-                        self.process(route, target, depth, count, parse_option);
+                        self.process(route, target, depth + 1, count, parse_option);
                         Ok(())
                     }
                 }
@@ -394,23 +283,29 @@ mod tests {
         let result2 = parser.parse(ParseOptions::default().max_depth(2)).unwrap();
         let vec = &result2.json;
         println!("{:?}", vec);
-        assert_eq!(vec.len(), 2);
-        assert_eq!(vec[0].0.pointer, "/nested/a1");
-        assert_eq!(vec[0].0.value_type, ValueType::String);
-        assert_eq!(vec[0].1, Some("a".to_string()));
-        assert_eq!(vec[1].0.pointer, "/nested/b");
-        assert_eq!(vec[1].0.value_type, ValueType::Object);
-        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+        assert_eq!(vec.len(), 3);
+        assert_eq!(vec[0].0.pointer, "/nested");
+        assert_eq!(vec[0].0.value_type, ValueType::Object);
+        assert_eq!(vec[0].1, Some("{\"a1\": \"a\",\"b\": {\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}}".to_string()));
+        assert_eq!(vec[1].0.pointer, "/nested/a1");
+        assert_eq!(vec[1].0.value_type, ValueType::String);
+        assert_eq!(vec[1].1, Some("a".to_string()));
+        assert_eq!(vec[2].0.pointer, "/nested/b");
+        assert_eq!(vec[2].0.value_type, ValueType::Object);
+        assert_eq!(vec[2].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
         let result3 = JSONParser::change_depth(result1, ParseOptions::default().max_depth(2)).unwrap();
         let vec = &result3.json;
         println!("{:?}", vec);
-        assert_eq!(vec.len(), 2);
-        assert_eq!(vec[0].0.pointer, "/nested/a1");
-        assert_eq!(vec[0].0.value_type, ValueType::String);
-        assert_eq!(vec[0].1, Some("a".to_string()));
-        assert_eq!(vec[1].0.pointer, "/nested/b");
-        assert_eq!(vec[1].0.value_type, ValueType::Object);
-        assert_eq!(vec[1].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
+        assert_eq!(vec.len(), 3);
+        assert_eq!(vec[0].0.pointer, "/nested");
+        assert_eq!(vec[0].0.value_type, ValueType::Object);
+        assert_eq!(vec[0].1, Some("{\"a1\": \"a\",\"b\": {\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}}".to_string()));
+        assert_eq!(vec[1].0.pointer, "/nested/a1");
+        assert_eq!(vec[1].0.value_type, ValueType::String);
+        assert_eq!(vec[1].1, Some("a".to_string()));
+        assert_eq!(vec[2].0.pointer, "/nested/b");
+        assert_eq!(vec[2].0.value_type, ValueType::Object);
+        assert_eq!(vec[2].1, Some("{\"a2\": \"a\",\"c\": {\"a3\": \"a\"}}".to_string()));
     }
 
     #[test]
@@ -419,7 +314,7 @@ mod tests {
         "plagiarism": true,"reproduce": true}, "bonusToSelf": [{"level":1,"value":2}]}, {"description": "Bash", "copyflags": {"plagiarism": true,"reproduce": true}}]"#;
 
         let mut parser = JSONParser::new(json);
-        let result1 = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap();
+        let result1 = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills".to_string()).max_depth(1)).unwrap();
         let vec = &result1.json;
         println!("{:?}", vec);
     }
@@ -450,15 +345,19 @@ mod tests {
         assert_eq!(vec[3].0.pointer, "/aaa");
         assert_eq!(vec[3].0.value_type, ValueType::Bool);
         assert_eq!(vec[3].1, Some("true".to_string()));
-        assert_eq!(vec[4].0.pointer, "/flags/a");
-        assert_eq!(vec[4].0.value_type, ValueType::Bool);
-        assert_eq!(vec[4].1, Some("true".to_string()));
-        assert_eq!(vec[5].0.pointer, "/flags/b");
+        assert_eq!(vec[4].0.pointer, "/flags");
+        assert_eq!(vec[4].0.value_type, ValueType::Object);
+        assert_eq!(vec[5].0.pointer, "/flags/a");
         assert_eq!(vec[5].0.value_type, ValueType::Bool);
-        assert_eq!(vec[5].1, Some("false".to_string()));
-        assert_eq!(vec[6].0.pointer, "/flags/c/nested");
-        assert_eq!(vec[6].0.value_type, ValueType::String);
-        assert_eq!(vec[6].1, Some("Oui".to_string()));
+        assert_eq!(vec[5].1, Some("true".to_string()));
+        assert_eq!(vec[6].0.pointer, "/flags/b");
+        assert_eq!(vec[6].0.value_type, ValueType::Bool);
+        assert_eq!(vec[6].1, Some("false".to_string()));
+        assert_eq!(vec[7].0.pointer, "/flags/c");
+        assert_eq!(vec[7].0.value_type, ValueType::Object);
+        assert_eq!(vec[8].0.pointer, "/flags/c/nested");
+        assert_eq!(vec[8].0.value_type, ValueType::String);
+        assert_eq!(vec[8].1, Some("Oui".to_string()));
     }
 
     #[test]
@@ -518,16 +417,16 @@ mod tests {
         let mut parser = JSONParser::new(json);
         let vec = parser.parse(ParseOptions::default()).unwrap().json;
         println!("{:?}", vec);
-        assert_eq!(vec[0].0.pointer, "/skills/0/description");
-        assert_eq!(vec[0].0.parent().pointer, "/skills/0");
-        assert_eq!(vec[0].0.value_type, ValueType::String);
-        assert_eq!(vec[0].1, Some("Basic Skill".to_string()));
-        assert_eq!(vec[1].0.pointer, "/skills/1/description");
+        assert_eq!(vec[1].0.pointer, "/skills/0/description");
+        assert_eq!(vec[1].0.parent().pointer, "/skills/0");
         assert_eq!(vec[1].0.value_type, ValueType::String);
-        assert_eq!(vec[1].1, Some("Heal".to_string()));
-        assert_eq!(vec[2].0.pointer, "/skills/2/description");
-        assert_eq!(vec[2].0.value_type, ValueType::String);
-        assert_eq!(vec[2].1, Some("Bash".to_string()));
+        assert_eq!(vec[1].1, Some("Basic Skill".to_string()));
+        assert_eq!(vec[3].0.pointer, "/skills/1/description");
+        assert_eq!(vec[3].0.value_type, ValueType::String);
+        assert_eq!(vec[3].1, Some("Heal".to_string()));
+        assert_eq!(vec[5].0.pointer, "/skills/2/description");
+        assert_eq!(vec[5].0.value_type, ValueType::String);
+        assert_eq!(vec[5].1, Some("Bash".to_string()));
     }
 
     #[test]
@@ -543,21 +442,21 @@ mod tests {
         "#;
 
         let mut parser = JSONParser::new(json);
-        let vec = parser.parse(ParseOptions::default().start_parse_at("/skills").parse_array(false)).unwrap().json;
+        let vec = parser.parse(ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false)).unwrap().json;
         println!("{:?}", vec);
-        assert_eq!(vec.len(), 6);
-        assert_eq!(vec[0].0.pointer, "/skills/0/description");
-        assert_eq!(vec[0].0.value_type, ValueType::String);
-        assert_eq!(vec[1].0.pointer, "/skills/0/inner");
-        assert_eq!(vec[1].0.value_type, ValueType::Array);
-        assert_eq!(vec[2].0.pointer, "/skills/1/description");
-        assert_eq!(vec[2].0.value_type, ValueType::String);
-        assert_eq!(vec[3].0.pointer, "/skills/1/inner");
-        assert_eq!(vec[3].0.value_type, ValueType::Array);
-        assert_eq!(vec[4].0.pointer, "/skills/2/description");
+        assert_eq!(vec.len(), 9);
+        assert_eq!(vec[1].0.pointer, "/skills/0/description");
+        assert_eq!(vec[1].0.value_type, ValueType::String);
+        assert_eq!(vec[2].0.pointer, "/skills/0/inner");
+        assert_eq!(vec[2].0.value_type, ValueType::Array);
+        assert_eq!(vec[4].0.pointer, "/skills/1/description");
         assert_eq!(vec[4].0.value_type, ValueType::String);
-        assert_eq!(vec[5].0.pointer, "/skills/2/inner");
+        assert_eq!(vec[5].0.pointer, "/skills/1/inner");
         assert_eq!(vec[5].0.value_type, ValueType::Array);
+        assert_eq!(vec[7].0.pointer, "/skills/2/description");
+        assert_eq!(vec[7].0.value_type, ValueType::String);
+        assert_eq!(vec[8].0.pointer, "/skills/2/inner");
+        assert_eq!(vec[8].0.value_type, ValueType::Array);
     }
 
     #[test]
@@ -577,7 +476,7 @@ mod tests {
         println!("{:?}", vec);
         assert_eq!(vec[0].0.pointer, "/skills");
         assert_eq!(vec[0].0.value_type, ValueType::Array);
-        assert_eq!(vec[0].1.as_ref().unwrap(), "[{\"description\":\"Basic Skill\"},                    {\"description\":\"Heal\"},                    {\"description\":\"Bash\"}]");
+        assert_eq!(vec[0].1.as_ref().unwrap(), "[{\"description\": \"Basic Skill\"},\n                    {\"description\": \"Heal\"},\n                    {\"description\": \"Bash\"}\n                ]");
     }
 
 
@@ -729,7 +628,7 @@ mod tests {
         }"#;
 
         let mut parser = JSONParser::new(json);
-        let res = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills").max_depth(1)).unwrap();
+        let res = parser.parse(ParseOptions::default().parse_array(false).start_parse_at("/skills".to_string()).max_depth(1)).unwrap();
         let vec = res.json;
         println!("{:?}", res.root_array_len);
         println!("{:?}", vec);

@@ -1,9 +1,7 @@
-use std::mem;
 use egui::{Context, Ui};
-use crate::parser::{JsonArrayEntries, JSONParser, ParseOptions};
-use crate::parser::parser::ValueType;
-use crate::table::{Column, Table};
-use crate::{concat_string, View};
+use crate::parser::{JSONParser, ParseOptions, ValueType};
+use crate::table::{Table};
+use crate::{View};
 
 pub struct SubTable {
     name: String,

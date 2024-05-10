@@ -1,6 +1,8 @@
+use std::hash::{Hash, Hasher};
+use std::time::Instant;
 use egui::ahash::{HashSet, HashSetExt};
 use crate::parser::lexer::Lexer;
-use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
+use crate::parser::parser::Parser;
 use crate::table::Column;
 
 pub mod parser;
@@ -68,6 +70,115 @@ impl JsonArrayEntries {
     }
 }
 
+
+#[derive(Debug, Default, Clone)]
+pub struct PointerKey {
+    pub pointer: String,
+    pub value_type: ValueType,
+    pub depth: u8,
+    pub index: usize,
+}
+
+impl PartialEq<Self> for PointerKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.pointer.eq(&other.pointer)
+    }
+}
+
+impl Eq for PointerKey {}
+
+impl Hash for PointerKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pointer.hash(state);
+    }
+}
+
+impl PointerKey {
+    pub fn parent(&self) -> PointerKey {
+        let index = self.pointer.rfind('/').unwrap_or(0);
+        Self {
+            pointer: self.pointer[0..index].to_string(),
+            value_type: ValueType::Object,
+            depth: self.depth.max(0),
+            index: 0,
+        }
+    }
+}
+
+macro_rules! concat_string {
+    () => { String::with_capacity(0) };
+    ($($s:expr),+) => {{
+        use std::ops::AddAssign;
+        let mut len = 0;
+        $(len.add_assign(AsRef::<str>::as_ref(&$s).len());)+
+        let mut buf = String::with_capacity(len);
+        $(buf.push_str($s.as_ref());)+
+        buf
+    }};
+}
+
+impl PointerKey {
+    pub fn from_pointer(pointer: String, value_type: ValueType, depth: u8) -> Self {
+        Self {
+            pointer,
+            value_type,
+            depth,
+            index: 0,
+        }
+    }
+    pub fn from_pointer_and_index(pointer: String, value_type: ValueType, depth: u8, index: usize) -> Self {
+        Self {
+            pointer,
+            value_type,
+            depth,
+            index,
+        }
+    }
+}
+
+#[derive(Eq, Hash, PartialEq, Debug, Clone, Copy)]
+#[derive(Default)]
+pub enum ValueType {
+    Array,
+    Object,
+    Number,
+    String,
+    Bool,
+    Null,
+    #[default]
+    None,
+}
+
+
+type PointerFragment = Vec<String>;
+
+pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
+
+#[derive(Clone)]
+pub struct ParseResult {
+    pub json: FlatJsonValue,
+    pub max_json_depth: usize,
+    pub parsing_max_depth: usize,
+    pub root_value_type: ValueType,
+    pub started_parsing_at: Option<String>,
+    pub parsing_prefix: Option<String>,
+    pub root_array_len: usize,
+}
+
+impl ParseResult {
+    pub fn clone_except_json(&self) -> Self {
+        Self {
+            json: Default::default(),
+            max_json_depth: self.max_json_depth,
+            parsing_max_depth: self.parsing_max_depth,
+            root_value_type: Default::default(),
+            started_parsing_at: self.started_parsing_at.clone(),
+            parsing_prefix: self.parsing_prefix.clone(),
+            root_array_len: self.root_array_len,
+        }
+    }
+}
+
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
@@ -97,6 +208,7 @@ impl<'a> JSONParser<'a> {
         let len = json_array.len();
         let mut new_json_array = Vec::with_capacity(json_array.len());
         let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+        let start = Instant::now();
         for i in (0..len).rev() {
             let mut parse_result = previous_parse_result.clone_except_json();
             parse_result.json = json_array.pop().unwrap().entries;
@@ -119,7 +231,7 @@ impl<'a> JSONParser<'a> {
                 };
                 if !k.pointer.is_empty() {
                     if k.pointer.len() <= prefix_len {
-                        println!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
+                        // panic!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
                         continue;
                     }
                     let key = &k.pointer[prefix_len..k.pointer.len()];
@@ -144,6 +256,7 @@ impl<'a> JSONParser<'a> {
         }
         new_json_array.reverse();
         unique_keys.sort();
+        println!("took {}ms to change depth", start.elapsed().as_millis());
         Ok((new_json_array, unique_keys))
     }
 
@@ -152,7 +265,7 @@ impl<'a> JSONParser<'a> {
             let previous_len = previous_parse_result.json.len();
             let mut new_flat_json_structure = FlatJsonValue::with_capacity(previous_len + (parse_options.max_depth - previous_parse_result.parsing_max_depth) * (previous_len / 3));
             for (k, v) in previous_parse_result.json {
-                if !matches!(k.value_type, ValueType::Object) || k.depth > parse_options.max_depth as u8 {
+                if !matches!(k.value_type, ValueType::Object) || k.depth < previous_parse_result.parsing_max_depth as u8 {
                     new_flat_json_structure.push((k, v));
                 } else if let Some(mut v) = v {
                     new_flat_json_structure.push((k.clone(), Some(v.clone())));
@@ -197,30 +310,37 @@ impl<'a> JSONParser<'a> {
                     let (k, _v) = &previous_parse_result.json[j];
                     let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                         let prefix = concat_string!(started_parsing_at, "/", _i);
+                        // println!("else if {}", prefix);
                         (k.pointer.starts_with(&prefix), prefix.len())
                     } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
                         let prefix = concat_string!(prefix, "/", _i);
+                        // println!("else if {}", prefix);
                         (k.pointer.starts_with(&prefix), prefix.len())
                     } else {
                         let prefix = concat_string!("/", _i);
+                        // println!("else {}", prefix);
                         (k.pointer.starts_with(&prefix), prefix.len())
                     };
-                    if !k.pointer.is_empty() {
-                        let key = &k.pointer[prefix_len..k.pointer.len()];
-                        let column = Column {
-                            name: key.to_string(),
-                            depth: k.depth,
-                            value_type: k.value_type,
-                            seen_count: 1,
-                            order: unique_keys.len(),
-                        };
-                        if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
-                            column.seen_count += 1;
-                        } else {
-                            unique_keys.push(column);
-                        }
-                    }
+
                     if match_prefix {
+                        if !k.pointer.is_empty() {
+                            if k.pointer.len() < prefix_len{
+                                panic!("{} len is < {}", k.pointer, prefix_len);
+                            }
+                            let key = &k.pointer[prefix_len..k.pointer.len()];
+                            let column = Column {
+                                name: key.to_string(),
+                                depth: k.depth,
+                                value_type: k.value_type,
+                                seen_count: 1,
+                                order: unique_keys.len(),
+                            };
+                            if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                                column.seen_count += 1;
+                            } else {
+                                unique_keys.push(column);
+                            }
+                        }
                         if is_first_entry {
                             is_first_entry = false;
                             let prefix = &k.pointer[0..prefix_len];

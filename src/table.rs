@@ -7,8 +7,7 @@ use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widge
 use egui::scroll_area::ScrollBarVisibility;
 
 use crate::{concat_string, Window};
-use crate::parser::{JsonArrayEntries, JSONParser};
-use crate::parser::parser::{FlatJsonValue, ParseResult, PointerKey, ValueType};
+use crate::parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseResult, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -245,7 +244,7 @@ impl Table {
                 table = table.column(Column::initial(40.0).clip(true).resizable(true));
                 continue;
             }
-            table = table.column(Column::initial((columns[i].name.len() + 3) as f32 * text_width).clip(true).resizable(true));
+            table = table.column(Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width).clip(true).resizable(true));
         }
         let mut request_repaint = false;
         let mut click_on_array_row_index: Option<(usize, PointerKey)> = None;

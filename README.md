@@ -1,3 +1,5 @@
+_Early development stage, look and feel is pretty bad but it is usable_
+
 # Features
 ## Implemented
 - *lag-free* visualisation of large json array: only visible rows and columns are rendered

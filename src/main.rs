@@ -4,22 +4,20 @@ mod table;
 mod panels;
 mod components;
 mod subtable_window;
-mod parser;
+pub mod parser;
 
-use std::{env, fs, mem};
+use std::{env, fs};
 
 use std::collections::{BTreeSet};
 
 use std::path::Path;
-use std::process::exit;
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::NativeOptions;
 use eframe::Theme::Light;
 use egui::{Context, Separator, TextEdit, Vec2};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
-use crate::parser::{JSONParser, ParseOptions};
-use crate::parser::parser::ValueType;
+use crate::parser::{JSONParser, ParseOptions, ValueType};
 use crate::table::Table;
 
 /// Something to view in the demo windows
@@ -95,7 +93,7 @@ impl MyApp {
         } else if size < 50 {
             10
         } else {
-            1
+            10
         };
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let result = parser.parse(options.clone()).unwrap();
@@ -106,8 +104,8 @@ impl MyApp {
         let start = Instant::now();
         let (result1, columns) = JSONParser::as_array(result).unwrap();
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
-
-
+        // JSONParser::change_depth_array(parse_result, result1, 2);
+        // exit(0);
         Self {
             frame_history: FrameHistory::default(),
             table: Table::new(Some(parse_result), result1, columns, 1, "/skills".to_string(), ValueType::Array),
