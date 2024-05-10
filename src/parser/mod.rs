@@ -66,7 +66,6 @@ impl JsonArrayEntries {
     pub fn find_node_at(&self, pointer: &str) -> Option<&(PointerKey, Option<String>)> {
         self.entries().iter().find(|(p, _)| p.pointer.eq(pointer))
     }
-
 }
 
 #[macro_export]
@@ -128,9 +127,15 @@ impl<'a> JSONParser<'a> {
                         name: key.to_string(),
                         depth: k.depth,
                         value_type: k.value_type,
+                        seen_count: 0,
+                        order: unique_keys.len(),
                     };
-                    if !unique_keys.contains(&column) && !column.name.contains("#") {
-                        unique_keys.push(column);
+                    if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                        column.seen_count += 1;
+                    } else {
+                        if !column.name.contains("#") {
+                            unique_keys.push(column);
+                        }
                     }
                 }
                 k.index = i;
@@ -138,6 +143,7 @@ impl<'a> JSONParser<'a> {
             new_json_array.push(JsonArrayEntries { entries: vec, index: i });
         }
         new_json_array.reverse();
+        unique_keys.sort();
         Ok((new_json_array, unique_keys))
     }
 
@@ -152,7 +158,7 @@ impl<'a> JSONParser<'a> {
                     new_flat_json_structure.push((k.clone(), Some(v.clone())));
                     let lexer = Lexer::new(v.as_bytes());
                     let mut parser = Parser::new(lexer);
-                    parse_options.prefix =  Some(k.pointer);
+                    parse_options.prefix = Some(k.pointer);
                     let res = parser.parse(&parse_options, k.depth + 1)?;
                     new_flat_json_structure.extend(res.json);
                 }
@@ -178,7 +184,7 @@ impl<'a> JSONParser<'a> {
         if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
             return Err("Parsed json root is not an array".to_string());
         }
-        let mut unique_keys: HashSet<Column> = HashSet::with_capacity(1000);
+        let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
         let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(previous_parse_result.root_array_len);
         let mut j = previous_parse_result.json.len() - 1;
         let mut estimated_capacity = 100;
@@ -204,9 +210,15 @@ impl<'a> JSONParser<'a> {
                         let column = Column {
                             name: key.to_string(),
                             depth: k.depth,
-                            value_type: k.value_type
+                            value_type: k.value_type,
+                            seen_count: 1,
+                            order: unique_keys.len(),
                         };
-                        unique_keys.insert(column);
+                        if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                            column.seen_count += 1;
+                        } else {
+                            unique_keys.push(column);
+                        }
                     }
                     if match_prefix {
                         if is_first_entry {
@@ -229,10 +241,10 @@ impl<'a> JSONParser<'a> {
                 }
             }
             res.push(JsonArrayEntries { entries: flat_json_values, index: i });
-
         }
         res.reverse();
-        Ok((res, unique_keys.into_iter().collect()))
+        unique_keys.sort();
+        Ok((res, unique_keys))
     }
 
     pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntries>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntries> {

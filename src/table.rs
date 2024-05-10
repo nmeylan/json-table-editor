@@ -16,6 +16,8 @@ pub struct Column {
     pub name: String,
     pub depth: u8,
     pub value_type: ValueType,
+    pub seen_count: usize,
+    pub order: usize,
 }
 
 impl Hash for Column {
@@ -30,6 +32,8 @@ impl Column {
             name,
             depth: 0,
             value_type,
+            seen_count: 0,
+            order: 0,
         }
     }
 }
@@ -42,6 +46,7 @@ impl PartialEq<Self> for Column {
     }
 }
 
+
 impl PartialOrd<Self> for Column {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -50,7 +55,10 @@ impl PartialOrd<Self> for Column {
 
 impl Ord for Column {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
+        match other.seen_count.cmp(&self.seen_count) {
+            Ordering::Equal => other.order.cmp(&self.order),
+            cmp => cmp,
+        }
     }
 }
 
