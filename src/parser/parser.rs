@@ -12,12 +12,13 @@ pub struct Parser<'a> {
     pub max_depth: usize,
     root_value_type: ValueType,
     root_array_len: usize,
+    pub(crate) depth_after_start_at: usize,
 }
 
 
 impl<'a> Parser<'a> {
     pub fn new(lexer: Lexer<'a>) -> Self {
-        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, root_value_type: ValueType::None, root_array_len: 0 }
+        Self { lexer, current_token: None, state_seen_start_parse_at: false, max_depth: 0, root_value_type: ValueType::None, root_array_len: 0, depth_after_start_at: 1 }
     }
 
     pub fn parse(&mut self, parse_option: &ParseOptions, depth: u8) -> Result<ParseResult, String> {
@@ -147,6 +148,7 @@ impl<'a> Parser<'a> {
                                         self.state_seen_start_parse_at = true;
                                         self.root_value_type = ValueType::Array;
                                         self.root_array_len = i;
+                                        self.depth_after_start_at = (depth + 1) as usize;
                                     }
                                     break;
                                 }

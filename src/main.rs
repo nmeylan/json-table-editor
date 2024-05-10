@@ -108,13 +108,13 @@ impl MyApp {
         // exit(0);
         Self {
             frame_history: FrameHistory::default(),
-            table: Table::new(Some(parse_result), result1, columns, 1, "/skills".to_string(), ValueType::Array),
+            table: Table::new(Some(parse_result), result1, columns, parser.parser.depth_after_start_at as u8, "/skills".to_string(), ValueType::Array),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],
             max_depth: max_depth as u8,
             open: Default::default(),
-            depth: 1,
+            depth: parser.parser.depth_after_start_at as u8,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
