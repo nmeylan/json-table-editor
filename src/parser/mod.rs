@@ -1,10 +1,10 @@
 
-use crate::parser::my_lexer::Lexer;
+use crate::parser::lexer::Lexer;
 use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
 use crate::table::Column;
 
 pub mod parser;
-pub mod my_lexer;
+pub mod lexer;
 
 pub struct JSONParser<'a> {
     pub parser: Parser<'a>,

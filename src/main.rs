@@ -79,17 +79,6 @@ impl MyApp {
 
         let mut content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
 
-        // let mut lexer = Lexer::new(content.as_str());
-        // let tokens = lexer.lex().unwrap();
-        // // 55034885 tokens
-        // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
-        // let start = Instant::now();
-        // let mut lexer = my_lexer::Lexer::new(content.as_bytes());
-        // let tokens = lexer.lex();
-        // 55034885 tokens
-        // 50565637
-        // println!("{:?}", tokens);
-        // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_mut_str());
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(1);
@@ -102,25 +91,6 @@ impl MyApp {
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
 
 
-        // let result2 = crate::parser::JSONParser::change_depth(result, options.max_depth(2)).unwrap();
-        // println!("Increase depth took {}ms, max depth {}, {}", start.elapsed().as_millis(), result2.max_json_depth, result2.json.len());
-        // exit(0);
-        // let start = Instant::now();
-        // let mut v: Value = serde_json::from_str(&content).unwrap();
-        // let mut max_depth = 0;
-        // let depth = 1;
-        // let mut count = 0usize;
-        //
-        // let mut root_node = mem::take(v.as_object_mut().unwrap().get_mut("skills").unwrap());
-        //
-        // println!("Parse took {}ms", start.elapsed().as_millis());
-        // let start = Instant::now();
-        // for node in root_node.as_array().unwrap().iter() {
-        //     collect_keys(&node, "", depth, &mut max_depth, &mut count);
-        // }
-        // println!("Collect max depth {}ms", start.elapsed().as_millis());
-
-        // println!("{:?}", all_columns);
         Self {
             table: Table::new(result1, columns, 1, "/skills".to_string(), ValueType::Array),
             windows: vec![

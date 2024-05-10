@@ -170,7 +170,7 @@ impl<'a> Lexer<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::my_lexer;
+    use crate::parser::lexer;
 
     #[test]
     fn lexer() {
@@ -182,7 +182,7 @@ mod tests {
               "aa": true
             }"#;
 
-        let mut lexer = my_lexer::Lexer::new(json.as_bytes());
+        let mut lexer = lexer::Lexer::new(json.as_bytes());
         let tokens = lexer.lex();
         println!("{:?}", tokens);
     }

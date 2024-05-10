@@ -2,7 +2,7 @@
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
-use crate::parser::my_lexer::{Lexer};
+use crate::parser::lexer::{Lexer};
 use crate::parser::{ParseOptions, Token};
 
 pub struct Parser<'a> {
