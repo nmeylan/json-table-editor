@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::mem;
 use std::time::Instant;
 use egui::{Align, Context, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
@@ -15,6 +16,12 @@ pub struct Column {
     pub name: String,
     pub depth: u8,
     pub value_type: ValueType,
+}
+
+impl Hash for Column {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state)
+    }
 }
 
 impl Column {
@@ -116,7 +123,7 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(parse_result: Option<ParseResult>, nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
-        let last_parsed_max_depth = parse_result.as_ref().unwrap().parsing_max_depth;
+        let last_parsed_max_depth = parse_result.as_ref().map_or(depth as usize, |p| p.parsing_max_depth);
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,

@@ -227,7 +227,7 @@ impl<'a> Parser<'a> {
                     if depth > 1 {
                         let start = self.lexer.reader_index();
                         if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string().replace(['\n'], ""))));
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string())));
                             self.lexer.set_reader_index(start);
                             self.process(route, target, depth, count, parse_option);
                             Ok(())
@@ -274,7 +274,7 @@ impl<'a> Parser<'a> {
                             }
                         } else if let Some(array_str) = self.lexer.consume_string_until_end_of_array() {
                             if depth <= parse_option.max_depth as u8 {
-                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth), Some(concat_string!("[", array_str, "]").replace(['\n'], ""))));
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth), Some(concat_string!("[", array_str, "]"))));
                             }
                             break;
                         }

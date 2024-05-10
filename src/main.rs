@@ -11,6 +11,7 @@ use std::{env, fs, mem};
 use std::collections::{BTreeSet};
 
 use std::path::Path;
+use std::process::exit;
 
 use std::time::{Instant};
 use eframe::egui;

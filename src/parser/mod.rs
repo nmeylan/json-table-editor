@@ -1,4 +1,4 @@
-
+use egui::ahash::{HashSet, HashSetExt};
 use crate::parser::lexer::Lexer;
 use crate::parser::parser::{FlatJsonValue, Parser, ParseResult, PointerKey, ValueType};
 use crate::table::Column;
@@ -178,17 +178,17 @@ impl<'a> JSONParser<'a> {
         if !matches!(previous_parse_result.root_value_type, ValueType::Array) {
             return Err("Parsed json root is not an array".to_string());
         }
-        let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+        let mut unique_keys: HashSet<Column> = HashSet::with_capacity(1000);
         let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(previous_parse_result.root_array_len);
         let mut j = previous_parse_result.json.len() - 1;
-        let mut estimated_capacity = 1;
+        let mut estimated_capacity = 100;
         for i in (0..previous_parse_result.root_array_len).rev() {
             let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
             let mut is_first_entry = true;
+            let _i = i.to_string();
             loop {
                 if j >= 0 && !previous_parse_result.json.is_empty() {
                     let (k, _v) = &previous_parse_result.json[j];
-                    let _i = i.to_string();
                     let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                         let prefix = concat_string!(started_parsing_at, "/", _i);
                         (k.pointer.starts_with(&prefix), prefix.len())
@@ -206,9 +206,7 @@ impl<'a> JSONParser<'a> {
                             depth: k.depth,
                             value_type: k.value_type
                         };
-                        if !unique_keys.contains(&column) {
-                            unique_keys.push(column);
-                        }
+                        unique_keys.insert(column);
                     }
                     if match_prefix {
                         if is_first_entry {
@@ -232,12 +230,9 @@ impl<'a> JSONParser<'a> {
             }
             res.push(JsonArrayEntries { entries: flat_json_values, index: i });
 
-            if i == 10 {
-                estimated_capacity = j / 10;
-            }
         }
         res.reverse();
-        Ok((res, unique_keys))
+        Ok((res, unique_keys.into_iter().collect()))
     }
 
     pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntries>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntries> {
