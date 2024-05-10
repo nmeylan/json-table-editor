@@ -10,11 +10,10 @@
 
 ![](./github/json-editor.png)
 
-Json in video below is 372mb with an array of 309_759 entries, containing nested objects
-
-https://github.com/nmeylan/json-table-editor/assets/1909074/db210bc1-467e-41e9-8fe0-26f57998450a
+Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps
 
 
+https://github.com/nmeylan/json-table-editor/assets/1909074/57128f45-b524-481b-892b-b66b89e215af
 
 ## Todo
 - Cell edition
