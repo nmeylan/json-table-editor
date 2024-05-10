@@ -55,7 +55,7 @@ fn main() {
         viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
         ..eframe::NativeOptions::default()
     };
-    eframe::run_native("Empty app", options, Box::new(|_cc| {
+    eframe::run_native("JSON table editor", options, Box::new(|_cc| {
         Box::new(MyApp::new())
     }));
 }

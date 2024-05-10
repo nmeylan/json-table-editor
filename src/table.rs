@@ -105,9 +105,14 @@ impl super::View for Table {
                             let mut scroll_to_x = None;
                             if self.next_frame_scroll_to_column {
                                 self.next_frame_scroll_to_column = false;
-                                let index = self.column_selected.iter().position(|c| {
-                                    c.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase())
+                                let mut index = self.column_selected.iter().position(|c| {
+                                    c.name.to_lowercase().eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
                                 });
+                                if index.is_none() {
+                                    index = self.column_selected.iter().position(|c| {
+                                        c.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase())
+                                    });
+                                }
                                 if let Some(index) = index {
                                     if let Some(offset) = self.columns_offset.get(index) {
                                         scroll_to_x = Some(*offset);
@@ -303,7 +308,6 @@ impl Table {
                     let node = self.nodes().get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |index| {
-
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
@@ -332,7 +336,7 @@ impl Table {
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
                                     click_on_array_row_index = Some((row_index, pointer.clone()));
-                                } 
+                                }
                             }
                         }
                     }
@@ -343,11 +347,11 @@ impl Table {
                 }
             });
 
-        if let Some((row_index, pointer))= click_on_array_row_index {
+        if let Some((row_index, pointer)) = click_on_array_row_index {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
                 let mut content = value.clone().unwrap();
-                if matches!(pointer.value_type, ValueType::Object){
+                if matches!(pointer.value_type, ValueType::Object) {
                     content = concat_string!("[", content, "]");
                 }
                 self.windows.push(SubTable::new(pointer.pointer, content,
