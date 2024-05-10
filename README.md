@@ -15,7 +15,10 @@ _Early development stage, look and feel is pretty bad but it is usable_
 Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps
 
 
-https://github.com/nmeylan/json-table-editor/assets/1909074/57128f45-b524-481b-892b-b66b89e215af
+
+https://github.com/nmeylan/json-table-editor/assets/1909074/3e7deb79-96b3-4c9e-ba11-064949f27520
+
+
 
 ## Todo
 - Cell edition
