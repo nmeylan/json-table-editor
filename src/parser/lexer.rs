@@ -91,6 +91,14 @@ impl<'a> Lexer<'a> {
         None
     }
 
+    pub fn reader_index(&self) -> usize {
+        self.reader.index
+    }
+
+    pub fn set_reader_index(&mut self, index: usize) {
+        self.reader.index = index;
+    }
+
     pub fn consume_string_until_end_of_object(&mut self) -> Option<&'a str> {
         let mut square_close_count = 1;
         let start = self.reader.index - 1;

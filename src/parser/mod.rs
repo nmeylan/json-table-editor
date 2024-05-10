@@ -127,6 +127,7 @@ impl<'a> JSONParser<'a> {
                     let column = Column {
                         name: key.to_string(),
                         depth: k.depth,
+                        value_type: k.value_type,
                     };
                     if !unique_keys.contains(&column) && !column.name.contains("#") {
                         unique_keys.push(column);
@@ -203,6 +204,7 @@ impl<'a> JSONParser<'a> {
                         let column = Column {
                             name: key.to_string(),
                             depth: k.depth,
+                            value_type: k.value_type
                         };
                         if !unique_keys.contains(&column) {
                             unique_keys.push(column);

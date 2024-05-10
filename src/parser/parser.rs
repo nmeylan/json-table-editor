@@ -1,4 +1,3 @@
-
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Index;
@@ -19,7 +18,7 @@ pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
     pub depth: u8,
-    pub index: usize
+    pub index: usize,
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -35,6 +34,7 @@ impl Hash for PointerKey {
         self.pointer.hash(state);
     }
 }
+
 impl PointerKey {
     pub fn parent(&self) -> PointerKey {
         let index = self.pointer.rfind('/').unwrap_or(0);
@@ -90,7 +90,6 @@ pub enum ValueType {
     #[default]
     None,
 }
-
 
 
 type PointerFragment = Vec<String>;
@@ -225,12 +224,18 @@ impl<'a> Parser<'a> {
                     } else {
                         depth
                     };
-                    if depth <= parse_option.max_depth as u8 {
-                        self.process(route, target, depth, count, parse_option)
-                    } else if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                        target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string().replace(['\n'], ""))));
-                        Ok(())
-                    } else {
+                    if depth > 1 {
+                        let start = self.lexer.reader_index();
+                        if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
+                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string().replace(['\n'], ""))));
+                            self.lexer.set_reader_index(start);
+                            self.process(route, target, depth, count, parse_option);
+                            Ok(())
+                        } else {
+                            Ok(())
+                        }
+                    } else  {
+                        self.process(route, target, depth, count, parse_option);
                         Ok(())
                     }
                 }
@@ -268,7 +273,9 @@ impl<'a> Parser<'a> {
                                 i += 1;
                             }
                         } else if let Some(array_str) = self.lexer.consume_string_until_end_of_array() {
-                            target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth), Some(concat_string!("[", array_str, "]").replace(['\n'], ""))));
+                            if depth <= parse_option.max_depth as u8 {
+                                target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Array, depth), Some(concat_string!("[", array_str, "]").replace(['\n'], ""))));
+                            }
                             break;
                         }
                     }
@@ -276,37 +283,44 @@ impl<'a> Parser<'a> {
                 }
                 Token::String(value) => {
                     let value = value.to_string();
-                    let pointer = Self::concat_route(route);
-                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
-                        if pointer.starts_with(start_parse_at) {
+                    if depth <= parse_option.max_depth as u8 {
+                        let pointer = Self::concat_route(route);
+                        if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                            if pointer.starts_with(start_parse_at) {
+                                target.push((PointerKey::from_pointer(pointer, ValueType::String, depth), Some(value)));
+                            }
+                        } else {
                             target.push((PointerKey::from_pointer(pointer, ValueType::String, depth), Some(value)));
                         }
-                    } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::String, depth), Some(value)));
                     }
+
                     Ok(())
                 }
                 Token::Number(value) => {
                     let value = value.to_string();
-                    let pointer = Self::concat_route(route);
-                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
-                        if pointer.starts_with(start_parse_at) {
+                    if depth <= parse_option.max_depth as u8 {
+                        let pointer = Self::concat_route(route);
+                        if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                            if pointer.starts_with(start_parse_at) {
+                                target.push((PointerKey::from_pointer(pointer, ValueType::Number, depth), Some(value)));
+                            }
+                        } else {
                             target.push((PointerKey::from_pointer(pointer, ValueType::Number, depth), Some(value)));
                         }
-                    } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Number, depth), Some(value)));
                     }
                     Ok(())
                 }
                 Token::Boolean(value) => {
                     let value = *value;
-                    let pointer = Self::concat_route(route);
-                    if let Some(ref start_parse_at) = parse_option.start_parse_at {
-                        if pointer.starts_with(start_parse_at) {
+                    if depth <= parse_option.max_depth as u8 {
+                        let pointer = Self::concat_route(route);
+                        if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                            if pointer.starts_with(start_parse_at) {
+                                target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth), Some(value.to_string())));
+                            }
+                        } else {
                             target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth), Some(value.to_string())));
                         }
-                    } else {
-                        target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth), Some(value.to_string())));
                     }
                     Ok(())
                 }

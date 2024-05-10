@@ -81,11 +81,11 @@ impl MyApp {
 
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_mut_str());
-        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(1);
+        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(10);
         let result = parser.parse(options.clone()).unwrap();
 
         let parse_result = result.clone_except_json();
-        let max_depth = 10;
+        let max_depth = result.max_json_depth;
         println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
         let (result1, columns) = JSONParser::as_array(result).unwrap();

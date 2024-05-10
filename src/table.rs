@@ -12,15 +12,17 @@ use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
 pub struct Column {
-    pub(crate) name: String,
-    pub(crate) depth: u8,
+    pub name: String,
+    pub depth: u8,
+    pub value_type: ValueType,
 }
 
 impl Column {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, value_type: ValueType) -> Self {
         Self {
             name,
             depth: 0,
+            value_type,
         }
     }
 }
@@ -122,7 +124,7 @@ impl Table {
             non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
-            column_pinned: vec![Column::new("/#".to_string())],
+            column_pinned: vec![Column::new("/#".to_string(), ValueType::Number)],
             scroll_y: 0.0,
             hovered_row_index: None,
             columns_offset: vec![],
@@ -148,11 +150,8 @@ impl Table {
 
     pub fn update_selected_columns(&mut self, depth: u8) {
         let previous_parse_result = self.parse_result.clone().unwrap();
-        let (new_json_array, new_columns) = JSONParser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
-        self.all_columns = new_columns;
         let column_selected = Self::selected_columns(&self.all_columns, depth);
         self.column_selected = column_selected;
-        self.nodes = new_json_array;
     }
     pub fn update_max_depth(&mut self, depth: u8) {
         self.max_depth = depth as usize;
@@ -177,7 +176,7 @@ impl Table {
     }
 
     pub fn visible_columns(all_columns: &Vec<Column>, depth: u8) -> impl Iterator<Item=&Column> {
-        all_columns.iter().filter(move |column: &&Column| column.depth <= depth)
+        all_columns.iter().filter(move |column: &&Column| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object)))
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) {
