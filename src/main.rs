@@ -92,7 +92,7 @@ impl MyApp {
         // println!("Custom Lexer took {}ms, {} tokens",start.elapsed().as_millis(), tokens.len());
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_mut_str());
-        let options = ParseOptions::default().start_parse_at("/skills").parse_array(false).max_depth(1);
+        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(1);
         let result = parser.parse(options.clone()).unwrap();
 
         let max_depth = 10;

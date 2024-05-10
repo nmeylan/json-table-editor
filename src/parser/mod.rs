@@ -35,8 +35,8 @@ impl ParseOptions {
         self
     }
 
-    pub fn start_parse_at(mut self, pointer: &str) -> Self {
-        self.start_parse_at = Some(pointer.to_string());
+    pub fn start_parse_at(mut self, pointer: String) -> Self {
+        self.start_parse_at = Some(pointer);
         self
     }
     pub fn max_depth(mut self, max_depth: usize) -> Self {
@@ -137,7 +137,7 @@ impl<'a> JSONParser<'a> {
             let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
             let mut is_first_entry = true;
             loop {
-                if j > 0 && !previous_parse_result.json.is_empty() {
+                if j >= 0 && !previous_parse_result.json.is_empty() {
                     let (k, _v) = &previous_parse_result.json[j];
                     let _i = i.to_string();
                     let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
@@ -171,6 +171,9 @@ impl<'a> JSONParser<'a> {
                         k.index = i;
                         flat_json_values.push((k, v));
                     } else {
+                        break;
+                    }
+                    if j == 0 {
                         break;
                     }
                     j -= 1;

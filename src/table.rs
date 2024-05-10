@@ -276,7 +276,6 @@ impl Table {
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |index| {
 
-                            println!("col index {} {:?}", index, &columns[index]);
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
@@ -319,7 +318,10 @@ impl Table {
         if let Some((row_index, pointer))= click_on_array_row_index {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
-                let content = value.clone().unwrap();
+                let mut content = value.clone().unwrap();
+                if matches!(pointer.value_type, ValueType::Object){
+                    content = concat_string!("[", content, "]");
+                }
                 self.windows.push(SubTable::new(pointer.pointer, content,
                                                 if matches!(pointer.value_type, ValueType::Array) { ValueType::Array } else { ValueType::Object }))
             } else {

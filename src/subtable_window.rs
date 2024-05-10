@@ -3,7 +3,7 @@ use egui::{Context, Ui};
 use crate::parser::{JsonArrayEntries, JSONParser, ParseOptions};
 use crate::parser::parser::ValueType;
 use crate::table::{Column, Table};
-use crate::View;
+use crate::{concat_string, View};
 
 pub struct SubTable {
     name: String,
@@ -13,7 +13,7 @@ pub struct SubTable {
 impl SubTable {
     pub fn new(name: String, content: String, parent_value_type: ValueType) -> Self {
         let mut parser = JSONParser::new(content.as_str());
-        let options = ParseOptions::default().parse_array(true).prefix(name.clone()).max_depth(10);
+        let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
         let result = parser.parse(options.clone()).unwrap();
         let (nodes, columns) = JSONParser::as_array(result).unwrap();
         Self {
