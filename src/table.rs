@@ -275,6 +275,8 @@ impl Table {
                     let node = self.nodes().get(row_index);
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |index| {
+
+                            println!("col index {} {:?}", index, &columns[index]);
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
@@ -360,8 +362,7 @@ impl Table {
         } else {
             self.filtered_nodes.clear();
         }
-        // let (flatten_nodes, _) = flatten::flatten(&self.nodes, self.max_depth as u8, &self.non_null_columns);
-        // self.flatten_nodes = flatten_nodes;
+
         self.next_frame_reset_scroll = true;
     }
 

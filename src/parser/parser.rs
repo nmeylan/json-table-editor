@@ -213,7 +213,7 @@ impl<'a> Parser<'a> {
                     if depth <= parse_option.max_depth as u8 {
                         self.process(route, target, depth, count, parse_option)
                     } else if let Some(object_str) = self.lexer.consume_string_until_end_of_object() {
-                        target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth), Some(object_str.to_string().replace(['\n'], ""))));
+                        target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth - 1), Some(object_str.to_string().replace(['\n'], ""))));
                         Ok(())
                     } else {
                         Ok(())
