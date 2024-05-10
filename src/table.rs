@@ -52,6 +52,7 @@ pub struct Table {
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
     max_depth: usize,
+    last_parsed_max_depth: usize,
     parse_result: Option<ParseResult>,
     nodes: Vec<JsonArrayEntries>,
     filtered_nodes: Vec<JsonArrayEntries>,
@@ -115,6 +116,7 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(parse_result: Option<ParseResult>, nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+        let last_parsed_max_depth = parse_result.as_ref().unwrap().parsing_max_depth;
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
@@ -134,6 +136,7 @@ impl Table {
             scroll_to_column: "".to_string(),
             next_frame_scroll_to_column: false,
             filtered_nodes: vec![],
+            last_parsed_max_depth,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -149,9 +152,18 @@ impl Table {
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) {
-        let previous_parse_result = self.parse_result.clone().unwrap();
-        let column_selected = Self::selected_columns(&self.all_columns, depth);
-        self.column_selected = column_selected;
+        if depth <= self.last_parsed_max_depth as u8 {
+            let column_selected = Self::selected_columns(&self.all_columns, depth);
+            self.column_selected = column_selected;
+        } else {
+            let previous_parse_result = self.parse_result.clone().unwrap();
+            let (new_json_array, new_columns) = JSONParser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
+            self.all_columns = new_columns;
+            let column_selected = Self::selected_columns(&self.all_columns, depth);
+            self.column_selected = column_selected;
+            self.nodes = new_json_array;
+            self.last_parsed_max_depth = depth as usize;
+        }
     }
     pub fn update_max_depth(&mut self, depth: u8) {
         self.max_depth = depth as usize;

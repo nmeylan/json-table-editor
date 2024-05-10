@@ -6,7 +6,7 @@ mod components;
 mod subtable_window;
 mod parser;
 
-use std::{env, fs};
+use std::{env, fs, mem};
 
 use std::collections::{BTreeSet};
 
@@ -77,16 +77,27 @@ impl MyApp {
             println!("Opening {}", args[1].as_str());
         }
 
-        let mut content = fs::read_to_string(Path::new(args[1].as_str())).unwrap();
+        let path = Path::new(args[1].as_str());
+        let mut content = fs::read_to_string(path).unwrap();
 
+        let metadata1 = fs::metadata(path).unwrap();
+
+        let size = metadata1.len() / 1024 / 1024;
         let start = Instant::now();
         let mut parser = JSONParser::new(content.as_mut_str());
-        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(10);
+        let max_depth =if size < 10 {
+            100
+        } else if size < 50 {
+            10
+        } else {
+            1
+        };
+        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let result = parser.parse(options.clone()).unwrap();
 
         let parse_result = result.clone_except_json();
         let max_depth = result.max_json_depth;
-        println!("Custom parser took {}ms, max depth {}, {}, root array len {}", start.elapsed().as_millis(), max_depth, result.json.len(), result.root_array_len);
+        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}, root array len {}", start.elapsed().as_millis(), size, max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();
         let (result1, columns) = JSONParser::as_array(result).unwrap();
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
