@@ -11,6 +11,7 @@ use std::{env, fs};
 use std::collections::{BTreeSet};
 
 use std::path::Path;
+use std::process::exit;
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::NativeOptions;
@@ -93,7 +94,7 @@ impl MyApp {
         } else if size < 50 {
             10
         } else {
-            10
+            3
         };
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let result = parser.parse(options.clone()).unwrap();
@@ -106,15 +107,17 @@ impl MyApp {
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
         // JSONParser::change_depth_array(parse_result, result1, 2);
         // exit(0);
+        let parsing_max_depth = parse_result.parsing_max_depth;
+        let depth = (parser.parser.depth_after_start_at as u8).min(parsing_max_depth as u8);
         Self {
             frame_history: FrameHistory::default(),
-            table: Table::new(Some(parse_result), result1, columns, parser.parser.depth_after_start_at as u8, "/skills".to_string(), ValueType::Array),
+            table: Table::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],
             max_depth: max_depth as u8,
             open: Default::default(),
-            depth: parser.parser.depth_after_start_at as u8,
+            depth,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {

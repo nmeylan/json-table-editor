@@ -172,13 +172,15 @@ impl Table {
 
     pub fn update_selected_columns(&mut self, depth: u8) {
         if depth <= self.last_parsed_max_depth as u8 {
-            let column_selected = Self::selected_columns(&self.all_columns, depth);
+            let mut column_selected = Self::selected_columns(&self.all_columns, depth);
+            column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
         } else {
             let previous_parse_result = self.parse_result.clone().unwrap();
             let (new_json_array, new_columns) = JSONParser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
             self.all_columns = new_columns;
-            let column_selected = Self::selected_columns(&self.all_columns, depth);
+            let mut column_selected = Self::selected_columns(&self.all_columns, depth);
+            column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
             self.nodes = new_json_array;
             self.last_parsed_max_depth = depth as usize;

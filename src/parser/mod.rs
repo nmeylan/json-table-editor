@@ -265,15 +265,22 @@ impl<'a> JSONParser<'a> {
             let previous_len = previous_parse_result.json.len();
             let mut new_flat_json_structure = FlatJsonValue::with_capacity(previous_len + (parse_options.max_depth - previous_parse_result.parsing_max_depth) * (previous_len / 3));
             for (k, v) in previous_parse_result.json {
-                if !matches!(k.value_type, ValueType::Object) || k.depth < previous_parse_result.parsing_max_depth as u8 {
+                if !matches!(k.value_type, ValueType::Object) {
                     new_flat_json_structure.push((k, v));
-                } else if let Some(mut v) = v {
-                    new_flat_json_structure.push((k.clone(), Some(v.clone())));
-                    let lexer = Lexer::new(v.as_bytes());
-                    let mut parser = Parser::new(lexer);
-                    parse_options.prefix = Some(k.pointer);
-                    let res = parser.parse(&parse_options, k.depth + 1)?;
-                    new_flat_json_structure.extend(res.json);
+                } else {
+                    if k.depth == previous_parse_result.parsing_max_depth as u8 {
+                        if let Some(mut v) = v {
+                            new_flat_json_structure.push((k.clone(), Some(v.clone())));
+                            let lexer = Lexer::new(v.as_bytes());
+                            let mut parser = Parser::new(lexer);
+                            parse_options.prefix = Some(k.pointer);
+                            let res = parser.parse(&parse_options, k.depth + 1)?;
+                            new_flat_json_structure.extend(res.json);
+                        }
+                    } else {
+                        new_flat_json_structure.push((k, v));
+                    }
+
                 }
             }
             Ok(ParseResult {
