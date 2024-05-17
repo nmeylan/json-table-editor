@@ -133,8 +133,7 @@ impl<'a> Lexer<'a> {
             b'-' | b'0' | b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => {
                 let start = self.reader.index - 1;
                 while let Some(b) = self.reader.next() {
-                    if !(b == b'0' || b == b'1' || b == b'2' || b == b'3' || b == b'4' || b == b'5' || b == b'6' || b == b'7' || b == b'8' || b == b'9'
-                        || b == b'.') {
+                    if !((b >= 0x30 && b <= 0x39) || b == b'.') {
                         break;
                     }
                 }
@@ -158,40 +157,5 @@ impl<'a> Lexer<'a> {
             // Handle numbers, errors, etc.
             _ => None,
         }
-    }
-
-    pub fn lex(&mut self) -> Vec<Token<'a>> {
-        // let estimated_capacity = self.reader.slice.len() / 10;
-        // println!("estimated capacity {}", estimated_capacity);
-        // let mut tokens = Vec::with_capacity(estimated_capacity);
-        let mut tokens = Vec::new();
-        while !self.reader.is_at_end() {
-            if let Some(token) = self.next_token() {
-                tokens.push(token);
-            } else {
-                break;
-            }
-        }
-        tokens
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parser::lexer;
-
-    #[test]
-    fn lexer() {
-        let json = r#"
-        {
-              "id": 1,
-              "maxLevel": 9,
-              "name": "NV_BASIC",
-              "aa": true
-            }"#;
-
-        let mut lexer = lexer::Lexer::new(json.as_bytes());
-        let tokens = lexer.lex();
-        println!("{:?}", tokens);
     }
 }
