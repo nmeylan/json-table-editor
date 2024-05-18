@@ -125,6 +125,8 @@ impl<'a> Parser<'a> {
                             Ok(())
                         }
                     } else  {
+                        panic!("Should not be there {}",Self::concat_route(route) );
+                        target.push((PointerKey::from_pointer(Self::concat_route(route), ValueType::Object, depth), None));
                         self.process(route, target, depth + 1, count, parse_option);
                         Ok(())
                     }
@@ -211,6 +213,19 @@ impl<'a> Parser<'a> {
                             }
                         } else {
                             target.push((PointerKey::from_pointer(pointer, ValueType::Bool, depth), Some(value.to_string())));
+                        }
+                    }
+                    Ok(())
+                }
+                Token::Null => {
+                    if depth <= parse_option.max_depth as u8 {
+                        let pointer = Self::concat_route(route);
+                        if let Some(ref start_parse_at) = parse_option.start_parse_at {
+                            if pointer.starts_with(start_parse_at) {
+                                target.push((PointerKey::from_pointer(pointer, ValueType::Null, depth), None));
+                            }
+                        } else {
+                            target.push((PointerKey::from_pointer(pointer, ValueType::Null, depth), None));
                         }
                     }
                     Ok(())
@@ -420,7 +435,7 @@ mod tests {
         let vec = parser.parse(ParseOptions::default()).unwrap().json;
         println!("{:?}", vec);
         assert_eq!(vec[1].0.pointer, "/skills/0/description");
-        assert_eq!(vec[1].0.parent().pointer, "/skills/0");
+        assert_eq!(vec[1].0.parent(), "/skills/0");
         assert_eq!(vec[1].0.value_type, ValueType::String);
         assert_eq!(vec[1].1, Some("Basic Skill".to_string()));
         assert_eq!(vec[3].0.pointer, "/skills/1/description");

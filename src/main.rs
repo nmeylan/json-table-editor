@@ -100,6 +100,7 @@ impl MyApp {
         let result = parser.parse(options.clone()).unwrap();
 
         let parse_result = result.clone_except_json();
+
         let max_depth = result.max_json_depth;
         println!("Custom parser took {}ms for a {}mb file, max depth {}, {}, root array len {}", start.elapsed().as_millis(), size, max_depth, result.json.len(), result.root_array_len);
         let start = Instant::now();

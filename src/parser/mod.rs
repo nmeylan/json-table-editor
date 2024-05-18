@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::time::Instant;
 use egui::ahash::{HashSet, HashSetExt};
@@ -7,6 +8,7 @@ use crate::table::Column;
 
 pub mod parser;
 pub mod lexer;
+mod serializer;
 
 pub struct JSONParser<'a> {
     pub parser: Parser<'a>,
@@ -75,8 +77,8 @@ impl JsonArrayEntries {
 pub struct PointerKey {
     pub pointer: String,
     pub value_type: ValueType,
-    pub depth: u8,
-    pub index: usize,
+    pub depth: u8,    // depth of the pointed value in the json
+    pub index: usize, // index in the root json array
 }
 
 impl PartialEq<Self> for PointerKey {
@@ -94,14 +96,14 @@ impl Hash for PointerKey {
 }
 
 impl PointerKey {
-    pub fn parent(&self) -> PointerKey {
+    pub fn parent(&self) -> &str {
         let index = self.pointer.rfind('/').unwrap_or(0);
-        Self {
-            pointer: self.pointer[0..index].to_string(),
-            value_type: ValueType::Object,
-            depth: self.depth.max(0),
-            index: 0,
-        }
+        let parent_pointer = if index == 0 {
+            "/"
+        } else {
+            &self.pointer[0..index]
+        };
+        parent_pointer
     }
 }
 
@@ -153,6 +155,7 @@ pub enum ValueType {
 type PointerFragment = Vec<String>;
 
 pub type FlatJsonValue = Vec<(PointerKey, Option<String>)>;
+
 
 #[derive(Clone)]
 pub struct ParseResult {
