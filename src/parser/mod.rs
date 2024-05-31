@@ -28,8 +28,8 @@ pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Ve
         let mut parse_result = previous_parse_result.clone_except_json();
         parse_result.json = json_array.pop().unwrap().entries;
         let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
-        let result = change_depth(parse_result, options)?;
-        let mut vec = result.json;
+        change_depth(&mut parse_result, options)?;
+        let mut vec = parse_result.json;
 
         for j in 0..vec.len() {
             let (k, _v) = &mut vec[j];
@@ -75,41 +75,29 @@ pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Ve
     Ok((new_json_array, unique_keys))
 }
 
-pub fn change_depth(previous_parse_result: ParseResult, mut parse_options: ParseOptions) -> Result<ParseResult, String> {
+pub fn change_depth(previous_parse_result: &mut ParseResult, mut parse_options: ParseOptions) -> Result<(), String> {
     if previous_parse_result.parsing_max_depth < parse_options.max_depth {
         let previous_len = previous_parse_result.json.len();
-        let mut new_flat_json_structure = FlatJsonValue::with_capacity(previous_len + (parse_options.max_depth - previous_parse_result.parsing_max_depth) as usize * (previous_len / 3));
-        for (k, v) in previous_parse_result.json {
-            if !matches!(k.value_type, ValueType::Object) {
-                new_flat_json_structure.push((k, v));
-            } else {
+        for i in 0..previous_len {
+            let (k, v) = &previous_parse_result.json[i];
+            if matches!(k.value_type, ValueType::Object) {
                 if k.depth == previous_parse_result.parsing_max_depth as u8 {
-                    if let Some(mut v) = v {
-                        new_flat_json_structure.push((k.clone(), Some(v.clone())));
+                    if let Some(ref v) = v {
                         let lexer = Lexer::new(v.as_bytes());
                         let mut parser = Parser::new(lexer);
-                        parse_options.prefix = Some(k.pointer);
+                        parse_options.prefix = Some(k.pointer.clone());
                         let res = parser.parse(&parse_options, k.depth + 1)?;
-                        new_flat_json_structure.extend(res.json);
+                        previous_parse_result.json.extend(res.json);
                     }
-                } else {
-                    new_flat_json_structure.push((k, v));
                 }
-
             }
         }
-        Ok(ParseResult {
-            json: new_flat_json_structure,
-            max_json_depth: previous_parse_result.max_json_depth,
-            parsing_max_depth: parse_options.max_depth,
-            started_parsing_at: previous_parse_result.started_parsing_at,
-            parsing_prefix: previous_parse_result.parsing_prefix,
-        })
+        Ok(())
     } else if previous_parse_result.parsing_max_depth > parse_options.max_depth {
         // serialization
         todo!("");
     } else {
-        Ok(previous_parse_result)
+        Ok(())
     }
 }
 

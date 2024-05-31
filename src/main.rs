@@ -105,13 +105,12 @@ impl MyApp {
         let metadata1 = file.metadata().unwrap();
 
         let size = (metadata1.len() / 1024 / 1024) as usize;
-        let start = Instant::now();
         let max_depth =if size < 10 {
             100
         } else if size < 50 {
             10
         } else {
-            5
+            3
         };
         let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
