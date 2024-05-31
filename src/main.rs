@@ -1,3 +1,6 @@
+#![feature(core_io_borrowed_buf)]
+#![feature(read_buf)]
+
 extern crate core;
 
 mod table;
@@ -6,9 +9,11 @@ mod components;
 mod subtable_window;
 pub mod parser;
 
-use std::{env, fs};
+use std::{env, fs, io};
 
 use std::collections::{BTreeSet};
+use std::fs::File;
+use std::io::Read;
 
 use std::path::Path;
 use std::process::exit;
@@ -19,6 +24,7 @@ use eframe::Theme::Light;
 use egui::{Context, Separator, TextEdit, Vec2};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
+use crate::parser::read_file::{LfToCrlfReader};
 use crate::table::Table;
 
 /// Something to view in the demo windows
@@ -68,6 +74,17 @@ struct MyApp {
     depth: u8,
 }
 
+struct MyReader{}
+
+impl Read for MyReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        todo!()
+    }
+
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        todo!()
+    }
+}
 
 impl MyApp {
     fn new() -> Self {
@@ -79,16 +96,16 @@ impl MyApp {
         }
 
         let path = Path::new(args[1].as_str());
-        let mut content = fs::read_to_string(path).unwrap();
+        // let mut content = fs::read_to_string(path).unwrap();
         let start = Instant::now();
+        let mut file = File::open(path).unwrap();
         // content = content.replace('\n', "");
         // println!("took {}ms to replace LF", start.elapsed().as_millis());
 
-        let metadata1 = fs::metadata(path).unwrap();
+        let metadata1 = file.metadata().unwrap();
 
-        let size = metadata1.len() / 1024 / 1024;
+        let size = (metadata1.len() / 1024 / 1024) as usize;
         let start = Instant::now();
-        let mut parser = JSONParser::new(content.as_mut_str());
         let max_depth =if size < 10 {
             100
         } else if size < 50 {
@@ -96,9 +113,18 @@ impl MyApp {
         } else {
             5
         };
+        let start = Instant::now();
+        let mut content = String::with_capacity(metadata1.len() as usize);
+        let mut reader = LfToCrlfReader::new(file);
+        // file.read_to_string(&mut content);
+        reader.read_to_string(&mut content);
+        // println!("{}", content);
+        // println!("{}", &content[0..100000]);
+        println!("Read file took {}ms", start.elapsed().as_millis());
+
+        let mut parser = JSONParser::new(content.as_mut_str());
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let result = parser.parse(options.clone()).unwrap();
-
         let parse_result = result.clone_except_json();
 
         let max_depth = result.max_json_depth;

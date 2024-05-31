@@ -1,3 +1,5 @@
+pub mod read_file;
+
 use std::time::Instant;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
