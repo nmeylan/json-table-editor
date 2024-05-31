@@ -2,12 +2,11 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::mem;
-use std::time::Instant;
 use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
+use json_flat_parser::{FlatJsonValue, JsonArrayEntries, ParseResult, PointerKey, ValueType};
 
 use crate::{concat_string, Window};
-use crate::parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseResult, PointerKey, ValueType};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -65,8 +64,8 @@ pub struct Table {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
-    max_depth: usize,
-    last_parsed_max_depth: usize,
+    max_depth: u8,
+    last_parsed_max_depth: u8,
     parse_result: Option<ParseResult>,
     nodes: Vec<JsonArrayEntries>,
     filtered_nodes: Vec<JsonArrayEntries>,
@@ -135,11 +134,11 @@ impl super::View for Table {
 
 impl Table {
     pub fn new(parse_result: Option<ParseResult>, nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
-        let last_parsed_max_depth = parse_result.as_ref().map_or(depth as usize, |p| p.parsing_max_depth);
+        let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
-            max_depth: depth as usize,
+            max_depth: depth,
             nodes,
             parse_result,
             non_null_columns: vec![],
@@ -177,17 +176,17 @@ impl Table {
             self.column_selected = column_selected;
         } else {
             let previous_parse_result = self.parse_result.clone().unwrap();
-            let (new_json_array, new_columns) = JSONParser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
+            let (new_json_array, new_columns) = crate::parser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
             self.all_columns = new_columns;
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
             self.nodes = new_json_array;
-            self.last_parsed_max_depth = depth as usize;
+            self.last_parsed_max_depth = depth;
         }
     }
     pub fn update_max_depth(&mut self, depth: u8) {
-        self.max_depth = depth as usize;
+        self.max_depth = depth;
         self.update_selected_columns(depth);
     }
 
@@ -334,7 +333,7 @@ impl Table {
                         if let Some(index) = response.clicked_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
-                                let is_array = matches!(pointer.value_type, ValueType::Array);
+                                let is_array = matches!(pointer.value_type, ValueType::Array(_));
                                 let is_object = matches!(pointer.value_type, ValueType::Object);
                                 if is_array || is_object {
                                     click_on_array_row_index = Some((row_index, pointer.clone()));
@@ -344,7 +343,7 @@ impl Table {
                         if let Some(index) = response.hovered_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
-                                if matches!(pointer.value_type, ValueType::Array) || matches!(pointer.value_type, ValueType::Object){
+                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object){
                                     hovered_on_array_row_index = Some((row_index, pointer.clone()));
                                 }
                             }
@@ -368,7 +367,7 @@ impl Table {
                     content = concat_string!("[", content, "]");
                 }
                 self.windows.push(SubTable::new(pointer.pointer, content,
-                                                if matches!(pointer.value_type, ValueType::Array) { ValueType::Array } else { ValueType::Object }))
+                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object }))
             } else {
                 println!("can't find root at {} {}", row_index, pointer.pointer)
             }
@@ -405,7 +404,7 @@ impl Table {
             self.non_null_columns.push(column);
         }
         if !self.non_null_columns.is_empty() {
-            self.filtered_nodes = JSONParser::filter_non_null_column(&self.nodes, &self.parent_pointer, &self.non_null_columns);
+            self.filtered_nodes = crate::parser::filter_non_null_column(&self.nodes, &self.parent_pointer, &self.non_null_columns);
         } else {
             self.filtered_nodes.clear();
         }

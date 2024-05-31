@@ -1,5 +1,5 @@
 use egui::{Context, Ui};
-use crate::parser::{JSONParser, ParseOptions, ValueType};
+use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::table::{Table};
 use crate::{View};
 
@@ -13,7 +13,7 @@ impl SubTable {
         let mut parser = JSONParser::new(content.as_str());
         let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
         let result = parser.parse(options.clone()).unwrap();
-        let (nodes, columns) = JSONParser::as_array(result).unwrap();
+        let (nodes, columns) = crate::parser::as_array(result).unwrap();
         Self {
             name: name.clone(),
             table: Table::new(None, nodes, columns, 10, name, parent_value_type),

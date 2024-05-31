@@ -17,8 +17,8 @@ use std::time::{Instant};
 use eframe::NativeOptions;
 use eframe::Theme::Light;
 use egui::{Context, Separator, TextEdit, Vec2};
+use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
-use crate::parser::{JSONParser, ParseOptions, ValueType};
 use crate::table::Table;
 
 /// Something to view in the demo windows
@@ -81,8 +81,8 @@ impl MyApp {
         let path = Path::new(args[1].as_str());
         let mut content = fs::read_to_string(path).unwrap();
         let start = Instant::now();
-        content = content.replace('\n', "");
-        println!("took {}ms to replace LF", start.elapsed().as_millis());
+        // content = content.replace('\n', "");
+        // println!("took {}ms to replace LF", start.elapsed().as_millis());
 
         let metadata1 = fs::metadata(path).unwrap();
 
@@ -94,7 +94,7 @@ impl MyApp {
         } else if size < 50 {
             10
         } else {
-            3
+            5
         };
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let result = parser.parse(options.clone()).unwrap();
@@ -102,17 +102,17 @@ impl MyApp {
         let parse_result = result.clone_except_json();
 
         let max_depth = result.max_json_depth;
-        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}, root array len {}", start.elapsed().as_millis(), size, max_depth, result.json.len(), result.root_array_len);
+        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, max_depth, result.json.len());
         let start = Instant::now();
-        let (result1, columns) = JSONParser::as_array(result).unwrap();
+        let (result1, columns) = crate::parser::as_array(result).unwrap();
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
         // JSONParser::change_depth_array(parse_result, result1, 2);
         // exit(0);
         let parsing_max_depth = parse_result.parsing_max_depth;
-        let depth = (parser.parser.depth_after_start_at as u8).min(parsing_max_depth as u8);
+        let depth = (parser.parser.depth_after_start_at + 1).min(parsing_max_depth as u8);
         Self {
             frame_history: FrameHistory::default(),
-            table: Table::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array),
+            table: Table::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array(0)),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],

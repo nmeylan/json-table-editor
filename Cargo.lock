@@ -1051,6 +1051,14 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "json-flat-parser",
+]
+
+[[package]]
+name = "json-flat-parser"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
  "simdutf8",
 ]
 
