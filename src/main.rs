@@ -74,18 +74,6 @@ struct MyApp {
     depth: u8,
 }
 
-struct MyReader{}
-
-impl Read for MyReader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        todo!()
-    }
-
-    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-        todo!()
-    }
-}
-
 impl MyApp {
     fn new() -> Self {
         let args: Vec<_> = env::args().collect();
