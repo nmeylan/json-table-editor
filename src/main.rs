@@ -94,12 +94,10 @@ impl MyApp {
         let metadata1 = file.metadata().unwrap();
 
         let size = (metadata1.len() / 1024 / 1024) as usize;
-        let max_depth =if size < 10 {
-            2
-        } else if size < 50 {
-            10
+        let max_depth =if size < 100 {
+            u8::MAX
         } else {
-            2
+            1
         };
         let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
@@ -110,6 +108,7 @@ impl MyApp {
         // println!("{}", &content[0..100000]);
         println!("Read file took {}ms", start.elapsed().as_millis());
 
+        let start = Instant::now();
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
         let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap().to_owned();
         let parse_result = result.clone_except_json();

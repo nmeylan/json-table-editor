@@ -18,13 +18,13 @@ impl<R: Read> Read for LfToCrlfReader<R> {
         match self.inner.read(&mut buf) {
             Ok(0) => return Ok(0), // End of file
             Ok(n) => {
-                let mut i = 0;
-                while i < n {
-                    if buf[i] <= 0x20 { // ignore any char <= SPACE
-                        buf[i] = 0;
-                    }
-                    i += 1;
-                }
+                // let mut i = 0;
+                // while i < n {
+                //     if buf[i] <= 0x20 { // ignore any char <= SPACE
+                //         buf[i] = 0;
+                //     }
+                //     i += 1;
+                // }
                 read_bytes = n;
             }
             Err(e) => return Err(e),

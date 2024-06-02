@@ -22,7 +22,7 @@ macro_rules! concat_string {
 pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>), String> {
     let len = json_array.len();
     let mut new_json_array = Vec::with_capacity(json_array.len());
-    let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+    let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
     let start = Instant::now();
     for i in (0..len).rev() {
         let mut parse_result = previous_parse_result.clone_except_json();
@@ -84,10 +84,10 @@ pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<Json
         ValueType::Array(root_array_len) => root_array_len,
         _ => panic!("")
     };
-    let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
+    let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
     let mut res: Vec<JsonArrayEntriesOwned> = Vec::with_capacity(root_array_len);
     let mut j = previous_parse_result.json.len() - 1;
-    let mut estimated_capacity = 100;
+    let mut estimated_capacity = 16;
     for i in (0..root_array_len).rev() {
         let mut flat_json_values = FlatJsonValueOwned::with_capacity(estimated_capacity);
         let mut is_first_entry = true;
