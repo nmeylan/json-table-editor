@@ -4,7 +4,7 @@ use std::time::Instant;
 use json_flat_parser::{FlatJsonValue, FlatJsonValueOwned, JsonArrayEntriesOwned, JSONParser, ParseOptions, ParseResultOwned, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;
-use crate::table::Column;
+use crate::array_table::Column;
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };

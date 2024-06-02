@@ -60,7 +60,7 @@ impl Ord for Column {
     }
 }
 
-pub struct Table {
+pub struct ArrayTable {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
@@ -82,7 +82,7 @@ pub struct Table {
     pub next_frame_scroll_to_column: bool,
 }
 
-impl super::View for Table {
+impl super::View for ArrayTable {
     fn ui(&mut self, ui: &mut egui::Ui) {
         use egui_extras::{Size, StripBuilder};
         self.windows(ui.ctx());
@@ -132,7 +132,7 @@ impl super::View for Table {
     }
 }
 
-impl Table {
+impl ArrayTable {
     pub fn new(parse_result: Option<ParseResultOwned>, nodes: Vec<JsonArrayEntriesOwned>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
@@ -372,9 +372,6 @@ impl Table {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
                 let mut content = value.clone().unwrap();
-                if matches!(pointer.value_type, ValueType::Object(_)) {
-                    content = concat_string!("[", content, "]");
-                }
                 self.windows.push(SubTable::new(pointer.pointer, content,
                                                 if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) }))
             } else {

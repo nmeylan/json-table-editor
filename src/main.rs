@@ -3,11 +3,12 @@
 
 extern crate core;
 
-mod table;
+mod array_table;
 mod panels;
 mod components;
 mod subtable_window;
 pub mod parser;
+mod object_table;
 
 use std::{env, fs, io};
 
@@ -25,7 +26,7 @@ use egui::{Context, Separator, TextEdit, Vec2};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::parser::read_file::{LfToCrlfReader};
-use crate::table::Table;
+use crate::array_table::ArrayTable;
 
 /// Something to view in the demo windows
 pub trait View {
@@ -67,7 +68,7 @@ fn main() {
 
 struct MyApp {
     frame_history: FrameHistory,
-    table: Table,
+    table: ArrayTable,
     windows: Vec<Box<dyn Window>>,
     open: BTreeSet<String>,
     max_depth: u8,
@@ -124,7 +125,7 @@ impl MyApp {
         let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
         Self {
             frame_history: FrameHistory::default(),
-            table: Table::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array(0)),
+            table: ArrayTable::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array(0)),
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],

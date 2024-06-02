@@ -75,7 +75,7 @@ impl Size {
         self
     }
 
-    /// Allowed range of movement (in points), if in a resizable [`Table`](crate::table::Table).
+    /// Allowed range of movement (in points), if in a resizable [`Table`](crate::array_table::ArrayTable).
     pub fn range(self) -> Rangef {
         match self {
             Self::Absolute { range, .. }
@@ -269,7 +269,7 @@ impl<'l> StripLayout<'l> {
         self.set_pos(self.cell_rect(&width, &height));
     }
 
-    /// This is the innermost part of [`crate::Table`] and [`crate::Strip`].
+    /// This is the innermost part of [`crate::ArrayTable`] and [`crate::Strip`].
     ///
     /// Return the used space (`min_rect`) plus the [`Response`] of the whole cell.
     pub(crate) fn add(
@@ -332,7 +332,7 @@ impl<'l> StripLayout<'l> {
         (used_rect, response)
     }
 
-    /// This is the innermost part of [`crate::Table`] and [`crate::Strip`].
+    /// This is the innermost part of [`crate::ArrayTable`] and [`crate::Strip`].
     ///
     /// Return the used space (`min_rect`) plus the [`Response`] of the whole cell.
     pub(crate) fn add_empty(
@@ -363,7 +363,7 @@ impl<'l> StripLayout<'l> {
         max_rect
     }
 
-    /// only needed for layouts with multiple lines, like [`Table`](crate::Table).
+    /// only needed for layouts with multiple lines, like [`Table`](crate::ArrayTable).
     pub fn end_line(&mut self) {
         match self.direction {
             CellDirection::Horizontal => {
