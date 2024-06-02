@@ -1,7 +1,7 @@
 pub mod read_file;
 
 use std::time::Instant;
-use json_flat_parser::{FlatJsonValue, JsonArrayEntries, ParseOptions, ParseResult, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, FlatJsonValueOwned, JsonArrayEntriesOwned, JSONParser, ParseOptions, ParseResultOwned, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;
 use crate::table::Column;
@@ -19,7 +19,7 @@ macro_rules! concat_string {
 }
 
 
-pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Vec<JsonArrayEntries>, depth: usize) -> Result<(Vec<JsonArrayEntries>, Vec<Column>), String> {
+pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>), String> {
     let len = json_array.len();
     let mut new_json_array = Vec::with_capacity(json_array.len());
     let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
@@ -28,7 +28,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Ve
         let mut parse_result = previous_parse_result.clone_except_json();
         parse_result.json = json_array.pop().unwrap().entries;
         let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
-        change_depth(&mut parse_result, options)?;
+        JSONParser::change_depth_owned(&mut parse_result, options)?;
         let mut vec = parse_result.json;
 
         for j in 0..vec.len() {
@@ -67,7 +67,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Ve
             }
             k.index = i;
         }
-        new_json_array.push(JsonArrayEntries { entries: vec, index: i });
+        new_json_array.push(JsonArrayEntriesOwned { entries: vec, index: i });
     }
     new_json_array.reverse();
     unique_keys.sort();
@@ -75,33 +75,8 @@ pub fn change_depth_array(previous_parse_result: ParseResult, mut json_array: Ve
     Ok((new_json_array, unique_keys))
 }
 
-pub fn change_depth(previous_parse_result: &mut ParseResult, mut parse_options: ParseOptions) -> Result<(), String> {
-    if previous_parse_result.parsing_max_depth < parse_options.max_depth {
-        let previous_len = previous_parse_result.json.len();
-        for i in 0..previous_len {
-            let (k, v) = &previous_parse_result.json[i];
-            if matches!(k.value_type, ValueType::Object) {
-                if k.depth == previous_parse_result.parsing_max_depth as u8 {
-                    if let Some(ref v) = v {
-                        let lexer = Lexer::new(v.as_bytes());
-                        let mut parser = Parser::new(lexer);
-                        parse_options.prefix = Some(k.pointer.clone());
-                        let res = parser.parse(&parse_options, k.depth + 1)?;
-                        previous_parse_result.json.extend(res.json);
-                    }
-                }
-            }
-        }
-        Ok(())
-    } else if previous_parse_result.parsing_max_depth > parse_options.max_depth {
-        // serialization
-        todo!("");
-    } else {
-        Ok(())
-    }
-}
 
-pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<JsonArrayEntries>, Vec<Column>), String> {
+pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>), String> {
     if !matches!(previous_parse_result.json[0].0.value_type, ValueType::Array(_)) {
         return Err("Parsed json root is not an array".to_string());
     }
@@ -110,11 +85,11 @@ pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<JsonArray
         _ => panic!("")
     };
     let mut unique_keys: Vec<Column> = Vec::with_capacity(1000);
-    let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(root_array_len);
+    let mut res: Vec<JsonArrayEntriesOwned> = Vec::with_capacity(root_array_len);
     let mut j = previous_parse_result.json.len() - 1;
     let mut estimated_capacity = 100;
     for i in (0..root_array_len).rev() {
-        let mut flat_json_values = FlatJsonValue::with_capacity(estimated_capacity);
+        let mut flat_json_values = FlatJsonValueOwned::with_capacity(estimated_capacity);
         let mut is_first_entry = true;
         let _i = i.to_string();
         loop {
@@ -172,15 +147,15 @@ pub fn as_array(mut previous_parse_result: ParseResult) -> Result<(Vec<JsonArray
                 break;
             }
         }
-        res.push(JsonArrayEntries { entries: flat_json_values, index: i });
+        res.push(JsonArrayEntriesOwned { entries: flat_json_values, index: i });
     }
     res.reverse();
     unique_keys.sort();
     Ok((res, unique_keys))
 }
 
-pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntries>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntries> {
-    let mut res: Vec<JsonArrayEntries> = Vec::with_capacity(previous_parse_result.len());
+pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntriesOwned> {
+    let mut res: Vec<JsonArrayEntriesOwned> = Vec::with_capacity(previous_parse_result.len());
     for row in previous_parse_result {
         let mut should_add_row = true;
         for pointer in non_null_columns {

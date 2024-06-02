@@ -98,7 +98,7 @@ impl MyApp {
         } else if size < 50 {
             10
         } else {
-            3
+            5
         };
         let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
@@ -109,20 +109,19 @@ impl MyApp {
         // println!("{}", &content[0..100000]);
         println!("Read file took {}ms", start.elapsed().as_millis());
 
-        let mut parser = JSONParser::new(content.as_mut_str());
         let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
-        let result = parser.parse(options.clone()).unwrap();
+        let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap().to_owned();
         let parse_result = result.clone_except_json();
 
-        let max_depth = result.max_json_depth;
-        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, max_depth, result.json.len());
+        let parsing_max_depth = result.parsing_max_depth;
+        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
         let start = Instant::now();
         let (result1, columns) = crate::parser::as_array(result).unwrap();
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
         // JSONParser::change_depth_array(parse_result, result1, 2);
         // exit(0);
-        let parsing_max_depth = parse_result.parsing_max_depth;
-        let depth = (parser.parser.depth_after_start_at + 1).min(parsing_max_depth as u8);
+        let max_depth = parse_result.max_json_depth;
+        let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
         Self {
             frame_history: FrameHistory::default(),
             table: Table::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array(0)),

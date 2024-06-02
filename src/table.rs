@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
-use json_flat_parser::{FlatJsonValue, JsonArrayEntries, ParseResult, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
 use crate::{concat_string, Window};
 use crate::subtable_window::SubTable;
@@ -66,9 +66,9 @@ pub struct Table {
     column_pinned: Vec<Column>,
     max_depth: u8,
     last_parsed_max_depth: u8,
-    parse_result: Option<ParseResult>,
-    nodes: Vec<JsonArrayEntries>,
-    filtered_nodes: Vec<JsonArrayEntries>,
+    parse_result: Option<ParseResultOwned>,
+    nodes: Vec<JsonArrayEntriesOwned>,
+    filtered_nodes: Vec<JsonArrayEntriesOwned>,
     scroll_y: f32,
     non_null_columns: Vec<String>,
     pub hovered_row_index: Option<usize>,
@@ -133,7 +133,7 @@ impl super::View for Table {
 }
 
 impl Table {
-    pub fn new(parse_result: Option<ParseResult>, nodes: Vec<JsonArrayEntries>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(parse_result: Option<ParseResultOwned>, nodes: Vec<JsonArrayEntriesOwned>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
@@ -384,7 +384,7 @@ impl Table {
         }
     }
 
-    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValue, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
+    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValueOwned, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
         if let Some(column) = columns.get(index) {
             let key = &column.name;
             let key = concat_string!(self.parent_pointer, "/", row_index.to_string(), key);
@@ -413,7 +413,7 @@ impl Table {
     }
 
     #[inline]
-    fn nodes(&self) -> &Vec<JsonArrayEntries> {
+    fn nodes(&self) -> &Vec<JsonArrayEntriesOwned> {
         if self.non_null_columns.is_empty() {
             &self.nodes
         } else {

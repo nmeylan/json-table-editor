@@ -10,9 +10,8 @@ pub struct SubTable {
 
 impl SubTable {
     pub fn new(name: String, content: String, parent_value_type: ValueType) -> Self {
-        let mut parser = JSONParser::new(content.as_str());
         let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
-        let result = parser.parse(options.clone()).unwrap();
+        let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
         let (nodes, columns) = crate::parser::as_array(result).unwrap();
         Self {
             name: name.clone(),
