@@ -174,6 +174,15 @@ impl Table {
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
+            if self.column_selected.is_empty() {
+                self.column_selected.push(Column {
+                    name: "".to_string(),
+                    depth,
+                    value_type: Default::default(),
+                    seen_count: 0,
+                    order: 0,
+                })
+            }
         } else {
             let previous_parse_result = self.parse_result.clone().unwrap();
             let (new_json_array, new_columns) = crate::parser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
@@ -208,7 +217,7 @@ impl Table {
     }
 
     pub fn visible_columns(all_columns: &Vec<Column>, depth: u8) -> impl Iterator<Item=&Column> {
-        all_columns.iter().filter(move |column: &&Column| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object)))
+        all_columns.iter().filter(move |column: &&Column| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object(_))))
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) {
@@ -334,7 +343,7 @@ impl Table {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
                                 let is_array = matches!(pointer.value_type, ValueType::Array(_));
-                                let is_object = matches!(pointer.value_type, ValueType::Object);
+                                let is_object = matches!(pointer.value_type, ValueType::Object(_));
                                 if is_array || is_object {
                                     click_on_array_row_index = Some((row_index, pointer.clone()));
                                 }
@@ -343,7 +352,7 @@ impl Table {
                         if let Some(index) = response.hovered_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
-                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object){
+                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)){
                                     hovered_on_array_row_index = Some((row_index, pointer.clone()));
                                 }
                             }
@@ -363,11 +372,11 @@ impl Table {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
                 let mut content = value.clone().unwrap();
-                if matches!(pointer.value_type, ValueType::Object) {
+                if matches!(pointer.value_type, ValueType::Object(_)) {
                     content = concat_string!("[", content, "]");
                 }
                 self.windows.push(SubTable::new(pointer.pointer, content,
-                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object }))
+                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) }))
             } else {
                 println!("can't find root at {} {}", row_index, pointer.pointer)
             }

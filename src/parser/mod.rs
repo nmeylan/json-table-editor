@@ -29,7 +29,7 @@ pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_arra
         parse_result.json = json_array.pop().unwrap().entries;
         let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
         JSONParser::change_depth_owned(&mut parse_result, options)?;
-        let mut vec = parse_result.json;
+         let mut vec = parse_result.json;
 
         for j in 0..vec.len() {
             let (k, _v) = &mut vec[j];

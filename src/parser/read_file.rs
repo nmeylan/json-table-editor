@@ -23,16 +23,7 @@ impl<R: Read> Read for LfToCrlfReader<R> {
                     if buf[i] <= 0x20 { // ignore any char <= SPACE
                         buf[i] = 0;
                     }
-                    if buf[i + 1] <= 0x20 { // ignore any char <= SPACE
-                        buf[i + 1] = 0;
-                    }
-                    if buf[i + 2] <= 0x20 { // ignore any char <= SPACE
-                        buf[i + 2] = 0;
-                    }
-                    if buf[i + 3] <= 0x20 { // ignore any char <= SPACE
-                        buf[i + 3] = 0;
-                    }
-                    i += 4;
+                    i += 1;
                 }
                 read_bytes = n;
             }
