@@ -14,6 +14,6 @@ eframe = { version = "0.27.2", default-features = false, features = [
 egui = { version = "0.27.2", default-features = false, features = [] }
 egui_extras = { version = "0.27.2", default-features = false, features = [] }
 json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "c04d1ce", features = ["indexmap", "simdutf8"]}
-
+rayon = {version = "1.10.0"}
 [patch."https://github.com/nmeylan/json-parser-flat-format.git"]
 json-flat-parser = {path = "/home/nmeylan/dev/ragnarok/json-flat-parser"}

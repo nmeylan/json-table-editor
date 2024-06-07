@@ -95,7 +95,8 @@ impl MyApp {
 
         let size = (metadata1.len() / 1024 / 1024) as usize;
         let max_depth =if size < 100 {
-            u8::MAX
+            1
+            // u8::MAX
         } else {
             1
         };
@@ -120,6 +121,7 @@ impl MyApp {
         println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
         // JSONParser::change_depth_array(parse_result, result1, 2);
         // exit(0);
+        // let max_depth = 10;
         let max_depth = parse_result.max_json_depth;
         let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
         Self {
@@ -179,7 +181,10 @@ impl eframe::App for MyApp {
                     self.table.next_frame_scroll_to_column = true;
                 }
                 if slider_response.changed() {
-                    self.table.update_max_depth(self.depth);
+                    if let Some(new_max_depth) = self.table.update_max_depth(self.depth) {
+                        self.max_depth = new_max_depth as u8;
+                        println!("new max {}", self.max_depth);
+                    }
                 }
             });
         });

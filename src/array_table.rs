@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
@@ -169,7 +170,7 @@ impl ArrayTable {
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
 
-    pub fn update_selected_columns(&mut self, depth: u8) {
+    pub fn update_selected_columns(&mut self, depth: u8) -> Option<usize> {
         if depth <= self.last_parsed_max_depth as u8 {
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
@@ -183,20 +184,23 @@ impl ArrayTable {
                     order: 0,
                 })
             }
+            None
         } else {
             let previous_parse_result = self.parse_result.clone().unwrap();
-            let (new_json_array, new_columns) = crate::parser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
+            let (new_json_array, new_columns, new_max_depth) = crate::parser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
             self.all_columns = new_columns;
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
             self.nodes = new_json_array;
             self.last_parsed_max_depth = depth;
+            self.parse_result.as_mut().unwrap().max_json_depth = new_max_depth;
+            Some(new_max_depth)
         }
     }
-    pub fn update_max_depth(&mut self, depth: u8) {
+    pub fn update_max_depth(&mut self, depth: u8) -> Option<usize> {
         self.max_depth = depth;
-        self.update_selected_columns(depth);
+        self.update_selected_columns(depth)
     }
 
     fn selected_columns(all_columns: &Vec<Column>, depth: u8) -> Vec<Column> {
@@ -267,7 +271,8 @@ impl ArrayTable {
                 header.cols(true, |index| {
                     let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                     let column = columns.get(index).unwrap();
-                    let name = column.name.clone();
+                    let name = format!("{}", column.name.clone());
+                    // let name = format!("{} - {}", column.name.clone(), column.depth);
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
                     *i.borrow_mut() = index;
