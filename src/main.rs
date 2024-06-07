@@ -15,14 +15,16 @@ use std::{env, fs, io};
 use std::collections::{BTreeSet};
 use std::fs::File;
 use std::io::Read;
+use std::fmt::Write;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::NativeOptions;
 use eframe::Theme::Light;
-use egui::{Context, Separator, TextEdit, Vec2};
+use egui::{Align2, Button, Color32, Context, Id, LayerId, Order, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::Key::N;
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::parser::read_file::{LfToCrlfReader};
@@ -68,11 +70,16 @@ fn main() {
 
 struct MyApp {
     frame_history: FrameHistory,
-    table: ArrayTable,
+    table: Option<ArrayTable>,
     windows: Vec<Box<dyn Window>>,
     open: BTreeSet<String>,
     max_depth: u8,
     depth: u8,
+    selected_file: Option<PathBuf>,
+    parsing_invalid: bool,
+    parsing_invalid_pointers: Vec<String>,
+    selected_pointer: Option<String>,
+    min_depth: u8,
 }
 
 impl MyApp {
@@ -84,54 +91,22 @@ impl MyApp {
             println!("Opening {}", args[1].as_str());
         }
 
-        let path = Path::new(args[1].as_str());
-        // let mut content = fs::read_to_string(path).unwrap();
-        let start = Instant::now();
-        let mut file = File::open(path).unwrap();
-        // content = content.replace('\n', "");
-        // println!("took {}ms to replace LF", start.elapsed().as_millis());
+        // let path = Path::new(args[1].as_str());
 
-        let metadata1 = file.metadata().unwrap();
-
-        let size = (metadata1.len() / 1024 / 1024) as usize;
-        let max_depth = if size < 100 {
-            u8::MAX
-        } else {
-            2 // should start after prefix
-        };
-        let start = Instant::now();
-        let mut content = String::with_capacity(metadata1.len() as usize);
-        let mut reader = LfToCrlfReader::new(file);
-        // file.read_to_string(&mut content);
-        reader.read_to_string(&mut content);
-        // println!("{}", content);
-        // println!("{}", &content[0..100000]);
-        println!("Read file took {}ms", start.elapsed().as_millis());
-
-        let start = Instant::now();
-        let options = ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false).max_depth(max_depth);
-        let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap().to_owned();
-        let parse_result = result.clone_except_json();
-
-        let parsing_max_depth = result.parsing_max_depth;
-        println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
-        let start = Instant::now();
-        let (result1, columns) = crate::parser::as_array(result).unwrap();
-        println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
-        // JSONParser::change_depth_array(parse_result, result1, 2);
-        // exit(0);
-        // let max_depth = 10;
-        let max_depth = parse_result.max_json_depth;
-        let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
         Self {
             frame_history: FrameHistory::default(),
-            table: ArrayTable::new(Some(parse_result), result1, columns, depth, "/skills".to_string(), ValueType::Array(0)),
+            table: None,
             windows: vec![
                 Box::<SelectColumnsPanel>::default()
             ],
-            max_depth: max_depth as u8,
+            max_depth: 0,
             open: Default::default(),
-            depth,
+            depth: 0,
+            selected_file: None,
+            parsing_invalid: false,
+            parsing_invalid_pointers: vec![],
+            selected_pointer: None,
+            min_depth: 0,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -140,6 +115,74 @@ impl MyApp {
             let mut is_open = open.contains(window.name());
             window.show(ctx, &mut is_open);
             set_open(open, window.name(), is_open);
+        }
+    }
+
+    pub fn open_json(&mut self) {
+        let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
+        let metadata1 = file.metadata().unwrap();
+
+        let size = (metadata1.len() / 1024 / 1024) as usize;
+        let max_depth = if size < 100 {
+            u8::MAX
+        } else {
+            1 // should start after prefix
+        };
+        let start = Instant::now();
+        let mut content = String::with_capacity(metadata1.len() as usize);
+        let mut reader = LfToCrlfReader::new(file);
+        reader.read_to_string(&mut content);
+        // file.read_to_string(&mut content);
+        println!("Read file took {}ms", start.elapsed().as_millis());
+        let mut found_array = false;
+        let mut found_object = false;
+        for byte in content.as_bytes() {
+            if *byte == b'[' {
+                found_array = true;
+                break;
+            }
+            if *byte == b'{' {
+                found_object = true;
+                break;
+            }
+        }
+        if found_array || self.selected_pointer.is_some() {
+            let start = Instant::now();
+            let mut options = ParseOptions::default().parse_array(false).max_depth(max_depth);
+            if let Some(ref start_at) = self.selected_pointer {
+                options = options.start_parse_at(start_at.clone());
+            }
+            let mut result = JSONParser::parse(content.as_mut_str(), options).unwrap().to_owned();
+            let parsing_max_depth = result.parsing_max_depth;
+            println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
+            let parse_result = result.clone_except_json();
+
+            let start = Instant::now();
+            let (result1, columns) = crate::parser::as_array(result).unwrap();
+            println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
+
+            let max_depth = parse_result.max_json_depth;
+            let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
+            let mut prefix = "".to_owned();
+            if let Some(ref start_at) = self.selected_pointer {
+                prefix = start_at.clone();
+            }
+            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, prefix, ValueType::Array(0));
+            self.table = Some(table);
+            self.depth = depth;
+            self.max_depth = max_depth as u8;
+            self.min_depth = depth;
+            self.selected_file = None;
+            self.parsing_invalid_pointers.clear();
+            self.parsing_invalid = false;
+            self.selected_pointer = None;
+        } else {
+            let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
+            let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
+            self.parsing_invalid = true;
+            self.parsing_invalid_pointers = result.json.iter()
+                .filter(|(k, v)| matches!(k.value_type, ValueType::Array(_)))
+                .map(|(k, v)| k.pointer.clone()).collect();
         }
     }
 }
@@ -160,36 +203,120 @@ impl eframe::App for MyApp {
             .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
         ctx.send_viewport_cmd_to(
             ctx.parent_viewport_id(),
-            egui::ViewportCommand::Title(self.frame_history.fps().to_string()),
+            egui::ViewportCommand::Title(format!("{} - {}", self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()), self.frame_history.fps())),
         );
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("select columns").clicked() {
-                    set_open(&mut self.open, SelectColumnsPanel_id, true);
-                }
-                ui.add(Separator::default().vertical());
-                let slider_response = ui.add(
-                    egui::Slider::new(&mut self.depth, 1..=self.max_depth).text("Depth"),
-                );
-                ui.add(Separator::default().vertical());
-                ui.label("Scroll to column: ");
-                let text_edit = TextEdit::singleline(&mut self.table.scroll_to_column).hint_text("Type name contains in column");
-                let response = ui.add(text_edit);
-                if response.changed() {
-                    self.table.next_frame_scroll_to_column = true;
-                }
-                if slider_response.changed() {
-                    if let Some(new_max_depth) = self.table.update_max_depth(self.depth) {
-                        self.max_depth = new_max_depth as u8;
-                        println!("new max {}", self.max_depth);
+                if let Some(ref mut table) = self.table {
+                    if ui.button("select columns").clicked() {
+                        set_open(&mut self.open, SelectColumnsPanel_id, true);
+                    }
+                    ui.add(Separator::default().vertical());
+                    let slider_response = ui.add(
+                        egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
+                    );
+                    ui.add(Separator::default().vertical());
+                    ui.label("Scroll to column: ");
+                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("Type name contains in column");
+                    let response = ui.add(text_edit);
+                    if response.changed() {
+                        table.next_frame_scroll_to_column = true;
+                    }
+                    if slider_response.changed() {
+                        if let Some(new_max_depth) = table.update_max_depth(self.depth) {
+                            self.max_depth = new_max_depth as u8;
+                        }
                     }
                 }
             });
         });
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.table.ui(ui)
-        });
+            if !ctx.input(|i| i.raw.hovered_files.is_empty()) {
+                let text = ctx.input(|i| {
+                    let mut text = "Dropping files:\n".to_owned();
+                    for file in &i.raw.hovered_files {
+                        if let Some(path) = &file.path {
+                            write!(text, "\n{}", path.display()).ok();
+                        } else if !file.mime.is_empty() {
+                            write!(text, "\n{}", file.mime).ok();
+                        } else {
+                            text += "\n???";
+                        }
+                    }
+                    text
+                });
+
+                let painter =
+                    ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
+
+                let screen_rect = ctx.screen_rect();
+                painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
+                painter.text(
+                    screen_rect.center(),
+                    Align2::CENTER_CENTER,
+                    text,
+                    TextStyle::Heading.resolve(&ctx.style()),
+                    Color32::WHITE,
+                );
+            }
+
+            // Collect dropped files:
+            ctx.input(|i| {
+                if !i.raw.dropped_files.is_empty() {
+                    self.selected_file = Some(i.raw.dropped_files.clone().pop().unwrap().path.unwrap());
+                    self.table = None;
+                    self.selected_pointer = None;
+                    self.parsing_invalid = false;
+                    self.parsing_invalid_pointers.clear();
+                }
+            });
+
+            if let Some(ref mut table) = self.table {
+                table.ui(ui)
+            } else if self.selected_file.is_none() {
+                ui.allocate_ui_at_rect(ui.max_rect(),
+                                       |ui| {
+                                           let response = ui.centered_and_justified(|ui| {
+                                               ui.heading("Select or drop a json file")
+                                           });
+                                           if response.inner.clicked() {
+                                               if let Some(path) = rfd::FileDialog::new().pick_file() {
+                                                   self.selected_file = Some(path);
+                                               }
+                                           }
+                                       },
+                );
+            }
+            if self.selected_file.is_some() {
+                if !self.parsing_invalid {
+                    self.open_json();
+                } else {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("Provided json is not an array but an object");
+                        ui.heading("Select which array you want to parse");
+                        self.parsing_invalid_pointers.iter().for_each(|pointer| {
+                            if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
+                                ui.radio(true, pointer.as_str());
+                            } else {
+                                if ui.radio(false, pointer.as_str()).clicked() {
+                                    self.selected_pointer = Some(pointer.clone());
+                                }
+                            }
+                        });
+                        let sense = if self.selected_pointer.is_none() {
+                            Sense::hover()
+                        } else {
+                            Sense::click()
+                        };
+                        if Button::new("Parse again").sense(sense).ui(ui).clicked() {
+                            self.open_json();
+                        }
+                    });
+                }
+                // });
+            }
+        }).response;
     }
 }
 
