@@ -24,142 +24,139 @@ macro_rules! concat_string {
 }
 
 
-// pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>), String> {
-//     let len = json_array.len();
-//     let mut new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
-//     let start = Instant::now();
-//     let mut chunks = json_array.par_chunks_mut(len / 8);
-//
-//     let mut index = AtomicUsize::new(0);
-//     let unique_keys_by_chunks = chunks.into_par_iter().enumerate().map(|(num_chunk, mut chunk)| {
-//         let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
-//         for json_array_entry in chunk {
-//             let mut i = index.fetch_add(1, Ordering::AcqRel);
-//             let mut parse_result = previous_parse_result.clone_except_json();
-//             parse_result.json = mem::take(&mut json_array_entry.entries);
-//             let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
-//             JSONParser::change_depth_owned(&mut parse_result, options).unwrap();
-//             let mut vec = parse_result.json;
-//
-//             for j in 0..vec.len() {
-//                 let (k, _v) = &mut vec[j];
-//                 let _i = i.to_string();
-//                 let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
-//                     let prefix = concat_string!(started_parsing_at, "/", _i);
-//                     prefix.len()
-//                 } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
-//                     let prefix = concat_string!(prefix, "/", _i);
-//                     prefix.len()
-//                 } else {
-//                     let prefix = concat_string!("/", _i);
-//                     prefix.len()
-//                 };
-//                 if !k.pointer.is_empty() {
-//                     if k.pointer.len() <= prefix_len {
-//                         // panic!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
-//                         continue;
-//                     }
-//                     let key = &k.pointer[prefix_len..k.pointer.len()];
-//                     let start = Instant::now();
-//                     let column = Column {
-//                         name: key.to_string(),
-//                         depth: k.depth - previous_parse_result.parsing_max_depth,
-//                         value_type: k.value_type,
-//                         seen_count: 0,
-//                         order: unique_keys.len(),
-//                     };
-//                     // if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
-//                     //     column.seen_count += 1;
-//                     // } else {
-//                         if !column.name.contains("#") {
-//                             unique_keys.push(column);
-//                         }
-//                     // }
-//                 }
-//                 k.index = i;
-//             }
-//             let mut new_json_array_guard = new_json_array.lock().unwrap();
-//             new_json_array_guard.push(JsonArrayEntriesOwned { entries: vec, index: i });
-//         }
-//         unique_keys
-//     }).collect::<Vec<Vec<Column>>>();
-//     let mut unique_keys: Vec<Column> = Vec::with_capacity(unique_keys_by_chunks[0].len() + 16);
-//     for unique_keys_chunk in unique_keys_by_chunks {
-//         for column in unique_keys_chunk {
-//             if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
-//                 column.seen_count += 1;
-//             } else {
-//                 if !column.name.contains("#") {
-//                     unique_keys.push(column);
-//                 }
-//             }
-//         }
-//     }
-//     let mut new_json_array_guard = new_json_array.lock().unwrap();
-//     new_json_array_guard.reverse();
-//     unique_keys.sort();
-//     println!("took {}ms to change depth", start.elapsed().as_millis());
-//     Ok((mem::take(&mut new_json_array_guard), unique_keys))
-// }
 pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>, usize), String> {
     let len = json_array.len();
-    let mut new_json_array = Vec::with_capacity(json_array.len());
-    let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
+    let mut new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
     let start = Instant::now();
-    let mut max_depth = previous_parse_result.max_json_depth;
-    for i in (0..len).rev() {
-        let mut parse_result = previous_parse_result.clone_except_json();
-        parse_result.json = json_array.pop().unwrap().entries;
-        let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
-        JSONParser::change_depth_owned(&mut parse_result, options)?;
-        if max_depth < parse_result.max_json_depth {
-            max_depth = parse_result.max_json_depth;
-        }
-        let mut vec = parse_result.json;
-        for j in 0..vec.len() {
-            let (k, _v) = &mut vec[j];
-            let _i = i.to_string();
-            let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
-                let prefix = concat_string!(started_parsing_at, "/", _i);
-                prefix.len()
-            } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
-                let prefix = concat_string!(prefix, "/", _i);
-                prefix.len()
-            } else {
-                let prefix = concat_string!("/", _i);
-                prefix.len()
-            };
-            if !k.pointer.is_empty() {
-                if k.pointer.len() <= prefix_len {
-                    // panic!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
-                    continue;
-                }
-                let key = &k.pointer[prefix_len..k.pointer.len()];
-                let column = Column {
-                    name: key.to_string(),
-                    depth: k.depth,
-                    value_type: k.value_type,
-                    seen_count: 0,
-                    order: unique_keys.len(),
-                };
-                if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
-                    column.seen_count += 1;
+    let mut chunks = json_array.par_chunks_mut(len / 8);
+
+    let unique_keys_by_chunks = chunks.into_par_iter().map(|mut chunk| {
+        let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
+        for json_array_entry in chunk {
+            let mut parse_result = previous_parse_result.clone_except_json();
+            parse_result.json = mem::take(&mut json_array_entry.entries);
+            let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
+            JSONParser::change_depth_owned(&mut parse_result, options).unwrap();
+            let mut vec = parse_result.json;
+
+            for j in 0..vec.len() {
+                let (k, _v) = &mut vec[j];
+                let _i = json_array_entry.index.to_string();
+                let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+                    let prefix = concat_string!(started_parsing_at, "/", _i);
+                    prefix.len()
+                } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
+                    let prefix = concat_string!(prefix, "/", _i);
+                    prefix.len()
                 } else {
-                    if !column.name.contains("#") {
-                        unique_keys.push(column);
+                    let prefix = concat_string!("/", _i);
+                    prefix.len()
+                };
+                if !k.pointer.is_empty() {
+                    if k.pointer.len() <= prefix_len {
+                        // panic!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
+                        continue;
+                    }
+                    let key = &k.pointer[prefix_len..k.pointer.len()];
+                    let column = Column {
+                        name: key.to_string(),
+                        depth: k.depth,
+                        value_type: k.value_type,
+                        seen_count: 0,
+                        order: unique_keys.len(),
+                    };
+                    if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                        column.seen_count += 1;
+                    } else {
+                        if !column.name.contains("#") {
+                            unique_keys.push(column);
+                        }
                     }
                 }
+                k.index = json_array_entry.index;
             }
-            k.index = i;
+            let mut new_json_array_guard = new_json_array.lock().unwrap();
+            new_json_array_guard.push(JsonArrayEntriesOwned { entries: vec, index: json_array_entry.index });
         }
-        new_json_array.push(JsonArrayEntriesOwned { entries: vec, index: i });
+        unique_keys
+    }).collect::<Vec<Vec<Column>>>();
+    let mut unique_keys: Vec<Column> = Vec::with_capacity(unique_keys_by_chunks[0].len() + 16);
+    for unique_keys_chunk in unique_keys_by_chunks {
+        for column_chunk in unique_keys_chunk {
+            if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column_chunk)) {
+                column.seen_count += column_chunk.seen_count;
+            } else {
+                if !column_chunk.name.contains("#") {
+                    unique_keys.push(column_chunk);
+                }
+            }
+        }
     }
-    new_json_array.reverse();
-    // new_json_array[0].entries.iter().for_each(|(k, v)| println!("{} {} {}", k.pointer, k.depth, v.is_some()));
+    let mut new_json_array_guard = new_json_array.lock().unwrap();
+    new_json_array_guard.sort_unstable_by(|a, b| a.index.cmp(&b.index));
     unique_keys.sort();
     println!("took {}ms to change depth", start.elapsed().as_millis());
-    Ok((new_json_array, unique_keys, max_depth))
+    Ok((mem::take(&mut new_json_array_guard), unique_keys, 4))
 }
+// pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>, usize), String> {
+//     let len = json_array.len();
+//     let mut new_json_array = Vec::with_capacity(json_array.len());
+//     let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
+//     let start = Instant::now();
+//     let mut max_depth = previous_parse_result.max_json_depth;
+//     for i in (0..len).rev() {
+//         let mut parse_result = previous_parse_result.clone_except_json();
+//         parse_result.json = json_array.pop().unwrap().entries;
+//         let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
+//         JSONParser::change_depth_owned(&mut parse_result, options)?;
+//         if max_depth < parse_result.max_json_depth {
+//             max_depth = parse_result.max_json_depth;
+//         }
+//         let mut vec = parse_result.json;
+//         for j in 0..vec.len() {
+//             let (k, _v) = &mut vec[j];
+//             let _i = i.to_string();
+//             let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+//                 let prefix = concat_string!(started_parsing_at, "/", _i);
+//                 prefix.len()
+//             } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
+//                 let prefix = concat_string!(prefix, "/", _i);
+//                 prefix.len()
+//             } else {
+//                 let prefix = concat_string!("/", _i);
+//                 prefix.len()
+//             };
+//             if !k.pointer.is_empty() {
+//                 if k.pointer.len() <= prefix_len {
+//                     // panic!("ERROR, depth {} out of bounds of {}, expected to have a prefix of len {}", depth, k.pointer, prefix_len);
+//                     continue;
+//                 }
+//                 let key = &k.pointer[prefix_len..k.pointer.len()];
+//                 let column = Column {
+//                     name: key.to_string(),
+//                     depth: k.depth,
+//                     value_type: k.value_type,
+//                     seen_count: 0,
+//                     order: unique_keys.len(),
+//                 };
+//                 if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+//                     column.seen_count += 1;
+//                 } else {
+//                     if !column.name.contains("#") {
+//                         unique_keys.push(column);
+//                     }
+//                 }
+//             }
+//             k.index = i;
+//         }
+//         new_json_array.push(JsonArrayEntriesOwned { entries: vec, index: i });
+//     }
+//     new_json_array.reverse();
+//     // new_json_array[0].entries.iter().for_each(|(k, v)| println!("{} {} {}", k.pointer, k.depth, v.is_some()));
+//     unique_keys.sort();
+//     println!("took {}ms to change depth", start.elapsed().as_millis());
+//     Ok((new_json_array, unique_keys, max_depth))
+// }
 
 pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>), String> {
     if !matches!(previous_parse_result.json[0].0.value_type, ValueType::Array(_)) {

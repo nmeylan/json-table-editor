@@ -94,11 +94,10 @@ impl MyApp {
         let metadata1 = file.metadata().unwrap();
 
         let size = (metadata1.len() / 1024 / 1024) as usize;
-        let max_depth =if size < 100 {
-            1
-            // u8::MAX
+        let max_depth = if size < 100 {
+            u8::MAX
         } else {
-            1
+            2 // should start after prefix
         };
         let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
