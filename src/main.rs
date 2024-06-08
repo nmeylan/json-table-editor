@@ -64,8 +64,18 @@ fn main() {
         ..eframe::NativeOptions::default()
     };
     eframe::run_native("JSON table editor", options, Box::new(|_cc| {
-        Box::new(MyApp::new())
-    }));
+        let mut app = MyApp::new();
+
+        let args: Vec<_> = env::args().collect();
+        if args.len() >= 2 {
+            println!("Opening {}", args[1].as_str());
+            app.selected_file = Some(PathBuf::from(args[1].as_str()));
+        }
+        if args.len() >= 3 {
+            app.selected_pointer = Some(args[2].clone());
+        }
+        Box::new(app)
+    })).unwrap();
 }
 
 struct MyApp {
@@ -84,12 +94,6 @@ struct MyApp {
 
 impl MyApp {
     fn new() -> Self {
-        let args: Vec<_> = env::args().collect();
-        if args.len() < 2 {
-            println!("Please provide file to open as 1st program argument");
-        } else {
-            println!("Opening {}", args[1].as_str());
-        }
 
         // let path = Path::new(args[1].as_str());
 
@@ -130,9 +134,9 @@ impl MyApp {
         };
         let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
-        let mut reader = LfToCrlfReader::new(file);
-        reader.read_to_string(&mut content);
-        // file.read_to_string(&mut content);
+        // let mut reader = LfToCrlfReader::new(file);
+        // reader.read_to_string(&mut content);
+        file.read_to_string(&mut content);
         println!("Read file took {}ms", start.elapsed().as_millis());
         let mut found_array = false;
         let mut found_object = false;
@@ -172,7 +176,6 @@ impl MyApp {
             self.depth = depth;
             self.max_depth = max_depth as u8;
             self.min_depth = depth;
-            self.selected_file = None;
             self.parsing_invalid_pointers.clear();
             self.parsing_invalid = false;
             self.selected_pointer = None;

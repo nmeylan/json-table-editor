@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
-use egui::{Align, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, ComboBox, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
@@ -283,13 +283,19 @@ impl ArrayTable {
 
                             if !pinned_column_table || *i.borrow() > 0 {
                                 ui.horizontal(|ui| {
+                                    if column.name.eq("") {
+                                        return;
+                                    }
                                     let button = egui::Button::new("📌").frame(false);
                                     if ui.add(button).clicked() {
                                         *pinned_column.borrow_mut() = Some(*i.borrow());
                                     }
-                                    if ui.checkbox(&mut chcked, "").clicked() {
-                                        *clicked_column.borrow_mut() = Some(name);
-                                    }
+                                    ComboBox::new(format!("{}filter", name), "").show_ui(ui, |ui| {
+                                        if ui.checkbox(&mut chcked, "Non null").clicked() {
+                                            *clicked_column.borrow_mut() = Some(name);
+                                        }
+                                    });
+
                                 });
                             }
 
