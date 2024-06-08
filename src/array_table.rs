@@ -1,13 +1,15 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
-use egui::{Align, ComboBox, Context, CursorIcon, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
 use crate::{concat_string, Window};
+use crate::components::popover::PopupMenu;
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -61,6 +63,7 @@ impl Ord for Column {
     }
 }
 
+#[derive(Default)]
 pub struct ArrayTable {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
@@ -82,6 +85,10 @@ pub struct ArrayTable {
     pub next_frame_reset_scroll: bool,
     pub next_frame_scroll_to_column: bool,
 }
+
+
+const filter_icon: ImageSource = egui::include_image!("../icons/funnelRegular.svg");
+const pin_icon: ImageSource = egui::include_image!("../icons/pinTab.svg");
 
 impl super::View for ArrayTable {
     fn ui(&mut self, ui: &mut egui::Ui) {
@@ -130,6 +137,24 @@ impl super::View for ArrayTable {
                     });
                 });
             });
+    }
+}
+
+type ColumnFilterCache = egui::util::cache::FrameCache<HashSet<String>, ArrayTable>;
+
+impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), HashSet<String>> for ArrayTable {
+    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntriesOwned>, &String)) -> HashSet<String> {
+        let mut unique_values = HashSet::new();
+        if matches!(column.value_type, ValueType::String) {
+            nodes.iter().enumerate().map(|(i, row)| {
+                Self::get_pointer_for_column(parent_pointer, &&row.entries, i, column).map(|(_, value)| value.clone().unwrap())
+            }).for_each(|value| {
+                if let Some(value) = value {
+                    unique_values.insert(value);
+                }
+            })
+        }
+        unique_values
     }
 }
 
@@ -286,13 +311,30 @@ impl ArrayTable {
                                     if column.name.eq("") {
                                         return;
                                     }
-                                    let button = egui::Button::new("📌").frame(false);
+                                    let button = Button::image(pin_icon).frame(false);
                                     if ui.add(button).clicked() {
                                         *pinned_column.borrow_mut() = Some(*i.borrow());
                                     }
-                                    ComboBox::new(format!("{}filter", name), "").show_ui(ui, |ui| {
+                                    let column_id = Id::new(&name);
+                                    PopupMenu::new(column_id.with("filter")).show_ui(ui, |ui| ui.add(Button::image(filter_icon).frame(false)), |ui| {
                                         if ui.checkbox(&mut chcked, "Non null").clicked() {
                                             *clicked_column.borrow_mut() = Some(name);
+                                        }
+
+                                        if matches!(column.value_type, ValueType::String) {
+                                            let values = ui.memory_mut(|mem| {
+                                                let cache = mem.caches.cache::<ColumnFilterCache>();
+                                                let values = cache.get((column, &self.nodes, &self.parent_pointer));
+                                                values
+                                            });
+                                            if values.len() > 0 {
+                                                ui.separator();
+                                                values.iter().for_each(|value| {
+                                                    if ui.checkbox(&mut chcked, value).clicked() {
+                                                        // *clicked_column.borrow_mut() = Some(value);
+                                                    }
+                                                });
+                                            }
                                         }
                                     });
 
@@ -403,13 +445,17 @@ impl ArrayTable {
 
     fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValueOwned, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
         if let Some(column) = columns.get(index) {
-            let key = &column.name;
-            let key = concat_string!(self.parent_pointer, "/", row_index.to_string(), key);
-            return data.iter().find(|(pointer, _)| {
-                pointer.pointer.eq(&key)
-            });
+            return Self::get_pointer_for_column(&self.parent_pointer, data, row_index, column);
         }
         None
+    }
+
+    fn get_pointer_for_column<'a>(parent_pointer: &String, data: &&'a FlatJsonValueOwned, row_index: usize, column: &Column) -> Option<&'a (PointerKey, Option<String>)> {
+        let key = &column.name;
+        let key = concat_string!(parent_pointer, "/", row_index.to_string(), key);
+        return data.iter().find(|(pointer, _)| {
+            pointer.pointer.eq(&key)
+        });
     }
 
     fn on_non_null_column_click(&mut self, column: String) {
