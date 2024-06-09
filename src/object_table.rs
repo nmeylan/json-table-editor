@@ -1,8 +1,6 @@
-use eframe::emath::Vec2;
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{Response, Sense};
-use json_flat_parser::{FlatJsonValueOwned};
-use crate::concat_string;
+use egui::Sense;
+use json_flat_parser::{FlatJsonValueOwned, PointerKey, ValueType};
 
 pub struct ObjectTable {
     nodes: FlatJsonValueOwned,
@@ -39,8 +37,13 @@ impl ObjectTable {
                 header.col(|ui| {ui.label("Pointer")});
                 header.col(|ui| {ui.label("Value")});
             }).body(None, |body| {
-            body.rows(text_height, self.nodes.len(), |mut row| {
-                let (pointer, value) = &self.nodes[row.index()];
+            let vec = self.nodes.iter()
+                .filter(|(pointer, _)| {
+                    !matches!(pointer.value_type, ValueType::Array(_)) &&
+                        !matches!(pointer.value_type, ValueType::Object(_))
+                }).collect::<Vec<&(PointerKey, Option<String>)>>();
+            body.rows(text_height, vec.len(), |mut row| {
+                let (pointer, value) = &vec[row.index()];
                 row.col(|c| c.label(&pointer.pointer));
                 row.col(|c| { value.as_ref().map(|v| c.label(v)).unwrap_or_else(|| c.label("")) });
             });

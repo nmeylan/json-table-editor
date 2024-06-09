@@ -444,8 +444,8 @@ impl ArrayTable {
         }
         if let Some((row_index, pointer)) = click_on_array_row_index {
             let json_array_entries = &self.nodes()[row_index];
-            if let Some((key, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
-                let mut content = value.clone().unwrap();
+            if let Some((_, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
+                let content = value.clone().unwrap();
                 self.windows.push(SubTable::new(pointer.pointer, content,
                                                 if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) }))
             } else {

@@ -24,7 +24,7 @@ impl SubTable {
             }
         } else {
 
-            let options = ParseOptions::default().parse_array(false).keep_object_raw_data(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
+            let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
             let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
             Self {
                 name: name.clone(),
