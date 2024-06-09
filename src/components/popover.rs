@@ -1,9 +1,7 @@
 use egui::{InnerResponse, Response, ScrollArea, Ui, WidgetInfo, WidgetType};
 
-use egui::{style::WidgetVisuals, *};
+use egui::{*};
 
-#[allow(unused_imports)] // Documentation
-use egui::style::Spacing;
 
 pub struct PopupMenu {
     id_source: Id,
@@ -103,7 +101,7 @@ fn popup<'c, R>(
 
     let height = height.unwrap_or_else(|| ui.spacing().combo_height);
 
-    let inner = egui::popup::popup_above_or_below_widget(
+    let inner = popup_above_or_below_widget(
         ui,
         popup_id,
         &button_response,
@@ -122,5 +120,46 @@ fn popup<'c, R>(
     InnerResponse {
         inner,
         response: button_response,
+    }
+}
+
+pub fn popup_above_or_below_widget<R>(
+    ui: &Ui,
+    popup_id: Id,
+    widget_response: &Response,
+    above_or_below: AboveOrBelow,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    if ui.memory(|mem| mem.is_popup_open(popup_id)) {
+        let (pos, pivot) = match above_or_below {
+            AboveOrBelow::Above => (widget_response.rect.left_top(), Align2::LEFT_BOTTOM),
+            AboveOrBelow::Below => (widget_response.rect.left_bottom(), Align2::LEFT_TOP),
+        };
+
+        let inner = Area::new(popup_id)
+            .order(Order::Foreground)
+            .constrain(true)
+            .fixed_pos(pos)
+            .pivot(pivot)
+            .show(ui.ctx(), |ui| {
+                let frame = Frame::popup(ui.style());
+                let frame_margin = frame.total_margin();
+                frame
+                    .show(ui, |ui| {
+                        ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
+                            ui.set_width(widget_response.rect.width() - frame_margin.sum().x);
+                            add_contents(ui)
+                        })
+                            .inner
+                    })
+                    .inner
+            });
+
+        if ui.input(|i| i.key_pressed(Key::Escape)) || (!widget_response.clicked() && inner.response.clicked_elsewhere()) {
+            ui.memory_mut(|mem| mem.close_popup());
+        }
+        Some(inner.inner)
+    } else {
+        None
     }
 }

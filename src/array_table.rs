@@ -320,41 +320,41 @@ impl ArrayTable {
                                         *pinned_column.borrow_mut() = Some(*i.borrow());
                                     }
                                     let column_id = Id::new(&name);
-                                    PopupMenu::new(column_id.with("filter")).show_ui(ui, |ui| ui.add(Button::image(filter_icon).frame(false)), |ui| {
+                                    PopupMenu::new(column_id.with("filter"))
+                                        .show_ui(ui, |ui| ui.add(Button::image(filter_icon).frame(false)),
+                                                 |ui| {
+                                                     let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                     let mut chcked = if let Some(filters) = checked_filtered_values {
+                                                         filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
+                                                     } else {
+                                                         false
+                                                     };
+                                                     if ui.checkbox(&mut chcked, "Non null").clicked() {
+                                                         *clicked_filter_non_null_column.borrow_mut() = Some(name);
+                                                     }
 
-                                        let mut checked_filtered_values = self.columns_filter.get(&column.name);
-                                        let mut chcked = if let Some(filters) = checked_filtered_values {
-                                            filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
-                                        } else {
-                                            false
-                                        };
-                                        if ui.checkbox(&mut chcked, "Non null").clicked() {
-                                            *clicked_filter_non_null_column.borrow_mut() = Some(name);
-                                        }
-
-                                        if matches!(column.value_type, ValueType::String) {
-                                            let values = ui.memory_mut(|mem| {
-                                                let cache = mem.caches.cache::<ColumnFilterCache>();
-                                                let values = cache.get((column, &self.nodes, &self.parent_pointer));
-                                                values
-                                            });
-                                            if values.len() > 0 {
-                                                let mut checked_filtered_values = self.columns_filter.get(&column.name);
-                                                ui.separator();
-                                                values.iter().for_each(|value| {
-                                                    let mut chcked = if let Some(filters) = checked_filtered_values {
-                                                        filters.contains(value)
-                                                    } else {
-                                                        false
-                                                    };
-                                                    if ui.checkbox(&mut chcked, value).clicked() {
-                                                        *clicked_filter_column_value.borrow_mut() = Some((column.name.clone(), value.clone()));
-                                                    }
-                                                });
-                                            }
-                                        }
-                                    });
-
+                                                     if matches!(column.value_type, ValueType::String) {
+                                                         let values = ui.memory_mut(|mem| {
+                                                             let cache = mem.caches.cache::<ColumnFilterCache>();
+                                                             let values = cache.get((column, &self.nodes, &self.parent_pointer));
+                                                             values
+                                                         });
+                                                         if values.len() > 0 {
+                                                             let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                             ui.separator();
+                                                             values.iter().for_each(|value| {
+                                                                 let mut chcked = if let Some(filters) = checked_filtered_values {
+                                                                     filters.contains(value)
+                                                                 } else {
+                                                                     false
+                                                                 };
+                                                                 if ui.checkbox(&mut chcked, value).clicked() {
+                                                                     *clicked_filter_column_value.borrow_mut() = Some((column.name.clone(), value.clone()));
+                                                                 }
+                                                             });
+                                                         }
+                                                     }
+                                                 });
                                 });
                             }
 
@@ -426,7 +426,7 @@ impl ArrayTable {
                         if let Some(index) = response.hovered_col_index {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
                             if let Some((pointer, _value)) = data {
-                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)){
+                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)) {
                                     hovered_on_array_row_index = Some((row_index, pointer.clone()));
                                 }
                             }
