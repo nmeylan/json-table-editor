@@ -17,18 +17,15 @@ use std::fs::File;
 use std::io::Read;
 use std::fmt::Write;
 
-use std::path::{Path, PathBuf};
-use std::process::exit;
+use std::path::{ PathBuf};
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::NativeOptions;
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, Context, Id, LayerId, Order, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-use egui::Key::N;
+use egui::{Align2, Button, Color32, ComboBox, Context, Id, LayerId, Order, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
-use crate::parser::read_file::{LfToCrlfReader};
-use crate::array_table::ArrayTable;
+use crate::array_table::{ArrayTable, ScrollToRowMode};
 
 /// Something to view in the demo windows
 pub trait View {
@@ -222,10 +219,32 @@ impl eframe::App for MyApp {
                     );
                     ui.add(Separator::default().vertical());
                     ui.label("Scroll to column: ");
-                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("Type name contains in column");
-                    let response = ui.add(text_edit);
-                    if response.changed() {
-                        table.next_frame_scroll_to_column = true;
+                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("Type name contained in column");
+                    let scroll_to_column_response = ui.add(text_edit);
+
+                    ui.add(Separator::default().vertical());
+                    ui.label("Scroll to row: ");
+                    let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
+                        || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
+                    });
+                    let hint_text = match &table.scroll_to_row_mode {
+                        ScrollToRowMode::RowNumber => "Type row number",
+                        ScrollToRowMode::MatchingTerm => "Type term contained in string value"
+                    };
+                    let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
+                    let scroll_to_row_response = ui.add(text_edit);
+
+                    // interaction handling
+                    if scroll_to_column_response.changed() {
+                        table.changed_scroll_to_column_value = true;
+                    }
+                    if scroll_to_row_response.changed() {
+                        table.changed_scroll_to_row_value = true;
+                    }
+                    if scroll_to_row_mode_response.inner.is_some() && scroll_to_row_mode_response.inner.unwrap() {
+                        table.changed_scroll_to_row_value = true;
+                        table.scroll_to_row.clear();
                     }
                     if slider_response.changed() {
                         if let Some(new_max_depth) = table.update_max_depth(self.depth) {

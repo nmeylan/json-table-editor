@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap};
-use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::string::ToString;
@@ -64,6 +63,25 @@ impl Ord for Column {
         }
     }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ScrollToRowMode {
+    RowNumber,
+    MatchingTerm
+}
+
+impl Default for ScrollToRowMode {
+    fn default() -> Self {
+        ScrollToRowMode::RowNumber
+    }
+}
+impl ScrollToRowMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::RowNumber => "row number",
+            Self::MatchingTerm => "matching term",
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct ArrayTable {
@@ -83,9 +101,13 @@ pub struct ArrayTable {
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
     pub scroll_to_column: String,
+    pub scroll_to_row: String,
+    pub scroll_to_row_mode: ScrollToRowMode,
 
+    // Handle interaction
     pub next_frame_reset_scroll: bool,
-    pub next_frame_scroll_to_column: bool,
+    pub changed_scroll_to_column_value: bool,
+    pub changed_scroll_to_row_value: bool,
 }
 
 
@@ -111,8 +133,8 @@ impl super::View for ArrayTable {
 
                         ui.vertical(|ui| {
                             let mut scroll_to_x = None;
-                            if self.next_frame_scroll_to_column {
-                                self.next_frame_scroll_to_column = false;
+                            if self.changed_scroll_to_column_value {
+                                self.changed_scroll_to_column_value = false;
                                 let mut index = self.column_selected.iter().position(|c| {
                                     c.name.to_lowercase().eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
                                 });
@@ -181,10 +203,13 @@ impl ArrayTable {
             parent_value_type,
             windows: vec![],
             scroll_to_column: "".to_string(),
-            next_frame_scroll_to_column: false,
+            changed_scroll_to_column_value: false,
             filtered_nodes: vec![],
             last_parsed_max_depth,
             columns_filter: HashMap::new(),
+            scroll_to_row_mode: ScrollToRowMode::RowNumber,
+            scroll_to_row: "".to_string(),
+            changed_scroll_to_row_value: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -278,6 +303,18 @@ impl ArrayTable {
             table = table.scroll_to_row(0, Some(Align::TOP));
             self.next_frame_reset_scroll = false;
         }
+        if self.changed_scroll_to_row_value {
+            self.changed_scroll_to_row_value = false;
+            match self.scroll_to_row_mode {
+                ScrollToRowMode::RowNumber => {
+                    table = table.scroll_to_row(self.scroll_to_row.parse::<usize>().unwrap_or_else(|_| {
+                        self.scroll_to_row.clear();
+                        0
+                    }), Some(Align::TOP));
+                }
+                ScrollToRowMode::MatchingTerm => {}
+            }
+        }
         table = table.vertical_scroll_offset(self.scroll_y);
 
         let columns_count = if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() };
@@ -302,7 +339,6 @@ impl ArrayTable {
                     let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                     let column = columns.get(index).unwrap();
                     let name = format!("{}", column.name.clone());
-                    // let name = format!("{} - {}", column.name.clone(), column.depth);
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
                     *i.borrow_mut() = index;
@@ -390,11 +426,14 @@ impl ArrayTable {
                 let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
                     let node = self.nodes().get(row_index);
+
                     if let Some(data) = node.as_ref() {
                         let response = row.cols(false, |index| {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
 
                             if let Some((pointer, value)) = data {
+                                let is_array = matches!(pointer.value_type, ValueType::Array(_));
+                                let is_object = matches!(pointer.value_type, ValueType::Object(_));
                                 if pinned_column_table && index == 0 {
                                     let label = Label::new(pointer.index.to_string()).sense(Sense::click());
                                     return Some(Box::new(|ui| {
@@ -403,7 +442,12 @@ impl ArrayTable {
                                 }
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
-                                        let label = Label::new(value).sense(Sense::click());
+                                        let mut label = if is_array || is_object {
+                                            Label::new(value.replace("\n", "")) // maybe we want cache
+                                        } else {
+                                            Label::new(value)
+                                        };
+                                        label = label.sense(Sense::click());
                                         return Some(Box::new(|ui| {
                                             label.ui(ui)
                                         }));
