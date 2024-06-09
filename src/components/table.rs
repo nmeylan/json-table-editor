@@ -197,6 +197,7 @@ pub(crate) struct StripLayoutFlags {
     pub(crate) striped: bool,
     pub(crate) hovered: bool,
     pub(crate) selected: bool,
+    pub(crate) highlighted: bool,
 }
 
 /// Positions cells in [`CellDirection`] and starts a new line on [`StripLayout::end_line`]
@@ -307,6 +308,13 @@ impl<'l> StripLayout<'l> {
                 gapless_rect,
                 egui::Rounding::ZERO,
                 self.ui.visuals().widgets.hovered.bg_fill,
+            );
+        }
+        if flags.highlighted && !flags.hovered {
+            self.ui.painter().rect_filled(
+                gapless_rect,
+                egui::Rounding::ZERO,
+                Color32::YELLOW,
             );
         }
 
@@ -896,6 +904,7 @@ impl<'a> TableBuilder<'a> {
                 hovered: false,
                 selected: false,
                 response: &mut response,
+                highlighted: false,
             });
             layout.allocate_rect();
         });
@@ -962,7 +971,7 @@ impl<'a> TableBuilder<'a> {
             scroll_options,
             sense,
         }
-            .body(None, add_body_contents);
+            .body(None, None, add_body_contents);
     }
 }
 
@@ -1034,7 +1043,7 @@ impl<'a> Table<'a> {
     }
 
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
         where
             F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -1139,6 +1148,7 @@ impl<'a> Table<'a> {
                     first_col_visible_width: first_col_visible_offset,
                     hovered_row_index,
                     hovered_row_index_id,
+                    search_matching_row_index,
                 });
 
                 if scroll_to_row.is_some() && scroll_to_y_range.is_none() {
@@ -1294,6 +1304,7 @@ pub struct TableBody<'a> {
     hovered_row_index_id: egui::Id,
     pub scroll_offset_x: f32,
     pub first_col_visible_width: f32,
+    pub search_matching_row_index: Option<usize>,
 }
 
 impl<'a> TableBody<'a> {
@@ -1399,6 +1410,7 @@ impl<'a> TableBody<'a> {
                 height: row_height_sans_spacing,
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
+                highlighted: self.search_matching_row_index == Some(row_index),
                 selected: false,
                 response: &mut response,
                 remainder_with: 0.0,
@@ -1462,6 +1474,7 @@ pub struct TableRow<'a, 'b> {
 
     response: &'b mut Option<Response>,
     pub remainder_with: f32,
+    pub highlighted: bool,
 }
 
 pub struct ColumnResponse {
@@ -1498,6 +1511,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             striped: self.striped,
             hovered: self.hovered,
             selected: self.selected,
+            highlighted: self.highlighted,
         };
 
         let (used_rect, response) = self.layout.add(
@@ -1553,6 +1567,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 striped: self.striped,
                 hovered: self.hovered,
                 selected: self.selected,
+                highlighted: self.highlighted,
             };
 
             let (used_rect, response) =  self.layout.add(

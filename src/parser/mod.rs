@@ -275,3 +275,20 @@ pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix
     }
     res
 }
+pub fn search_occurrences(previous_parse_result: &Vec<JsonArrayEntriesOwned>, term: &str) -> Vec<usize> {
+    let mut res: Vec<usize> = vec![];
+    for json_array_entry in previous_parse_result.iter() {
+        for (p, v) in &json_array_entry.entries {
+            if !matches!(p.value_type, ValueType::String) {
+                continue;
+            }
+            if let Some(value) = v {
+                if value.to_lowercase().contains(term) {
+                    res.push(json_array_entry.index);
+                    break;
+                }
+            }
+        }
+    }
+    res
+}

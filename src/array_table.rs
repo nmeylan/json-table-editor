@@ -3,14 +3,17 @@ use std::cmp::Ordering;
 use std::collections::{HashMap};
 use std::hash::{Hash, Hasher};
 use std::mem;
+use std::ops::Sub;
 use std::string::ToString;
+use std::time::{Duration, Instant};
 use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Response, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
-use crate::{concat_string, Window};
+use crate::{concat_string, ICON_FILTER, ICON_PIN, Window};
 use crate::components::popover::PopupMenu;
+use crate::parser::search_occurrences;
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -100,6 +103,8 @@ pub struct ArrayTable {
     parent_pointer: String,
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
+    pub matching_rows: Vec<usize>,
+    pub matching_row_selected: usize,
     pub scroll_to_column: String,
     pub scroll_to_row: String,
     pub scroll_to_row_mode: ScrollToRowMode,
@@ -107,12 +112,11 @@ pub struct ArrayTable {
     // Handle interaction
     pub next_frame_reset_scroll: bool,
     pub changed_scroll_to_column_value: bool,
-    pub changed_scroll_to_row_value: bool,
+    pub changed_matching_row_selected: bool,
+    pub changed_scroll_to_row_value: Option<Instant>,
 }
 
 
-const filter_icon: ImageSource = egui::include_image!("../icons/funnelRegular.svg");
-const pin_icon: ImageSource = egui::include_image!("../icons/pinTab.svg");
 
 impl super::View for ArrayTable {
     fn ui(&mut self, ui: &mut egui::Ui) {
@@ -202,6 +206,8 @@ impl ArrayTable {
             parent_pointer,
             parent_value_type,
             windows: vec![],
+            matching_rows: vec![],
+            matching_row_selected: 0,
             scroll_to_column: "".to_string(),
             changed_scroll_to_column_value: false,
             filtered_nodes: vec![],
@@ -209,7 +215,8 @@ impl ArrayTable {
             columns_filter: HashMap::new(),
             scroll_to_row_mode: ScrollToRowMode::RowNumber,
             scroll_to_row: "".to_string(),
-            changed_scroll_to_row_value: false,
+            changed_scroll_to_row_value: None,
+            changed_matching_row_selected: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -300,20 +307,35 @@ impl ArrayTable {
             ;
 
         if self.next_frame_reset_scroll {
-            table = table.scroll_to_row(0, Some(Align::TOP));
+            table = table.scroll_to_row(0, Some(Align::Center));
             self.next_frame_reset_scroll = false;
         }
-        if self.changed_scroll_to_row_value {
-            self.changed_scroll_to_row_value = false;
+        if let Some(changed_scroll_to_row_value) = self.changed_scroll_to_row_value {
             match self.scroll_to_row_mode {
                 ScrollToRowMode::RowNumber => {
+                    self.changed_scroll_to_row_value = None;
                     table = table.scroll_to_row(self.scroll_to_row.parse::<usize>().unwrap_or_else(|_| {
                         self.scroll_to_row.clear();
                         0
-                    }), Some(Align::TOP));
+                    }), Some(Align::Center));
                 }
-                ScrollToRowMode::MatchingTerm => {}
+                ScrollToRowMode::MatchingTerm => {
+                    if changed_scroll_to_row_value.elapsed().as_millis() >= 300 {
+                        self.changed_scroll_to_row_value = None;
+                        if !self.scroll_to_row.is_empty() {
+                            self.matching_rows = search_occurrences(&self.nodes, &self.scroll_to_row.to_lowercase());
+                            self.matching_row_selected = 0;
+                            if !self.matching_rows.is_empty() {
+                                self.changed_matching_row_selected = true;
+                            }
+                        }
+                    }
+                }
             }
+        }
+        if self.changed_matching_row_selected {
+            self.changed_matching_row_selected = false;
+            table = table.scroll_to_row(self.matching_rows[self.matching_row_selected], Some(Align::Center));
         }
         table = table.vertical_scroll_offset(self.scroll_y);
 
@@ -329,6 +351,11 @@ impl ArrayTable {
         let mut request_repaint = false;
         let mut click_on_array_row_index: Option<(usize, PointerKey)> = None;
         let mut hovered_on_array_row_index: Option<(usize, PointerKey)> = None;
+        let search_highlight_row = if !self.matching_rows.is_empty() {
+            Some(self.matching_rows[self.matching_row_selected])
+        } else {
+            None
+        };
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
                 let clicked_filter_non_null_column: RefCell<Option<String>> = RefCell::new(None);
@@ -351,13 +378,13 @@ impl ArrayTable {
                                     if column.name.eq("") {
                                         return;
                                     }
-                                    let button = Button::image(pin_icon).frame(false);
+                                    let button = Button::image(ICON_PIN).frame(false);
                                     if ui.add(button).clicked() {
                                         *pinned_column.borrow_mut() = Some(*i.borrow());
                                     }
                                     let column_id = Id::new(&name);
                                     PopupMenu::new(column_id.with("filter"))
-                                        .show_ui(ui, |ui| ui.add(Button::image(filter_icon).frame(false)),
+                                        .show_ui(ui, |ui| ui.add(Button::image(ICON_FILTER).frame(false)),
                                                  |ui| {
                                                      let mut checked_filtered_values = self.columns_filter.get(&column.name);
                                                      let mut chcked = if let Some(filters) = checked_filtered_values {
@@ -421,7 +448,7 @@ impl ArrayTable {
                     self.on_filter_column_value(clicked_column.clone());
                 }
             })
-            .body(self.hovered_row_index, |body| {
+            .body(self.hovered_row_index, search_highlight_row, |body| {
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
@@ -553,5 +580,12 @@ impl ArrayTable {
         } else {
             &self.filtered_nodes
         }
+    }
+
+    pub fn reset_search(&mut self) {
+        self.scroll_to_row.clear();
+        self.matching_rows.clear();
+        self.changed_scroll_to_row_value = Some(Instant::now().sub(Duration::from_millis(1000)));
+        self.matching_row_selected = 0;
     }
 }

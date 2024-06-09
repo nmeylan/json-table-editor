@@ -1,5 +1,9 @@
-#![feature(core_io_borrowed_buf)]
-#![feature(read_buf)]
+
+
+pub const ICON_FILTER: ImageSource = egui::include_image!("../icons/funnelRegular.svg");
+pub const ICON_PIN: ImageSource = egui::include_image!("../icons/pinTab.svg");
+pub const ICON_CHEVRON_UP: ImageSource = egui::include_image!("../icons/chevronUp.svg");
+pub const ICON_CHEVRON_DOWN: ImageSource = egui::include_image!("../icons/chevronDown.svg");
 
 extern crate core;
 
@@ -22,7 +26,7 @@ use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::NativeOptions;
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, Id, LayerId, Order, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align2, Button, Color32, ComboBox, Context, Id, ImageSource, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
@@ -219,7 +223,7 @@ impl eframe::App for MyApp {
                     );
                     ui.add(Separator::default().vertical());
                     ui.label("Scroll to column: ");
-                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("Type name contained in column");
+                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).desired_width(100.0).hint_text("named");
                     let scroll_to_column_response = ui.add(text_edit);
 
                     ui.add(Separator::default().vertical());
@@ -234,17 +238,41 @@ impl eframe::App for MyApp {
                     };
                     let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
                     let scroll_to_row_response = ui.add(text_edit);
+                    if !table.matching_rows.is_empty() {
+                        let response_prev = ui.add(Button::image(ICON_CHEVRON_UP).frame(false));
+                        let response_next = ui.add(Button::image(ICON_CHEVRON_DOWN).frame(false));
+                        ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
+
+                        if response_prev.clicked() {
+                            if table.matching_row_selected == 0 {
+                                table.matching_row_selected = table.matching_rows.len() - 1;
+                            } else {
+                                table.matching_row_selected -= 1;
+                            }
+                            table.changed_matching_row_selected = true;
+                        }
+                        if response_next.clicked() {
+                            if table.matching_row_selected == table.matching_rows.len() - 1 {
+                                table.matching_row_selected = 0;
+                            } else {
+                                table.matching_row_selected += 1;
+                            }
+                            table.changed_matching_row_selected = true;
+                        }
+                    }
 
                     // interaction handling
                     if scroll_to_column_response.changed() {
                         table.changed_scroll_to_column_value = true;
                     }
                     if scroll_to_row_response.changed() {
-                        table.changed_scroll_to_row_value = true;
+                        table.changed_scroll_to_row_value = Some(Instant::now());
+                        if table.scroll_to_row.is_empty() {
+                            table.reset_search();
+                        }
                     }
                     if scroll_to_row_mode_response.inner.is_some() && scroll_to_row_mode_response.inner.unwrap() {
-                        table.changed_scroll_to_row_value = true;
-                        table.scroll_to_row.clear();
+                        table.reset_search();
                     }
                     if slider_response.changed() {
                         if let Some(new_max_depth) = table.update_max_depth(self.depth) {

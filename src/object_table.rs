@@ -36,7 +36,7 @@ impl ObjectTable {
             .header(text_height * 2.0, |mut header| {
                 header.col(|ui| {ui.label("Pointer")});
                 header.col(|ui| {ui.label("Value")});
-            }).body(None, |body| {
+            }).body(None, None, |body| {
             let vec = self.nodes.iter()
                 .filter(|(pointer, _)| {
                     !matches!(pointer.value_type, ValueType::Array(_)) &&
