@@ -1,11 +1,13 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap};
 use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
-use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use std::string::ToString;
+use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Response, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
+use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
 use crate::{concat_string, Window};
@@ -74,7 +76,7 @@ pub struct ArrayTable {
     nodes: Vec<JsonArrayEntriesOwned>,
     filtered_nodes: Vec<JsonArrayEntriesOwned>,
     scroll_y: f32,
-    non_null_columns: Vec<String>,
+    columns_filter: HashMap<String, Vec<String>>,
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
     parent_pointer: String,
@@ -140,11 +142,11 @@ impl super::View for ArrayTable {
     }
 }
 
-type ColumnFilterCache = egui::util::cache::FrameCache<HashSet<String>, ArrayTable>;
+type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, ArrayTable>;
 
-impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), HashSet<String>> for ArrayTable {
-    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntriesOwned>, &String)) -> HashSet<String> {
-        let mut unique_values = HashSet::new();
+impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), IndexSet<String>> for ArrayTable {
+    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntriesOwned>, &String)) -> IndexSet<String> {
+        let mut unique_values = IndexSet::new();
         if matches!(column.value_type, ValueType::String) {
             nodes.iter().enumerate().map(|(i, row)| {
                 Self::get_pointer_for_column(parent_pointer, &&row.entries, i, column).map(|(_, value)| value.clone().unwrap())
@@ -158,6 +160,8 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &Stri
     }
 }
 
+pub const NON_NULL_FILTER_VALUE: &'static str = "__non_null";
+
 impl ArrayTable {
     pub fn new(parse_result: Option<ParseResultOwned>, nodes: Vec<JsonArrayEntriesOwned>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
@@ -167,7 +171,6 @@ impl ArrayTable {
             max_depth: depth,
             nodes,
             parse_result,
-            non_null_columns: vec![],
             // states
             next_frame_reset_scroll: false,
             column_pinned: vec![Column::new("/#".to_string(), ValueType::Number)],
@@ -181,6 +184,7 @@ impl ArrayTable {
             next_frame_scroll_to_column: false,
             filtered_nodes: vec![],
             last_parsed_max_depth,
+            columns_filter: HashMap::new(),
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -290,7 +294,8 @@ impl ArrayTable {
         let mut hovered_on_array_row_index: Option<(usize, PointerKey)> = None;
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
-                let clicked_column: RefCell<Option<String>> = RefCell::new(None);
+                let clicked_filter_non_null_column: RefCell<Option<String>> = RefCell::new(None);
+                let clicked_filter_column_value: RefCell<Option<(String, String)>> = RefCell::new(None);
                 let pinned_column: RefCell<Option<usize>> = RefCell::new(None);
                 let i: RefCell<usize> = RefCell::new(0);
                 header.cols(true, |index| {
@@ -302,7 +307,6 @@ impl ArrayTable {
                     let label = Label::new(&name);
                     *i.borrow_mut() = index;
                     Some(Box::new(|ui: &mut Ui| {
-                        let mut chcked = self.non_null_columns.contains(&column.name);
                         let response = ui.vertical(|ui| {
                             let response = ui.add(strong).on_hover_ui(|ui| { ui.add(label); });
 
@@ -317,8 +321,15 @@ impl ArrayTable {
                                     }
                                     let column_id = Id::new(&name);
                                     PopupMenu::new(column_id.with("filter")).show_ui(ui, |ui| ui.add(Button::image(filter_icon).frame(false)), |ui| {
+
+                                        let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                        let mut chcked = if let Some(filters) = checked_filtered_values {
+                                            filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
+                                        } else {
+                                            false
+                                        };
                                         if ui.checkbox(&mut chcked, "Non null").clicked() {
-                                            *clicked_column.borrow_mut() = Some(name);
+                                            *clicked_filter_non_null_column.borrow_mut() = Some(name);
                                         }
 
                                         if matches!(column.value_type, ValueType::String) {
@@ -328,10 +339,16 @@ impl ArrayTable {
                                                 values
                                             });
                                             if values.len() > 0 {
+                                                let mut checked_filtered_values = self.columns_filter.get(&column.name);
                                                 ui.separator();
                                                 values.iter().for_each(|value| {
+                                                    let mut chcked = if let Some(filters) = checked_filtered_values {
+                                                        filters.contains(value)
+                                                    } else {
+                                                        false
+                                                    };
                                                     if ui.checkbox(&mut chcked, value).clicked() {
-                                                        // *clicked_column.borrow_mut() = Some(value);
+                                                        *clicked_filter_column_value.borrow_mut() = Some((column.name.clone(), value.clone()));
                                                     }
                                                 });
                                             }
@@ -359,9 +376,13 @@ impl ArrayTable {
                         self.column_pinned.push(column);
                     }
                 }
-                let clicked_column = clicked_column.borrow();
-                if let Some(clicked_column) = clicked_column.as_ref() {
-                    self.on_non_null_column_click(clicked_column.clone());
+                let clicked_filter_non_null_column = clicked_filter_non_null_column.borrow();
+                if let Some(clicked_column) = clicked_filter_non_null_column.as_ref() {
+                    self.on_filter_column_value((clicked_column.clone(), NON_NULL_FILTER_VALUE.to_string()));
+                }
+                let clicked_filter_column_value = clicked_filter_column_value.borrow();
+                if let Some(clicked_column) = clicked_filter_column_value.as_ref() {
+                    self.on_filter_column_value(clicked_column.clone());
                 }
             })
             .body(self.hovered_row_index, |body| {
@@ -458,26 +479,32 @@ impl ArrayTable {
         });
     }
 
-    fn on_non_null_column_click(&mut self, column: String) {
-        if self.non_null_columns.is_empty() {
-            self.non_null_columns.push(column);
-        } else if self.non_null_columns.contains(&column) {
-            self.non_null_columns.retain(|c| !c.eq(&column));
-        } else {
-            self.non_null_columns.push(column);
-        }
-        if !self.non_null_columns.is_empty() {
-            self.filtered_nodes = crate::parser::filter_non_null_column(&self.nodes, &self.parent_pointer, &self.non_null_columns);
-        } else {
-            self.filtered_nodes.clear();
-        }
 
+    fn on_filter_column_value(&mut self, (column, value): (String, String)) {
+        let maybe_filter = self.columns_filter.get_mut(&column);
+        if let Some(filter) = maybe_filter {
+            if filter.contains(&value) {
+                filter.retain(|v| !v.eq(&value));
+                if filter.is_empty() {
+                    self.columns_filter.remove(&column);
+                }
+            } else {
+                filter.push(value);
+            }
+        } else {
+            self.columns_filter.insert(column, vec![value]);
+        }
+        if self.columns_filter.is_empty() {
+            self.filtered_nodes.clear();
+        } else {
+            self.filtered_nodes = crate::parser::filter_columns(&self.nodes, &self.parent_pointer, &self.columns_filter);
+        }
         self.next_frame_reset_scroll = true;
     }
 
     #[inline]
     fn nodes(&self) -> &Vec<JsonArrayEntriesOwned> {
-        if self.non_null_columns.is_empty() {
+        if self.columns_filter.is_empty() {
             &self.nodes
         } else {
             &self.filtered_nodes

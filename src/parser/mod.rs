@@ -1,5 +1,6 @@
 pub mod read_file;
 
+use std::collections::HashMap;
 use std::mem;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -9,7 +10,7 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::{ParallelSlice, ParallelSliceMut};
-use crate::array_table::Column;
+use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
@@ -193,7 +194,7 @@ pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<Json
 
                 if match_prefix {
                     if !k.pointer.is_empty() {
-                        if k.pointer.len() < prefix_len{
+                        if k.pointer.len() < prefix_len {
                             panic!("{} len is < {}", k.pointer, prefix_len);
                         }
                         let key = &k.pointer[prefix_len..k.pointer.len()];
@@ -236,16 +237,31 @@ pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<Json
     Ok((res, unique_keys))
 }
 
-pub fn filter_non_null_column(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix: &str, non_null_columns: &Vec<String>) -> Vec<JsonArrayEntriesOwned> {
+pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix: &str, filters: &HashMap<String, Vec<String>>) -> Vec<JsonArrayEntriesOwned> {
     let mut res: Vec<JsonArrayEntriesOwned> = Vec::with_capacity(previous_parse_result.len());
     for row in previous_parse_result {
         let mut should_add_row = true;
-        for pointer in non_null_columns {
+        for (pointer, filters) in filters {
             let pointer_to_find = concat_string!(prefix, "/", row.index().to_string(), pointer);
+            let mut filters_clone = Vec::with_capacity(filters.len());
+            let mut should_filter_by_non_null = false;
+            for filter in filters {
+                if filter.eq(NON_NULL_FILTER_VALUE) {
+                    should_filter_by_non_null = true;
+                } else {
+                    filters_clone.push(filter.clone());
+                }
+            }
             if let Some((_, value)) = row.find_node_at(&pointer_to_find) {
-                if value.is_none() {
+                if should_filter_by_non_null && value.is_none() {
                     should_add_row = false;
                     break;
+                }
+                if !filters_clone.is_empty() {
+                    if !filters_clone.contains(value.as_ref().unwrap()) {
+                        should_add_row = false;
+                        break;
+                    }
                 }
             } else {
                 should_add_row = false;

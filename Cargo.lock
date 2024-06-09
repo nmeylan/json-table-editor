@@ -1475,6 +1475,7 @@ dependencies = [
  "eframe",
  "egui",
  "egui_extras",
+ "indexmap",
  "json-flat-parser",
  "rayon",
  "rfd",
@@ -1483,6 +1484,7 @@ dependencies = [
 [[package]]
 name = "json-flat-parser"
 version = "0.1.0"
+source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=12551df#12551dfc3f42e30697fa854ee037334bdfe8a77b"
 dependencies = [
  "indexmap",
  "simdutf8",
