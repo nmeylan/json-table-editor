@@ -88,6 +88,7 @@ struct MyApp {
     max_depth: u8,
     depth: u8,
     selected_file: Option<PathBuf>,
+    should_parse_again: bool,
     parsing_invalid: bool,
     parsing_invalid_pointers: Vec<String>,
     selected_pointer: Option<String>,
@@ -110,6 +111,7 @@ impl MyApp {
             depth: 0,
             selected_file: None,
             parsing_invalid: false,
+            should_parse_again: false,
             parsing_invalid_pointers: vec![],
             selected_pointer: None,
             min_depth: 0,
@@ -179,11 +181,13 @@ impl MyApp {
             self.max_depth = max_depth as u8;
             self.min_depth = depth;
             self.parsing_invalid_pointers.clear();
+            self.should_parse_again = false;
             self.parsing_invalid = false;
             self.selected_pointer = None;
         } else {
             let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
             let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
+            self.should_parse_again = true;
             self.parsing_invalid = true;
             self.parsing_invalid_pointers = result.json.iter()
                 .filter(|(k, v)| matches!(k.value_type, ValueType::Array(_)))
@@ -318,6 +322,7 @@ impl eframe::App for MyApp {
                     self.selected_file = Some(i.raw.dropped_files.clone().pop().unwrap().path.unwrap());
                     self.table = None;
                     self.selected_pointer = None;
+                    self.should_parse_again = true;
                     self.parsing_invalid = false;
                     self.parsing_invalid_pointers.clear();
                 }
@@ -334,15 +339,14 @@ impl eframe::App for MyApp {
                                            if response.inner.clicked() {
                                                if let Some(path) = rfd::FileDialog::new().pick_file() {
                                                    self.selected_file = Some(path);
+                                                   self.should_parse_again = true;
                                                }
                                            }
                                        },
                 );
             }
             if self.selected_file.is_some() {
-                if !self.parsing_invalid {
-                    self.open_json();
-                } else {
+                if self.parsing_invalid  {
                     ui.vertical_centered(|ui| {
                         ui.heading("Provided json is not an array but an object");
                         ui.heading("Select which array you want to parse");
@@ -364,6 +368,8 @@ impl eframe::App for MyApp {
                             self.open_json();
                         }
                     });
+                } else if self.should_parse_again {
+                    self.open_json();
                 }
                 // });
             }
