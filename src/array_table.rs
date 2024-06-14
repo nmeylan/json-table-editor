@@ -13,8 +13,10 @@ use egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
-use crate::{concat_string, ICON_FILTER, ICON_PIN, Window};
+use crate::{concat_string, Window};
+use crate::components::icon;
 use crate::components::popover::PopupMenu;
+use crate::fonts::{FILTER, THUMBTACK};
 use crate::parser::search_occurrences;
 use crate::subtable_window::SubTable;
 
@@ -385,13 +387,13 @@ impl ArrayTable {
                                     if column.name.eq("") {
                                         return;
                                     }
-                                    let button = Button::image(ICON_PIN).frame(false);
-                                    if ui.add(button).clicked() {
+                                    let response = icon::button(ui, THUMBTACK);
+                                    if response.clicked() {
                                         *pinned_column.borrow_mut() = Some(*i.borrow());
                                     }
                                     let column_id = Id::new(&name);
                                     PopupMenu::new(column_id.with("filter"))
-                                        .show_ui(ui, |ui| ui.add(Button::image(ICON_FILTER).frame(false)),
+                                        .show_ui(ui, |ui| icon::button(ui, FILTER),
                                                  |ui| {
                                                      let mut checked_filtered_values = self.columns_filter.get(&column.name);
                                                      let mut chcked = if let Some(filters) = checked_filtered_values {
@@ -520,12 +522,14 @@ impl ArrayTable {
         if let Some(_) = hovered_on_array_row_index {
             ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
         }
-        if let Some((row_index, pointer)) = click_on_array_row_index {
+        if let Some((row_index,  pointer)) = click_on_array_row_index {
             let json_array_entries = &self.nodes()[row_index];
             if let Some((_, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
                 let content = value.clone().unwrap();
                 self.windows.push(SubTable::new(pointer.pointer, content,
-                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) }))
+                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
+                                                row_index
+                ))
             } else {
                 println!("can't find root at {} {}", row_index, pointer.pointer)
             }

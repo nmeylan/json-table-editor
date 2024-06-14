@@ -1,5 +1,5 @@
 use egui::{Context, Resize, Ui};
-use json_flat_parser::{JSONParser, ParseOptions, ValueType};
+use json_flat_parser::{JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable};
 use crate::{View};
 use crate::object_table::ObjectTable;
@@ -8,10 +8,12 @@ pub struct SubTable {
     name: String,
     array_table: Option<ArrayTable>,
     object_table: Option<ObjectTable>,
+    index_in_json_entries_array: usize,
 }
 
 impl SubTable {
-    pub fn new(name: String, content: String, parent_value_type: ValueType) -> Self {
+    pub fn new(name: String, content: String, parent_value_type: ValueType,
+               index_in_json_entries_array: usize) -> Self {
         if matches!(parent_value_type, ValueType::Array(_)) {
 
             let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
@@ -21,6 +23,7 @@ impl SubTable {
                 name: name.clone(),
                 array_table: Some(ArrayTable::new(None, nodes, columns, 10, name, parent_value_type)),
                 object_table: None,
+                index_in_json_entries_array,
             }
         } else {
 
@@ -30,6 +33,7 @@ impl SubTable {
                 name: name.clone(),
                 array_table: None,
                 object_table: Some(ObjectTable::new(result.json)),
+                index_in_json_entries_array,
             }
         }
     }

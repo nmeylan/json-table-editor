@@ -1,10 +1,3 @@
-
-
-pub const ICON_FILTER: ImageSource = egui::include_image!("../icons/funnelRegular.svg");
-pub const ICON_PIN: ImageSource = egui::include_image!("../icons/pinTab.svg");
-pub const ICON_CHEVRON_UP: ImageSource = egui::include_image!("../icons/chevronUp.svg");
-pub const ICON_CHEVRON_DOWN: ImageSource = egui::include_image!("../icons/chevronDown.svg");
-
 extern crate core;
 
 mod array_table;
@@ -13,6 +6,7 @@ mod components;
 mod subtable_window;
 pub mod parser;
 mod object_table;
+pub mod fonts;
 
 use std::{env, fs, io};
 
@@ -21,15 +15,17 @@ use std::fs::File;
 use std::io::Read;
 use std::fmt::Write;
 
-use std::path::{ PathBuf};
+use std::path::{PathBuf};
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
-use eframe::NativeOptions;
+use eframe::{CreationContext, NativeOptions};
 use eframe::Theme::Light;
 use egui::{Align2, Button, Color32, ComboBox, Context, Id, ImageSource, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
+use crate::components::icon;
+use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER};
 
 /// Something to view in the demo windows
 pub trait View {
@@ -66,7 +62,7 @@ fn main() {
     };
     eframe::run_native("JSON table editor", options, Box::new(|cc| {
         egui_extras::install_image_loaders(&cc.egui_ctx);
-        let mut app = MyApp::new();
+        let mut app = MyApp::new(cc);
 
         let args: Vec<_> = env::args().collect();
         if args.len() >= 2 {
@@ -97,8 +93,19 @@ struct MyApp {
 }
 
 impl MyApp {
-    fn new() -> Self {
+    fn new(cc: &CreationContext) -> Self {
+        let mut fonts = egui::FontDefinitions::default();
 
+        let font_data = egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
+        fonts.font_data.insert(
+            "fa".into(),
+            font_data,
+        );
+        fonts.families.insert(
+            egui::FontFamily::Name("fa".into()),
+            vec!["Ubuntu-Light".into(), "fa".into()],
+        );
+        cc.egui_ctx.set_fonts(fonts);
         // let path = Path::new(args[1].as_str());
 
         Self {
@@ -236,42 +243,43 @@ impl eframe::App for MyApp {
                     ui.add(Separator::default().vertical());
 
                     let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
-                        ui.add(Label::new("Scroll to row: ").wrap(false));
-                        let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
-                            ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
-                                || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
-                        });
-                        let hint_text = match &table.scroll_to_row_mode {
-                            ScrollToRowMode::RowNumber => "Type row number",
-                            ScrollToRowMode::MatchingTerm => "Type term contained in string value"
-                        };
-                        let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
-                        let scroll_to_row_response = ui.add(text_edit);
-                        if !table.matching_rows.is_empty() {
-                            let response_prev = ui.add(Button::image(ICON_CHEVRON_UP).frame(false));
-                            let response_next = ui.add(Button::image(ICON_CHEVRON_DOWN).frame(false));
-                            ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
+                        ui.horizontal(|ui| {
+                            ui.add(Label::new("Scroll to row: ").wrap(false));
+                            let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                                ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
+                                    || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
+                            });
+                            let hint_text = match &table.scroll_to_row_mode {
+                                ScrollToRowMode::RowNumber => "Type row number",
+                                ScrollToRowMode::MatchingTerm => "Type term contained in string value"
+                            };
+                            let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
+                            let scroll_to_row_response = ui.add(text_edit);
+                            if !table.matching_rows.is_empty() {
+                                let response_prev = icon::button(ui, CHEVRON_UP);
+                                let response_next = icon::button(ui, CHEVRON_DOWN);
+                                ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
 
-                            if response_prev.clicked() {
-                                if table.matching_row_selected == 0 {
-                                    table.matching_row_selected = table.matching_rows.len() - 1;
-                                } else {
-                                    table.matching_row_selected -= 1;
+                                if response_prev.clicked() {
+                                    if table.matching_row_selected == 0 {
+                                        table.matching_row_selected = table.matching_rows.len() - 1;
+                                    } else {
+                                        table.matching_row_selected -= 1;
+                                    }
+                                    table.changed_matching_row_selected = true;
                                 }
-                                table.changed_matching_row_selected = true;
-                            }
-                            if response_next.clicked() {
-                                if table.matching_row_selected == table.matching_rows.len() - 1 {
-                                    table.matching_row_selected = 0;
-                                } else {
-                                    table.matching_row_selected += 1;
+                                if response_next.clicked() {
+                                    if table.matching_row_selected == table.matching_rows.len() - 1 {
+                                        table.matching_row_selected = 0;
+                                    } else {
+                                        table.matching_row_selected += 1;
+                                    }
+                                    table.changed_matching_row_selected = true;
                                 }
-                                table.changed_matching_row_selected = true;
                             }
-                        }
-                        (scroll_to_row_mode_response, scroll_to_row_response)
+                            (scroll_to_row_mode_response, scroll_to_row_response)
+                        }).inner
                     }).inner;
-
 
 
                     // interaction handling
@@ -355,7 +363,7 @@ impl eframe::App for MyApp {
                 );
             }
             if self.selected_file.is_some() {
-                if self.parsing_invalid  {
+                if self.parsing_invalid {
                     ui.vertical_centered(|ui| {
                         ui.heading("Provided json is not an array but an object");
                         ui.heading("Select which array you want to parse");
