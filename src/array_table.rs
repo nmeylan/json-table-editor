@@ -5,9 +5,11 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
 use std::string::ToString;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Response, Sense, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Response, Sense, Style, TextBuffer, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
+use egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
@@ -94,7 +96,7 @@ pub struct ArrayTable {
     max_depth: u8,
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResultOwned>,
-    nodes: Vec<JsonArrayEntriesOwned>,
+    pub nodes: Vec<JsonArrayEntriesOwned>,
     filtered_nodes: Vec<JsonArrayEntriesOwned>,
     scroll_y: f32,
     columns_filter: HashMap<String, Vec<String>>,
@@ -286,12 +288,17 @@ impl ArrayTable {
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) {
-        let text_height = egui::TextStyle::Body
-            .resolve(ui.style())
-            .size
-            .max(ui.spacing().interact_size.y);
+        let text_height = Self::row_height(ui.style(), ui.spacing());
 
         self.draw_table(ui, text_height, 7.0, pinned);
+    }
+
+    pub fn row_height(style: &Arc<Style>, spacing: &Spacing) -> f32 {
+        let text_height = egui::TextStyle::Body
+            .resolve(style)
+            .size
+            .max(spacing.interact_size.y);
+        text_height
     }
     fn draw_table(&mut self, ui: &mut Ui, text_height: f32, text_width: f32, pinned_column_table: bool) {
         use crate::components::table::{Column, TableBuilder};

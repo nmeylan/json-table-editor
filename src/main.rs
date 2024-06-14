@@ -72,6 +72,7 @@ fn main() {
         if args.len() >= 2 {
             println!("Opening {}", args[1].as_str());
             app.selected_file = Some(PathBuf::from(args[1].as_str()));
+            app.should_parse_again = true;
         }
         if args.len() >= 3 {
             app.selected_pointer = Some(args[2].clone());

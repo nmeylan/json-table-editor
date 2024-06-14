@@ -3,7 +3,7 @@ use egui::Sense;
 use json_flat_parser::{FlatJsonValueOwned, PointerKey, ValueType};
 
 pub struct ObjectTable {
-    nodes: FlatJsonValueOwned,
+    pub nodes: FlatJsonValueOwned,
 }
 
 impl ObjectTable {

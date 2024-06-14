@@ -1,4 +1,4 @@
-use egui::{Context, Ui};
+use egui::{Context, Resize, Ui};
 use json_flat_parser::{JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable};
 use crate::{View};
@@ -40,6 +40,16 @@ impl SubTable {
     pub(crate) fn show(&mut self, ctx: &Context, open: &mut bool) {
         egui::Window::new(self.name())
             .open(open)
+            .resize(|r| {
+                let nodes =  if let Some(ref array_table) = self.array_table {
+                    array_table.nodes.len()
+                } else if let Some(ref object_table) = self.object_table {
+                    object_table.nodes.len()
+                } else {
+                    1
+                };
+                r.default_height(40.0 + nodes as f32 * ArrayTable::row_height(&ctx.style(), &ctx.style().spacing)).default_width( 480.0)
+            })
             .resizable([true, true])
             .show(ctx, |ui| {
                 let id = self.name().to_string();
