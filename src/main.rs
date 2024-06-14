@@ -217,7 +217,7 @@ impl eframe::App for MyApp {
         );
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 if let Some(ref mut table) = self.table {
                     if ui.button("select columns").clicked() {
                         set_open(&mut self.open, SelectColumnsPanel_id, true);
@@ -227,44 +227,52 @@ impl eframe::App for MyApp {
                         egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
                     );
                     ui.add(Separator::default().vertical());
-                    ui.label("Scroll to column: ");
-                    let text_edit = TextEdit::singleline(&mut table.scroll_to_column).desired_width(100.0).hint_text("named");
-                    let scroll_to_column_response = ui.add(text_edit);
+                    let scroll_to_column_response = ui.allocate_ui(Vec2::new(180.0, ui.spacing().interact_size.y), |ui| {
+                        ui.add(Label::new("Scroll to column: ").wrap(false));
+                        let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("named");
+                        ui.add(text_edit)
+                    }).inner;
 
                     ui.add(Separator::default().vertical());
-                    ui.label("Scroll to row: ");
-                    let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
-                        ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
-                        || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
-                    });
-                    let hint_text = match &table.scroll_to_row_mode {
-                        ScrollToRowMode::RowNumber => "Type row number",
-                        ScrollToRowMode::MatchingTerm => "Type term contained in string value"
-                    };
-                    let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
-                    let scroll_to_row_response = ui.add(text_edit);
-                    if !table.matching_rows.is_empty() {
-                        let response_prev = ui.add(Button::image(ICON_CHEVRON_UP).frame(false));
-                        let response_next = ui.add(Button::image(ICON_CHEVRON_DOWN).frame(false));
-                        ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
 
-                        if response_prev.clicked() {
-                            if table.matching_row_selected == 0 {
-                                table.matching_row_selected = table.matching_rows.len() - 1;
-                            } else {
-                                table.matching_row_selected -= 1;
+                    let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
+                        ui.add(Label::new("Scroll to row: ").wrap(false));
+                        let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                            ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
+                                || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
+                        });
+                        let hint_text = match &table.scroll_to_row_mode {
+                            ScrollToRowMode::RowNumber => "Type row number",
+                            ScrollToRowMode::MatchingTerm => "Type term contained in string value"
+                        };
+                        let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
+                        let scroll_to_row_response = ui.add(text_edit);
+                        if !table.matching_rows.is_empty() {
+                            let response_prev = ui.add(Button::image(ICON_CHEVRON_UP).frame(false));
+                            let response_next = ui.add(Button::image(ICON_CHEVRON_DOWN).frame(false));
+                            ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
+
+                            if response_prev.clicked() {
+                                if table.matching_row_selected == 0 {
+                                    table.matching_row_selected = table.matching_rows.len() - 1;
+                                } else {
+                                    table.matching_row_selected -= 1;
+                                }
+                                table.changed_matching_row_selected = true;
                             }
-                            table.changed_matching_row_selected = true;
-                        }
-                        if response_next.clicked() {
-                            if table.matching_row_selected == table.matching_rows.len() - 1 {
-                                table.matching_row_selected = 0;
-                            } else {
-                                table.matching_row_selected += 1;
+                            if response_next.clicked() {
+                                if table.matching_row_selected == table.matching_rows.len() - 1 {
+                                    table.matching_row_selected = 0;
+                                } else {
+                                    table.matching_row_selected += 1;
+                                }
+                                table.changed_matching_row_selected = true;
                             }
-                            table.changed_matching_row_selected = true;
                         }
-                    }
+                        (scroll_to_row_mode_response, scroll_to_row_response)
+                    }).inner;
+
+
 
                     // interaction handling
                     if scroll_to_column_response.changed() {
