@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Label, Response, Sense, Style, TextBuffer, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Key, Label, Response, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
@@ -109,6 +109,7 @@ pub struct ArrayTable {
     parent_pointer: String,
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
+    seed: usize, // seed for Id
     pub matching_rows: Vec<usize>,
     pub matching_row_selected: usize,
     pub scroll_to_column: String,
@@ -120,6 +121,9 @@ pub struct ArrayTable {
     pub changed_scroll_to_column_value: bool,
     pub changed_matching_row_selected: bool,
     pub changed_scroll_to_row_value: Option<Instant>,
+
+    pub editing_index:  Option<(usize, usize)>,
+    pub editing_value: RefCell<String>
 }
 
 
@@ -173,14 +177,16 @@ impl super::View for ArrayTable {
     }
 }
 
-type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, ArrayTable>;
+#[derive(Default)]
+struct CacheA {}
+type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, CacheA>;
 
-impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), IndexSet<String>> for ArrayTable {
+impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), IndexSet<String>> for CacheA {
     fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntriesOwned>, &String)) -> IndexSet<String> {
         let mut unique_values = IndexSet::new();
         if matches!(column.value_type, ValueType::String) {
             nodes.iter().enumerate().map(|(i, row)| {
-                Self::get_pointer_for_column(parent_pointer, &&row.entries, i, column).map(|(_, value)| value.clone().unwrap())
+                ArrayTable::get_pointer_for_column(parent_pointer, &&row.entries, i, column).map(|(_, value)| value.clone().unwrap())
             }).for_each(|value| {
                 if let Some(value) = value {
                     unique_values.insert(value);
@@ -208,6 +214,7 @@ impl ArrayTable {
             scroll_y: 0.0,
             hovered_row_index: None,
             columns_offset: vec![],
+            seed: Id::new(&parent_pointer).value() as usize,
             parent_pointer,
             parent_value_type,
             windows: vec![],
@@ -222,6 +229,8 @@ impl ArrayTable {
             scroll_to_row: "".to_string(),
             changed_scroll_to_row_value: None,
             changed_matching_row_selected: false,
+            editing_index: None,
+            editing_value: RefCell::new(String::new()),
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -455,14 +464,26 @@ impl ArrayTable {
             .body(self.hovered_row_index, search_highlight_row, |body| {
                 // Mutation after interaction
                 let mut subtable = None;
+                let mut editing_index: Option<(usize, usize)> = None;
+                let mut editing_index_changed: bool = false;
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
                     let node = self.nodes().get(row_index);
 
                     if let Some(data) = node.as_ref() {
-                        let response = row.cols(false, |ui, index| {
+                        row.cols(false, |ui, index| {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
+                            if self.editing_index.is_some() && self.editing_index.unwrap() == (index, row_index) {
+                                let ref_mut = &mut *self.editing_value.borrow_mut();
+                                let textedit_response = ui.add(TextEdit::singleline(ref_mut));
+                                if textedit_response.lost_focus() || ui.ctx().input(|input| input.key_pressed(Key::Enter)) {
+                                    editing_index = None;
+                                    editing_index_changed = true;
+                                } else {
+                                    textedit_response.request_focus();
+                                }
+                            }
                             if let Some((pointer, value)) = data {
                                 let is_array = matches!(pointer.value_type, ValueType::Array(_));
                                 let is_object = matches!(pointer.value_type, ValueType::Object(_));
@@ -470,16 +491,22 @@ impl ArrayTable {
                                     let label = Label::new(pointer.index.to_string()).sense(Sense::click());
                                     return Some(label.ui(ui));
                                 }
-                                if let Some(value) = value.as_ref() {
+
+                                else if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
                                         let mut label = if is_array || is_object {
                                             Label::new(value.replace("\n", "")) // maybe we want cache
+                                            // Label::new(value)
                                         } else {
                                             Label::new(value)
                                         };
+
+                                        let rect = ui.available_rect_before_wrap();
+                                        let cell_zone = ui.interact(rect, Id::new(self.seed + row_index * columns.len() + index), Sense::click());
+
                                         label = label.sense(Sense::click());
                                         let response = label.ui(ui);
-                                        if response.clicked() {
+                                        if cell_zone.clicked() || response.clicked() {
                                             let is_array = matches!(pointer.value_type, ValueType::Array(_));
                                             let is_object = matches!(pointer.value_type, ValueType::Object(_));
                                             if is_array || is_object {
@@ -488,16 +515,37 @@ impl ArrayTable {
                                                                                 if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
                                                                                 row_index,
                                                 ));
+                                            } else {
+                                                editing_index_changed = true;
+                                                *self.editing_value.borrow_mut() = value.clone();
+                                                editing_index = Some((index, row_index));
                                             }
                                         }
-                                        if response.hovered() {
+                                        if cell_zone.hovered() || response.hovered() {
                                             if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)) {
                                                 ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
                                             }
                                         }
-                                        return Some(response);
+                                        return Some(response.union(cell_zone));
+                                    }
+                                } else {
+                                    let rect = ui.available_rect_before_wrap();
+                                    let cell_zone = ui.interact(rect, Id::new(&pointer.pointer), Sense::click());
+                                    if cell_zone.clicked() {
+                                        editing_index_changed = true;
+                                        *self.editing_value.borrow_mut() = String::new();
+                                        editing_index = Some((index, row_index));
                                     }
                                 }
+                            } else {
+                                let rect = ui.available_rect_before_wrap();
+                                let cell_zone = ui.interact(rect, Id::new(self.seed + row_index * columns.len() + index ), Sense::click());
+                                if cell_zone.clicked() {
+                                    editing_index_changed = true;
+                                    *self.editing_value.borrow_mut() = String::new();
+                                    editing_index = Some((index, row_index));
+                                }
+                                return Some(cell_zone);
                             }
                             None
                         });
@@ -505,6 +553,9 @@ impl ArrayTable {
                 });
                 if let Some(subtable) = subtable {
                     self.windows.push(subtable);
+                }
+                if editing_index_changed {
+                    self.editing_index = editing_index;
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -523,6 +574,7 @@ impl ArrayTable {
         }
     }
 
+    #[inline]
     fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValueOwned, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
         if let Some(column) = columns.get(index) {
             return Self::get_pointer_for_column(&self.parent_pointer, data, row_index, column);
@@ -530,6 +582,7 @@ impl ArrayTable {
         None
     }
 
+    #[inline]
     fn get_pointer_for_column<'a>(parent_pointer: &String, data: &&'a FlatJsonValueOwned, row_index: usize, column: &Column) -> Option<&'a (PointerKey, Option<String>)> {
         let key = &column.name;
         let key = concat_string!(parent_pointer, "/", row_index.to_string(), key);
