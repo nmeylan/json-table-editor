@@ -279,7 +279,8 @@ impl<'l> StripLayout<'l> {
         width: CellSize,
         height: CellSize,
         child_ui_id_source: Id,
-        add_cell_contents: Option<impl FnOnce(&mut Ui) -> Response>,
+        cell_index: usize,
+        add_cell_contents: Option<impl FnOnce(&mut Ui, usize) -> Option<Response>>,
     ) -> (Rect, Response) {
         let max_rect = self.cell_rect(&width, &height);
 
@@ -318,7 +319,7 @@ impl<'l> StripLayout<'l> {
             );
         }
 
-        let (child_ui, child_response) = self.cell(flags, max_rect, child_ui_id_source, add_cell_contents);
+        let (child_ui, child_response) = self.cell(flags, max_rect, child_ui_id_source, cell_index, add_cell_contents);
 
         let used_rect = child_ui.min_rect();
 
@@ -399,7 +400,8 @@ impl<'l> StripLayout<'l> {
         flags: StripLayoutFlags,
         rect: Rect,
         child_ui_id_source: egui::Id,
-        add_cell_contents: Option<impl FnOnce(&mut Ui) -> Response>,
+        cell_index: usize,
+        add_cell_contents: Option<impl FnOnce(&mut Ui, usize) -> Option<Response>>,
     ) -> (Ui, Option<Response>) {
         let mut child_ui =
             self.ui
@@ -418,8 +420,8 @@ impl<'l> StripLayout<'l> {
         }
 
         let response = if let Some(add_cell_contents) = add_cell_contents {
-            let response = add_cell_contents(&mut child_ui);
-            Some(response)
+            let response = add_cell_contents(&mut child_ui, cell_index);
+            response
         } else {
             None
         };
@@ -1097,7 +1099,7 @@ impl<'a> Table<'a> {
         let number_of_columns = widths_ref.len();
 
         let scroll_area_output = scroll_area.show(ui, move |ui| {
-            let mut columns_offset =  Vec::with_capacity(number_of_columns);
+            let mut columns_offset = Vec::with_capacity(number_of_columns);
             let mut scroll_to_y_range = None;
 
             let clip_rect = ui.clip_rect();
@@ -1482,12 +1484,13 @@ pub struct ColumnResponse {
     pub double_clicked_col_index: Option<usize>,
     pub hovered_col_index: Option<usize>,
 }
+
 impl<'a, 'b> TableRow<'a, 'b> {
     /// Add the contents of a column.
     ///
     /// Returns the used space (`min_rect`) plus the [`Response`] of the whole cell.
     #[cfg_attr(debug_assertions, track_caller)]
-    pub fn col(&mut self, add_cell_contents: impl FnOnce(&mut Ui) -> Response) -> (Rect, Response) {
+    pub fn col(&mut self, mut add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> (Rect, Response) {
         let col_index = self.col_index;
 
         let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
@@ -1519,6 +1522,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             width,
             height,
             egui::Id::new((self.row_index, col_index)),
+            col_index,
             Some(add_cell_contents),
         );
 
@@ -1534,8 +1538,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         (used_rect, response)
     }
-    pub fn cols<'bb, F>(& mut self, is_header: bool, add_cell_contents: F) -> ColumnResponse
-        where F: Fn(usize) -> Option<Box<dyn FnOnce(&mut Ui) -> Response + 'bb>>{
+    pub fn cols(&mut self, is_header: bool, mut add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> ColumnResponse {
         let width = self.first_col_visible_offset;
 
         self.layout.add_empty(
@@ -1560,8 +1563,6 @@ impl<'a, 'b> TableRow<'a, 'b> {
             let height = CellSize::Absolute(self.height);
 
 
-            let value = add_cell_contents(*col_index);
-
             let flags = StripLayoutFlags {
                 clip,
                 striped: self.striped,
@@ -1570,12 +1571,13 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 highlighted: self.highlighted,
             };
 
-            let (used_rect, response) =  self.layout.add(
+            let (used_rect, response) = self.layout.add(
                 flags,
                 width,
                 height,
                 egui::Id::new((self.row_index, *col_index)),
-                value,
+                *col_index,
+                Some(&mut add_cell_contents),
             );
 
             if let Some(max_w) = self.max_used_widths.get_mut(*col_index) {

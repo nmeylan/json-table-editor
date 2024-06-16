@@ -96,7 +96,7 @@ pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_arra
     let mut new_json_array_guard = new_json_array.lock().unwrap();
     new_json_array_guard.sort_unstable_by(|a, b| a.index.cmp(&b.index));
     unique_keys.sort();
-    println!("took {}ms to change depth", start.elapsed().as_millis());
+
     Ok((mem::take(&mut new_json_array_guard), unique_keys, 4))
 }
 // pub fn change_depth_array(previous_parse_result: ParseResultOwned, mut json_array: Vec<JsonArrayEntriesOwned>, depth: usize) -> Result<(Vec<JsonArrayEntriesOwned>, Vec<Column>, usize), String> {

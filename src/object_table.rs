@@ -34,8 +34,8 @@ impl ObjectTable {
         table = table.column(Column::initial(340.0).clip(true).resizable(true));
         table
             .header(text_height * 2.0, |mut header| {
-                header.col(|ui| {ui.label("Pointer")});
-                header.col(|ui| {ui.label("Value")});
+                header.col(|ui, _| {Some(ui.label("Pointer"))});
+                header.col(|ui, _| {Some(ui.label("Value"))});
             }).body(None, None, |body| {
             let vec = self.nodes.iter()
                 .filter(|(pointer, _)| {
@@ -44,8 +44,8 @@ impl ObjectTable {
                 }).collect::<Vec<&(PointerKey, Option<String>)>>();
             body.rows(text_height, vec.len(), |mut row| {
                 let (pointer, value) = &vec[row.index()];
-                row.col(|c| c.label(&pointer.pointer));
-                row.col(|c| { value.as_ref().map(|v| c.label(v)).unwrap_or_else(|| c.label("")) });
+                row.col(|c, _| Some(c.label(&pointer.pointer)));
+                row.col(|c, _| { Some(value.as_ref().map(|v| c.label(v)).unwrap_or_else(|| c.label(""))) });
             });
         });
     }

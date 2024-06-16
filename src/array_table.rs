@@ -70,10 +70,11 @@ impl Ord for Column {
         }
     }
 }
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ScrollToRowMode {
     RowNumber,
-    MatchingTerm
+    MatchingTerm,
 }
 
 impl Default for ScrollToRowMode {
@@ -81,6 +82,7 @@ impl Default for ScrollToRowMode {
         ScrollToRowMode::RowNumber
     }
 }
+
 impl ScrollToRowMode {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -119,7 +121,6 @@ pub struct ArrayTable {
     pub changed_matching_row_selected: bool,
     pub changed_scroll_to_row_value: Option<Instant>,
 }
-
 
 
 impl super::View for ArrayTable {
@@ -367,114 +368,107 @@ impl ArrayTable {
         };
         let table_scroll_output = table
             .header(text_height * 2.0, |mut header| {
-                let clicked_filter_non_null_column: RefCell<Option<String>> = RefCell::new(None);
-                let clicked_filter_column_value: RefCell<Option<(String, String)>> = RefCell::new(None);
-                let pinned_column: RefCell<Option<usize>> = RefCell::new(None);
-                let i: RefCell<usize> = RefCell::new(0);
-                header.cols(true, |index| {
+                // Mutation after interaction
+                let mut clicked_filter_non_null_column: Option<String> = None;
+                let mut clicked_filter_column_value: Option<(String, String)> = None;
+                let mut pinned_column: Option<usize> = None;
+                header.cols(true, |ui, index| {
                     let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                     let column = columns.get(index).unwrap();
                     let name = format!("{}", column.name.clone());
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
-                    *i.borrow_mut() = index;
-                    Some(Box::new(|ui: &mut Ui| {
-                        let response = ui.vertical(|ui| {
-                            let response = ui.add(strong).on_hover_ui(|ui| { ui.add(label); });
+                    let response = ui.vertical(|ui| {
+                        let response = ui.add(strong).on_hover_ui(|ui| { ui.add(label); });
 
-                            if !pinned_column_table || *i.borrow() > 0 {
-                                ui.horizontal(|ui| {
-                                    if column.name.eq("") {
-                                        return;
-                                    }
-                                    let response = icon::button(ui, THUMBTACK);
-                                    if response.clicked() {
-                                        *pinned_column.borrow_mut() = Some(*i.borrow());
-                                    }
-                                    let column_id = Id::new(&name);
-                                    PopupMenu::new(column_id.with("filter"))
-                                        .show_ui(ui, |ui| icon::button(ui, FILTER),
-                                                 |ui| {
-                                                     let mut checked_filtered_values = self.columns_filter.get(&column.name);
-                                                     let mut chcked = if let Some(filters) = checked_filtered_values {
-                                                         filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
-                                                     } else {
-                                                         false
-                                                     };
-                                                     if ui.checkbox(&mut chcked, "Non null").clicked() {
-                                                         *clicked_filter_non_null_column.borrow_mut() = Some(name);
-                                                     }
+                        if !pinned_column_table || index > 0 {
+                            ui.horizontal(|ui| {
+                                if column.name.eq("") {
+                                    return;
+                                }
+                                let response = icon::button(ui, THUMBTACK);
+                                if response.clicked() {
+                                    pinned_column = Some(index);
+                                }
+                                let column_id = Id::new(&name);
+                                PopupMenu::new(column_id.with("filter"))
+                                    .show_ui(ui, |ui| icon::button(ui, FILTER),
+                                             |ui| {
+                                                 let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                 let mut chcked = if let Some(filters) = checked_filtered_values {
+                                                     filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
+                                                 } else {
+                                                     false
+                                                 };
+                                                 if ui.checkbox(&mut chcked, "Non null").clicked() {
+                                                     clicked_filter_non_null_column = Some(name);
+                                                 }
 
-                                                     if matches!(column.value_type, ValueType::String) {
-                                                         let values = ui.memory_mut(|mem| {
-                                                             let cache = mem.caches.cache::<ColumnFilterCache>();
-                                                             let values = cache.get((column, &self.nodes, &self.parent_pointer));
-                                                             values
+                                                 if matches!(column.value_type, ValueType::String) {
+                                                     let values = ui.memory_mut(|mem| {
+                                                         let cache = mem.caches.cache::<ColumnFilterCache>();
+                                                         let values = cache.get((column, &self.nodes, &self.parent_pointer));
+                                                         values
+                                                     });
+                                                     if values.len() > 0 {
+                                                         let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                         ui.separator();
+                                                         values.iter().for_each(|value| {
+                                                             let mut chcked = if let Some(filters) = checked_filtered_values {
+                                                                 filters.contains(value)
+                                                             } else {
+                                                                 false
+                                                             };
+                                                             if ui.checkbox(&mut chcked, value).clicked() {
+                                                                 clicked_filter_column_value = Some((column.name.clone(), value.clone()));
+                                                             }
                                                          });
-                                                         if values.len() > 0 {
-                                                             let mut checked_filtered_values = self.columns_filter.get(&column.name);
-                                                             ui.separator();
-                                                             values.iter().for_each(|value| {
-                                                                 let mut chcked = if let Some(filters) = checked_filtered_values {
-                                                                     filters.contains(value)
-                                                                 } else {
-                                                                     false
-                                                                 };
-                                                                 if ui.checkbox(&mut chcked, value).clicked() {
-                                                                     *clicked_filter_column_value.borrow_mut() = Some((column.name.clone(), value.clone()));
-                                                                 }
-                                                             });
-                                                         }
                                                      }
-                                                 });
-                                });
-                            }
+                                                 }
+                                             });
+                            });
+                        }
 
-                            response
-                        });
-                        response.inner
-                    }))
+                        response
+                    });
+                    Some(response.inner)
                 });
 
-                let pinned_column = pinned_column.borrow();
 
-                if let Some(pinned_column) = pinned_column.as_ref() {
+                if let Some(pinned_column) = pinned_column {
                     if pinned_column_table {
-                        let column = self.column_pinned.remove(*pinned_column);
+                        let column = self.column_pinned.remove(pinned_column);
                         self.column_selected.push(column);
                         self.column_selected.sort();
                     } else {
-                        let column = self.column_selected.remove(*pinned_column);
+                        let column = self.column_selected.remove(pinned_column);
                         self.column_pinned.push(column);
                     }
                 }
-                let clicked_filter_non_null_column = clicked_filter_non_null_column.borrow();
-                if let Some(clicked_column) = clicked_filter_non_null_column.as_ref() {
-                    self.on_filter_column_value((clicked_column.clone(), NON_NULL_FILTER_VALUE.to_string()));
+                if let Some(clicked_column) = clicked_filter_non_null_column {
+                    self.on_filter_column_value((clicked_column, NON_NULL_FILTER_VALUE.to_string()));
                 }
-                let clicked_filter_column_value = clicked_filter_column_value.borrow();
-                if let Some(clicked_column) = clicked_filter_column_value.as_ref() {
+                if let Some(clicked_column) = clicked_filter_column_value {
                     self.on_filter_column_value(clicked_column.clone());
                 }
             })
             .body(self.hovered_row_index, search_highlight_row, |body| {
+                // Mutation after interaction
+                let mut subtable = None;
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
                     let node = self.nodes().get(row_index);
 
                     if let Some(data) = node.as_ref() {
-                        let response = row.cols(false, |index| {
+                        let response = row.cols(false, |ui, index| {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
-
                             if let Some((pointer, value)) = data {
                                 let is_array = matches!(pointer.value_type, ValueType::Array(_));
                                 let is_object = matches!(pointer.value_type, ValueType::Object(_));
                                 if pinned_column_table && index == 0 {
                                     let label = Label::new(pointer.index.to_string()).sense(Sense::click());
-                                    return Some(Box::new(|ui| {
-                                        label.ui(ui)
-                                    }));
+                                    return Some(label.ui(ui));
                                 }
                                 if let Some(value) = value.as_ref() {
                                     if !matches!(pointer.value_type, ValueType::Null) {
@@ -484,56 +478,39 @@ impl ArrayTable {
                                             Label::new(value)
                                         };
                                         label = label.sense(Sense::click());
-                                        return Some(Box::new(|ui| {
-                                            label.ui(ui)
-                                        }));
+                                        let response = label.ui(ui);
+                                        if response.clicked() {
+                                            let is_array = matches!(pointer.value_type, ValueType::Array(_));
+                                            let is_object = matches!(pointer.value_type, ValueType::Object(_));
+                                            if is_array || is_object {
+                                                let content = value.clone();
+                                                subtable = Some(SubTable::new(pointer.pointer.clone(), content,
+                                                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
+                                                                                row_index,
+                                                ));
+                                            }
+                                        }
+                                        if response.hovered() {
+                                            if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)) {
+                                                ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
+                                            }
+                                        }
+                                        return Some(response);
                                     }
                                 }
                             }
                             None
                         });
-
-                        if let Some(index) = response.clicked_col_index {
-                            let data = self.get_pointer(columns, &data.entries(), index, data.index());
-                            if let Some((pointer, _value)) = data {
-                                let is_array = matches!(pointer.value_type, ValueType::Array(_));
-                                let is_object = matches!(pointer.value_type, ValueType::Object(_));
-                                if is_array || is_object {
-                                    click_on_array_row_index = Some((row_index, pointer.clone()));
-                                }
-                            }
-                        }
-                        if let Some(index) = response.hovered_col_index {
-                            let data = self.get_pointer(columns, &data.entries(), index, data.index());
-                            if let Some((pointer, _value)) = data {
-                                if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)) {
-                                    hovered_on_array_row_index = Some((row_index, pointer.clone()));
-                                }
-                            }
-                        }
                     }
                 });
+                if let Some(subtable) = subtable {
+                    self.windows.push(subtable);
+                }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
                     request_repaint = true;
                 }
             });
-
-        if let Some(_) = hovered_on_array_row_index {
-            ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
-        }
-        if let Some((row_index,  pointer)) = click_on_array_row_index {
-            let json_array_entries = &self.nodes()[row_index];
-            if let Some((_, value)) = json_array_entries.find_node_at(pointer.pointer.as_str()) {
-                let content = value.clone().unwrap();
-                self.windows.push(SubTable::new(pointer.pointer, content,
-                                                if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
-                                                row_index
-                ))
-            } else {
-                println!("can't find root at {} {}", row_index, pointer.pointer)
-            }
-        }
 
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
