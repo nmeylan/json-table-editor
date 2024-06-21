@@ -122,7 +122,7 @@ pub struct ArrayTable {
     pub changed_matching_row_selected: bool,
     pub changed_scroll_to_row_value: Option<Instant>,
 
-    pub editing_index:  Option<(usize, usize)>,
+    pub editing_index:  RefCell<Option<(usize, usize)>>,
     pub editing_value: RefCell<String>
 }
 
@@ -229,7 +229,7 @@ impl ArrayTable {
             scroll_to_row: "".to_string(),
             changed_scroll_to_row_value: None,
             changed_matching_row_selected: false,
-            editing_index: None,
+            editing_index: RefCell::new(None),
             editing_value: RefCell::new(String::new()),
         }
     }
@@ -368,8 +368,6 @@ impl ArrayTable {
             table = table.column(Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width).clip(true).resizable(true));
         }
         let mut request_repaint = false;
-        let mut click_on_array_row_index: Option<(usize, PointerKey)> = None;
-        let mut hovered_on_array_row_index: Option<(usize, PointerKey)> = None;
         let search_highlight_row = if !self.matching_rows.is_empty() {
             Some(self.matching_rows[self.matching_row_selected])
         } else {
@@ -464,8 +462,7 @@ impl ArrayTable {
             .body(self.hovered_row_index, search_highlight_row, |body| {
                 // Mutation after interaction
                 let mut subtable = None;
-                let mut editing_index: Option<(usize, usize)> = None;
-                let mut editing_index_changed: bool = false;
+                let mut updated_value: Option<(&PointerKey, String)> = None;
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
                     let row_index = row.index();
@@ -474,12 +471,12 @@ impl ArrayTable {
                     if let Some(data) = node.as_ref() {
                         row.cols(false, |ui, index| {
                             let data = self.get_pointer(columns, &data.entries(), index, data.index());
-                            if self.editing_index.is_some() && self.editing_index.unwrap() == (index, row_index) {
+                            let mut editing_index = self.editing_index.borrow_mut();
+                            if editing_index.is_some() && editing_index.unwrap() == (index, row_index) {
                                 let ref_mut = &mut *self.editing_value.borrow_mut();
                                 let textedit_response = ui.add(TextEdit::singleline(ref_mut));
                                 if textedit_response.lost_focus() || ui.ctx().input(|input| input.key_pressed(Key::Enter)) {
-                                    editing_index = None;
-                                    editing_index_changed = true;
+                                    *editing_index = None;
                                 } else {
                                     textedit_response.request_focus();
                                 }
@@ -516,9 +513,8 @@ impl ArrayTable {
                                                                                 row_index,
                                                 ));
                                             } else {
-                                                editing_index_changed = true;
                                                 *self.editing_value.borrow_mut() = value.clone();
-                                                editing_index = Some((index, row_index));
+                                                *editing_index = Some((index, row_index));
                                             }
                                         }
                                         if cell_zone.hovered() || response.hovered() {
@@ -532,18 +528,16 @@ impl ArrayTable {
                                     let rect = ui.available_rect_before_wrap();
                                     let cell_zone = ui.interact(rect, Id::new(&pointer.pointer), Sense::click());
                                     if cell_zone.clicked() {
-                                        editing_index_changed = true;
                                         *self.editing_value.borrow_mut() = String::new();
-                                        editing_index = Some((index, row_index));
+                                        *editing_index = Some((index, row_index));
                                     }
                                 }
                             } else {
                                 let rect = ui.available_rect_before_wrap();
                                 let cell_zone = ui.interact(rect, Id::new(self.seed + row_index * columns.len() + index ), Sense::click());
                                 if cell_zone.clicked() {
-                                    editing_index_changed = true;
                                     *self.editing_value.borrow_mut() = String::new();
-                                    editing_index = Some((index, row_index));
+                                    *editing_index = Some((index, row_index));
                                 }
                                 return Some(cell_zone);
                             }
@@ -553,9 +547,6 @@ impl ArrayTable {
                 });
                 if let Some(subtable) = subtable {
                     self.windows.push(subtable);
-                }
-                if editing_index_changed {
-                    self.editing_index = editing_index;
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -585,10 +576,15 @@ impl ArrayTable {
     #[inline]
     fn get_pointer_for_column<'a>(parent_pointer: &String, data: &&'a FlatJsonValueOwned, row_index: usize, column: &Column) -> Option<&'a (PointerKey, Option<String>)> {
         let key = &column.name;
-        let key = concat_string!(parent_pointer, "/", row_index.to_string(), key);
+        let key = Self::pointer_key(parent_pointer, row_index, key);
         return data.iter().find(|(pointer, _)| {
             pointer.pointer.eq(&key)
         });
+    }
+
+    #[inline]
+    fn pointer_key(parent_pointer: &String, row_index: usize, key: &String) -> String {
+        concat_string!(parent_pointer, "/", row_index.to_string(), key)
     }
 
 
