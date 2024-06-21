@@ -567,6 +567,13 @@ impl ArrayTable {
                     } else {
                         Some(value)
                     };
+
+                    for subtable in self.windows.iter_mut() {
+                        if subtable.id() == row_index {
+                            subtable.update_nodes(pointer.clone(), value.clone());
+                            break;
+                        }
+                    }
                     if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
                         entry.1 = value;
                     } else {

@@ -226,10 +226,6 @@ impl eframe::App for MyApp {
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if let Some(ref mut table) = self.table {
-                    if ui.button("select columns").clicked() {
-                        set_open(&mut self.open, SelectColumnsPanel_id, true);
-                    }
-                    ui.add(Separator::default().vertical());
                     let slider_response = ui.add(
                         egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
                     );

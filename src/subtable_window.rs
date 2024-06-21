@@ -8,7 +8,7 @@ pub struct SubTable {
     name: String,
     array_table: Option<ArrayTable>,
     object_table: Option<ObjectTable>,
-    index_in_json_entries_array: usize,
+    row_index: usize,
 }
 
 impl SubTable {
@@ -23,7 +23,7 @@ impl SubTable {
                 name: name.clone(),
                 array_table: Some(ArrayTable::new(None, nodes, columns, 10, name, parent_value_type)),
                 object_table: None,
-                index_in_json_entries_array,
+                row_index: index_in_json_entries_array,
             }
         } else {
             let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth).prefix(name.clone()).max_depth(10);
@@ -32,12 +32,34 @@ impl SubTable {
                 name: name.clone(),
                 array_table: None,
                 object_table: Some(ObjectTable::new(result.json)),
-                index_in_json_entries_array,
+                row_index: index_in_json_entries_array,
             }
         }
     }
     pub(crate) fn name(&self) -> &String {
         &self.name
+    }
+
+    #[inline]
+    pub fn id(&self) -> usize {
+        self.row_index
+    }
+
+    pub fn update_nodes(&mut self, pointer: PointerKey, value: Option<String>) {
+        if let Some(ref mut array_table) = self.array_table {
+            if let Some(entry) = array_table.nodes[self.row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
+                entry.1 = value;
+            } else {
+                array_table.nodes[self.row_index].entries.push((pointer, value));
+            }
+        } else {
+            let table = self.object_table.as_mut().unwrap();
+            if let Some(entry) = table.nodes.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
+                entry.1 = value;
+            } else {
+                table.nodes.push((pointer, value));
+            }
+        }
     }
 
     pub(crate) fn show(&mut self, ctx: &Context, open: &mut bool) {
