@@ -237,8 +237,8 @@ pub fn as_array(mut previous_parse_result: ParseResultOwned) -> Result<(Vec<Json
     Ok((res, unique_keys))
 }
 
-pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix: &str, filters: &HashMap<String, Vec<String>>) -> Vec<JsonArrayEntriesOwned> {
-    let mut res: Vec<JsonArrayEntriesOwned> = Vec::with_capacity(previous_parse_result.len());
+pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix: &str, filters: &HashMap<String, Vec<String>>) -> Vec<usize> {
+    let mut res: Vec<usize> = Vec::with_capacity(previous_parse_result.len());
     for row in previous_parse_result {
         let mut should_add_row = true;
         for (pointer, filters) in filters {
@@ -270,7 +270,7 @@ pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntriesOwned>, prefix
         }
 
         if should_add_row {
-            res.push(row.clone());
+            res.push(row.index);
         }
     }
     res

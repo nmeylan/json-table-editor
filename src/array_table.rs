@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui::{Align, Button, Context, CursorIcon, Id, ImageSource, Key, Label, Response, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
@@ -101,7 +101,7 @@ pub struct ArrayTable {
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResultOwned>,
     pub nodes: Vec<JsonArrayEntriesOwned>,
-    filtered_nodes: Vec<JsonArrayEntriesOwned>,
+    filtered_nodes: Vec<usize>,
     scroll_y: f32,
     columns_filter: HashMap<String, Vec<String>>,
     pub hovered_row_index: Option<usize>,
@@ -207,6 +207,7 @@ impl ArrayTable {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
             max_depth: depth,
+            filtered_nodes: (0..nodes.len()).collect::<Vec<usize>>(),
             nodes,
             parse_result,
             // states
@@ -223,7 +224,6 @@ impl ArrayTable {
             matching_row_selected: 0,
             scroll_to_column: "".to_string(),
             changed_scroll_to_column_value: false,
-            filtered_nodes: vec![],
             last_parsed_max_depth,
             columns_filter: HashMap::new(),
             scroll_to_row_mode: ScrollToRowMode::RowNumber,
@@ -465,8 +465,8 @@ impl ArrayTable {
                 let mut subtable = None;
                 let mut updated_value: Option<(PointerKey, String)> = None;
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-                let hovered_row_index = body.rows(text_height, self.nodes().len(), |mut row| {
-                    let row_index = row.index();
+                let hovered_row_index = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
+                    let row_index = self.filtered_nodes[row.index()];
                     let node = self.nodes().get(row_index);
 
                     if let Some(data) = node.as_ref() {
@@ -623,7 +623,7 @@ impl ArrayTable {
             self.columns_filter.insert(column, vec![value]);
         }
         if self.columns_filter.is_empty() {
-            self.filtered_nodes.clear();
+            self.filtered_nodes = (0..self.nodes.len()).collect::<Vec<usize>>();
         } else {
             self.filtered_nodes = crate::parser::filter_columns(&self.nodes, &self.parent_pointer, &self.columns_filter);
         }
@@ -632,11 +632,7 @@ impl ArrayTable {
 
     #[inline]
     fn nodes(&self) -> &Vec<JsonArrayEntriesOwned> {
-        if self.columns_filter.is_empty() {
-            &self.nodes
-        } else {
-            &self.filtered_nodes
-        }
+        &self.nodes
     }
 
     pub fn reset_search(&mut self) {
