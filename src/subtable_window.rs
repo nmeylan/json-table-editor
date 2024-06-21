@@ -1,5 +1,5 @@
 use egui::{Context, Resize, Ui};
-use json_flat_parser::{JSONParser, ParseOptions, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable};
 use crate::{ArrayResponse, View};
 use crate::object_table::ObjectTable;
@@ -49,17 +49,18 @@ impl SubTable {
 
     pub fn update_nodes(&mut self, pointer: PointerKey, value: Option<String>) {
         if let Some(ref mut array_table) = self.array_table {
-            if let Some(entry) = array_table.nodes[self.row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
-                entry.1 = value;
+            if let Some(entry) = array_table.nodes[self.row_index].entries.iter_mut()
+                .find(|entry| entry.pointer.pointer.eq(&pointer.pointer)) {
+                entry.value = value;
             } else {
-                array_table.nodes[self.row_index].entries.push((pointer, value));
+                array_table.nodes[self.row_index].entries.push(FlatJsonValue::<String>{ pointer, value});
             }
         } else {
             let table = self.object_table.as_mut().unwrap();
-            if let Some(entry) = table.nodes.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
-                entry.1 = value;
+            if let Some(entry) = table.nodes.iter_mut().find(|entry| entry.pointer.pointer.eq(&pointer.pointer)) {
+                entry.value = value;
             } else {
-                table.nodes.push((pointer, value));
+                table.nodes.push(FlatJsonValue::<String>{ pointer, value});
             }
         }
     }

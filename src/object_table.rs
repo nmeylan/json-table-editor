@@ -2,11 +2,11 @@ use std::cell::RefCell;
 use std::mem;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{Id, Key, Label, Sense, TextEdit};
-use json_flat_parser::{FlatJsonValueOwned, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use crate::ArrayResponse;
 
 pub struct ObjectTable {
-    pub nodes: FlatJsonValueOwned,
+    pub nodes: Vec<FlatJsonValue<String>>,
 
     // Handling interaction
 
@@ -15,7 +15,7 @@ pub struct ObjectTable {
 }
 
 impl ObjectTable {
-    pub fn new(nodes: FlatJsonValueOwned) -> Self {
+    pub fn new(nodes: Vec<FlatJsonValue<String>>) -> Self {
         Self {
             nodes,
             editing_index: RefCell::new(None),
@@ -49,22 +49,22 @@ impl ObjectTable {
                 header.col(|ui, _| {Some(ui.label("Value"))});
             }).body(None, None, |body| {
             let vec = self.nodes.iter()
-                .filter(|(pointer, _)| {
-                    !matches!(pointer.value_type, ValueType::Array(_)) &&
-                        !matches!(pointer.value_type, ValueType::Object(_))
-                }).collect::<Vec<&(PointerKey, Option<String>)>>();
+                .filter(|entry| {
+                    !matches!(entry.pointer.value_type, ValueType::Array(_)) &&
+                        !matches!(entry.pointer.value_type, ValueType::Object(_))
+                }).collect::<Vec<&FlatJsonValue<String>>>();
             let mut updated_value: Option<(PointerKey, String)> = None;
             body.rows(text_height, vec.len(), |mut row| {
                 let row_index = row.index();
-                let (pointer, value) = &vec[row_index];
-                row.col(|c, _| Some(c.label(&pointer.pointer)));
+                let entry = &vec[row_index];
+                row.col(|c, _| Some(c.label(&entry.pointer.pointer)));
                 row.col(|ui, _| {
                     let mut editing_index = self.editing_index.borrow_mut();
                     if editing_index.is_some() && editing_index.unwrap() == (row_index) {
                         let ref_mut = &mut *self.editing_value.borrow_mut();
                         let textedit_response = ui.add(TextEdit::singleline(ref_mut));
                         if textedit_response.lost_focus() || ui.ctx().input(|input| input.key_pressed(Key::Enter)) {
-                            let pointer = pointer.clone();
+                            let pointer = entry.pointer.clone();
                             updated_value = Some((pointer, mem::take(ref_mut)))
                         } else {
                             textedit_response.request_focus();
@@ -72,11 +72,11 @@ impl ObjectTable {
                         None
                     } else {
                         let rect = ui.available_rect_before_wrap();
-                        let cell_zone = ui.interact(rect, Id::new(&pointer.pointer), Sense::click());
-                        let response = value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
+                        let cell_zone = ui.interact(rect, Id::new(&entry.pointer.pointer), Sense::click());
+                        let response = entry.value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
                             .unwrap_or_else(|| ui.label(""));
                         if cell_zone.clicked() || response.clicked() {
-                            *self.editing_value.borrow_mut() = value.clone().unwrap_or(String::new());
+                            *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or(String::new());
                             *editing_index = Some(row_index);
                         }
                         Some(response)
@@ -92,11 +92,11 @@ impl ObjectTable {
                     Some(value)
                 };
                 if let Some(entry) = self.nodes.get_mut(row_index) {
-                    entry.1 = value.clone();
+                    entry.value = value.clone();
                 } else {
-                    self.nodes.push((pointer.clone(), value.clone()));
+                    self.nodes.push(FlatJsonValue{pointer: pointer.clone(), value: value.clone()});
                 }
-                array_response.edited_value = Some((pointer, value));
+                array_response.edited_value = Some(FlatJsonValue::<String>{pointer, value});
             }
         });
         array_response

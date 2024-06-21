@@ -11,7 +11,7 @@ use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer,
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
-use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseResult, PointerKey, ValueType};
 
 use crate::{ArrayResponse, concat_string, Window};
 use crate::components::icon;
@@ -99,8 +99,8 @@ pub struct ArrayTable {
     column_pinned: Vec<Column>,
     max_depth: u8,
     last_parsed_max_depth: u8,
-    parse_result: Option<ParseResultOwned>,
-    pub nodes: Vec<JsonArrayEntriesOwned>,
+    parse_result: Option<ParseResult<String>>,
+    pub nodes: Vec<JsonArrayEntries<String>>,
     filtered_nodes: Vec<usize>,
     scroll_y: f32,
     columns_filter: HashMap<String, Vec<String>>,
@@ -186,12 +186,12 @@ struct CacheA {}
 
 type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, CacheA>;
 
-impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &String), IndexSet<String>> for CacheA {
-    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntriesOwned>, &String)) -> IndexSet<String> {
+impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &String), IndexSet<String>> for CacheA {
+    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntries<String>>, &String)) -> IndexSet<String> {
         let mut unique_values = IndexSet::new();
         if matches!(column.value_type, ValueType::String) {
             nodes.iter().enumerate().map(|(i, row)| {
-                ArrayTable::get_pointer_for_column(parent_pointer, &&row.entries, i, column).filter(|(_, value)| value.is_some()).map(|(_, value)| value.clone().unwrap())
+                ArrayTable::get_pointer_for_column(parent_pointer, &&row.entries, i, column).filter(|entry| entry.value.is_some()).map(|entry| entry.value.clone().unwrap())
             }).for_each(|value| {
                 if let Some(value) = value {
                     unique_values.insert(value);
@@ -205,7 +205,7 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntriesOwned>, &Stri
 pub const NON_NULL_FILTER_VALUE: &'static str = "__non_null";
 
 impl ArrayTable {
-    pub fn new(parse_result: Option<ParseResultOwned>, nodes: Vec<JsonArrayEntriesOwned>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
@@ -248,8 +248,8 @@ impl ArrayTable {
             let maybe_response = window.show(ctx, &mut opened);
             if let Some(maybe_inner_response) = maybe_response {
                 if let Some(response) = maybe_inner_response {
-                    if let Some((pointer, value)) = response.edited_value {
-                        updated_values.push((pointer, value, window.id(), false));
+                    if let Some(entry) = response.edited_value {
+                        updated_values.push((entry, window.id(), false));
                     }
                 }
             }
@@ -258,7 +258,7 @@ impl ArrayTable {
             }
         }
         for updated_value in updated_values {
-            self.update_value(updated_value.0, updated_value.1, updated_value.2, updated_value.3);
+            self.update_value(updated_value.0, updated_value.1, updated_value.2);
         }
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
@@ -489,7 +489,7 @@ impl ArrayTable {
 
                     if let Some(data) = node.as_ref() {
                         row.cols(false, |ui, col_index| {
-                            let cell_id =  row_index * columns.len() + col_index + if pinned_column_table { self.seed1 } else { self.seed2 };
+                            let cell_id = row_index * columns.len() + col_index + if pinned_column_table { self.seed1 } else { self.seed2 };
                             let data = self.get_pointer(columns, &data.entries(), col_index, data.index());
                             let mut editing_index = self.editing_index.borrow_mut();
                             if editing_index.is_some() && editing_index.unwrap() == (col_index, row_index, pinned_column_table) {
@@ -507,14 +507,14 @@ impl ArrayTable {
                                 } else {
                                     textedit_response.request_focus();
                                 }
-                            } else if let Some((pointer, value)) = data {
-                                let is_array = matches!(pointer.value_type, ValueType::Array(_));
-                                let is_object = matches!(pointer.value_type, ValueType::Object(_));
+                            } else if let Some(entry) = data {
+                                let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
+                                let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                                 if pinned_column_table && col_index == 0 {
-                                    let label = Label::new(pointer.index.to_string()).sense(Sense::click());
+                                    let label = Label::new(entry.pointer.index.to_string()).sense(Sense::click());
                                     return Some(label.ui(ui));
-                                } else if let Some(value) = value.as_ref() {
-                                    if !matches!(pointer.value_type, ValueType::Null) {
+                                } else if let Some(value) = entry.value.as_ref() {
+                                    if !matches!(entry.pointer.value_type, ValueType::Null) {
                                         let mut label = if is_array || is_object {
                                             Label::new(value.replace("\n", "")) // maybe we want cache
                                         } else {
@@ -527,13 +527,13 @@ impl ArrayTable {
                                         label = label.sense(Sense::click());
                                         let response = label.ui(ui);
                                         if cell_zone.clicked() || response.clicked() {
-                                            let is_array = matches!(pointer.value_type, ValueType::Array(_));
-                                            let is_object = matches!(pointer.value_type, ValueType::Object(_));
+                                            let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
+                                            let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                                             if is_array || is_object {
                                                 let content = value.clone();
-                                                subtable = Some(SubTable::new(pointer.pointer.clone(), content,
-                                                                              if matches!(pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
-                                                                              row_index, pointer.depth,
+                                                subtable = Some(SubTable::new(entry.pointer.pointer.clone(), content,
+                                                                              if matches!(entry.pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
+                                                                              row_index, entry.pointer.depth,
                                                 ));
                                             } else {
                                                 *self.editing_value.borrow_mut() = value.clone();
@@ -541,7 +541,7 @@ impl ArrayTable {
                                             }
                                         }
                                         if cell_zone.hovered() || response.hovered() {
-                                            if matches!(pointer.value_type, ValueType::Array(_)) || matches!(pointer.value_type, ValueType::Object(_)) {
+                                            if matches!(entry.pointer.value_type, ValueType::Array(_)) || matches!(entry.pointer.value_type, ValueType::Object(_)) {
                                                 ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
                                             }
                                         }
@@ -549,7 +549,7 @@ impl ArrayTable {
                                     }
                                 } else {
                                     let rect = ui.available_rect_before_wrap();
-                                    let cell_zone = ui.interact(rect, Id::new(&pointer.pointer), Sense::click());
+                                    let cell_zone = ui.interact(rect, Id::new(&entry.pointer.pointer), Sense::click());
                                     if cell_zone.clicked() {
                                         *self.editing_value.borrow_mut() = String::new();
                                         *editing_index = Some((col_index, row_index, pinned_column_table));
@@ -579,10 +579,10 @@ impl ArrayTable {
                         Some(value)
                     };
                     if self.is_sub_table {
-                        array_response.edited_value = Some((pointer.clone(), value.clone()));
+                        array_response.edited_value = Some(FlatJsonValue { pointer: pointer.clone(), value: value.clone() });
                     }
                     let (_, row_index, _) = editing_index.unwrap();
-                    self.update_value(pointer, value, row_index, true);
+                    self.update_value(FlatJsonValue { pointer, value}, row_index, true);
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -602,26 +602,32 @@ impl ArrayTable {
         array_response
     }
 
-    fn update_value(&mut self, pointer: PointerKey, value: Option<String>, row_index: usize, should_update_subtable: bool) {
-
+    fn update_value(&mut self, updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) {
         if should_update_subtable {
             for subtable in self.windows.iter_mut() {
                 if subtable.id() == row_index {
-                    subtable.update_nodes(pointer.clone(), value.clone());
+                    subtable.update_nodes(updated_entry.pointer.clone(), updated_entry.value.clone());
                     break;
                 }
             }
         }
 
-        if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
-            entry.1 = value;
+        if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|entry| entry.pointer.pointer.eq(&updated_entry.pointer.pointer)) {
+            entry.value = updated_entry.value;
         } else {
-            self.nodes[row_index].entries.push((pointer, value));
+            self.nodes[row_index].entries.push(FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
+        }
+        if !self.is_sub_table {
+            let root_pointer = concat_string!(&self.parent_pointer, "/", row_index.to_string());
+            if let Some(entry) = self.nodes[row_index].entries.pop() {
+                // let value1 = JSONParser::serialize(&mut self.nodes[row_index].entries);
+                println!("{:?}", entry.value);
+            }
         }
     }
 
     #[inline]
-    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a FlatJsonValueOwned, index: usize, row_index: usize) -> Option<&'a (PointerKey, Option<String>)> {
+    fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<&'a FlatJsonValue<String>> {
         if let Some(column) = columns.get(index) {
             return Self::get_pointer_for_column(&self.parent_pointer, data, row_index, column);
         }
@@ -629,11 +635,11 @@ impl ArrayTable {
     }
 
     #[inline]
-    fn get_pointer_for_column<'a>(parent_pointer: &String, data: &&'a FlatJsonValueOwned, row_index: usize, column: &Column) -> Option<&'a (PointerKey, Option<String>)> {
+    fn get_pointer_for_column<'a>(parent_pointer: &String, data: &&'a Vec<FlatJsonValue<String>>, row_index: usize, column: &Column) -> Option<&'a FlatJsonValue<String>> {
         let key = &column.name;
         let key = Self::pointer_key(parent_pointer, row_index, key);
-        return data.iter().find(|(pointer, _)| {
-            pointer.pointer.eq(&key)
+        return data.iter().find(|entry| {
+            entry.pointer.pointer.eq(&key)
         });
     }
 
@@ -666,7 +672,7 @@ impl ArrayTable {
     }
 
     #[inline]
-    fn nodes(&self) -> &Vec<JsonArrayEntriesOwned> {
+    fn nodes(&self) -> &Vec<JsonArrayEntries<String>> {
         &self.nodes
     }
 

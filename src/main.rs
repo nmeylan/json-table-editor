@@ -21,7 +21,7 @@ use std::time::{Instant};
 use eframe::{CreationContext, NativeOptions};
 use eframe::Theme::Light;
 use egui::{Align2, Button, Color32, ComboBox, Context, Id, ImageSource, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-use json_flat_parser::{JSONParser, ParseOptions, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -48,7 +48,7 @@ pub trait Window {
 
 #[derive(Default)]
 struct ArrayResponse {
-    pub (crate) edited_value: Option<(PointerKey, Option<String>)>,
+    pub (crate) edited_value: Option<FlatJsonValue<String>>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -203,8 +203,8 @@ impl MyApp {
             self.should_parse_again = true;
             self.parsing_invalid = true;
             self.parsing_invalid_pointers = result.json.iter()
-                .filter(|(k, v)| matches!(k.value_type, ValueType::Array(_)))
-                .map(|(k, v)| k.pointer.clone()).collect();
+                .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
+                .map(|entry| entry.pointer.pointer.clone()).collect();
         }
     }
 }
