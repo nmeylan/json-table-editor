@@ -21,15 +21,15 @@ use std::time::{Instant};
 use eframe::{CreationContext, NativeOptions};
 use eframe::Theme::Light;
 use egui::{Align2, Button, Color32, ComboBox, Context, Id, ImageSource, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-use json_flat_parser::{JSONParser, ParseOptions, ValueType};
+use json_flat_parser::{JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER};
 
 /// Something to view in the demo windows
-pub trait View {
-    fn ui(&mut self, ui: &mut egui::Ui);
+pub trait View<R> {
+    fn ui(&mut self, ui: &mut egui::Ui) -> R;
 }
 
 /// Something to view
@@ -44,6 +44,11 @@ pub trait Window {
 
     /// Show windows, etc
     fn show(&mut self, ctx: &egui::Context, open: &mut bool);
+}
+
+#[derive(Default)]
+struct ArrayResponse {
+    pub (crate) edited_value: Option<(PointerKey, Option<String>)>,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -342,7 +347,7 @@ impl eframe::App for MyApp {
             });
 
             if let Some(ref mut table) = self.table {
-                table.ui(ui)
+                table.ui(ui);
             } else if self.selected_file.is_none() {
                 ui.allocate_ui_at_rect(ui.max_rect(),
                                        |ui| {

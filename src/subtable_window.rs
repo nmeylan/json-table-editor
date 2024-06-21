@@ -1,7 +1,7 @@
 use egui::{Context, Resize, Ui};
 use json_flat_parser::{JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable};
-use crate::{View};
+use crate::{ArrayResponse, View};
 use crate::object_table::ObjectTable;
 
 pub struct SubTable {
@@ -19,9 +19,11 @@ impl SubTable {
             let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth).max_depth(10);
             let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
+            let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone(), parent_value_type);
+            array_table.is_sub_table = true;
             Self {
-                name: name.clone(),
-                array_table: Some(ArrayTable::new(None, nodes, columns, 10, name, parent_value_type)),
+                name,
+                array_table: Some(array_table),
                 object_table: None,
                 row_index: index_in_json_entries_array,
             }
@@ -62,7 +64,7 @@ impl SubTable {
         }
     }
 
-    pub(crate) fn show(&mut self, ctx: &Context, open: &mut bool) {
+    pub(crate) fn show(&mut self, ctx: &Context, open: &mut bool) -> Option<Option<ArrayResponse>> {
         egui::Window::new(self.name())
             .open(open)
             .resize(|r| {
@@ -79,20 +81,20 @@ impl SubTable {
             .show(ctx, |ui| {
                 let id = self.name().to_string();
                 ui.push_id(id, |ui| {
-                    self.ui(ui);
-                });
-            });
+                    self.ui(ui)
+                }).inner
+            }).map(|i| i.inner)
     }
 }
 
-impl super::View for SubTable {
-    fn ui(&mut self, ui: &mut Ui) {
+impl super::View<ArrayResponse> for SubTable {
+    fn ui(&mut self, ui: &mut Ui) -> ArrayResponse {
         ui.vertical(|ui| {
             if let Some(ref mut array_table) = self.array_table {
                 array_table.ui(ui)
             } else {
                 self.object_table.as_mut().unwrap().ui(ui)
             }
-        });
+        }).inner
     }
 }

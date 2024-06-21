@@ -27,7 +27,7 @@ impl super::Window for SelectColumnsPanel {
     }
 }
 
-impl super::View for SelectColumnsPanel {
+impl super::View<()> for SelectColumnsPanel {
     fn ui(&mut self, ui: &mut Ui) {
         ui.add_enabled_ui(self.enabled, |ui| {
             ui.set_visible(self.visible);

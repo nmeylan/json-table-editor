@@ -13,7 +13,7 @@ use egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValueOwned, JsonArrayEntriesOwned, ParseResultOwned, PointerKey, ValueType};
 
-use crate::{concat_string, Window};
+use crate::{ArrayResponse, concat_string, Window};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
@@ -109,6 +109,7 @@ pub struct ArrayTable {
     parent_pointer: String,
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
+    pub(crate) is_sub_table: bool,
     seed1: usize, // seed for Id
     seed2: usize, // seed for Id
     pub matching_rows: Vec<usize>,
@@ -128,10 +129,11 @@ pub struct ArrayTable {
 }
 
 
-impl super::View for ArrayTable {
-    fn ui(&mut self, ui: &mut egui::Ui) {
+impl super::View<ArrayResponse> for ArrayTable {
+    fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
         use egui_extras::{Size, StripBuilder};
         self.windows(ui.ctx());
+        let mut array_response = ArrayResponse::default();
         StripBuilder::new(ui)
             .size(Size::remainder())
             .vertical(|mut strip| {
@@ -168,13 +170,14 @@ impl super::View for ArrayTable {
                             if let Some(offset) = scroll_to_x {
                                 scroll_area = scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
                             }
-                            let _scroll_area_output = scroll_area.show(ui, |ui| {
-                                self.table_ui(ui, false);
+                            scroll_area.show(ui, |ui| {
+                                array_response = self.table_ui(ui, false);
                             });
                         });
                     });
                 });
             });
+        array_response
     }
 }
 
@@ -234,16 +237,28 @@ impl ArrayTable {
             changed_matching_row_selected: false,
             editing_index: RefCell::new(None),
             editing_value: RefCell::new(String::new()),
+            is_sub_table: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
         let mut closed_windows = vec![];
+        let mut updated_values = vec![];
         for window in self.windows.iter_mut() {
             let mut opened = true;
-            window.show(ctx, &mut opened);
+            let maybe_response = window.show(ctx, &mut opened);
+            if let Some(maybe_inner_response) = maybe_response {
+                if let Some(response) = maybe_inner_response {
+                    if let Some((pointer, value)) = response.edited_value {
+                        updated_values.push((pointer, value, window.id(), false));
+                    }
+                }
+            }
             if !opened {
                 closed_windows.push(window.name().clone());
             }
+        }
+        for updated_value in updated_values {
+            self.update_value(updated_value.0, updated_value.1, updated_value.2, updated_value.3);
         }
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
@@ -302,10 +317,10 @@ impl ArrayTable {
         all_columns.iter().filter(move |column: &&Column| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object(_))))
     }
 
-    fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) {
+    fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) -> ArrayResponse {
         let text_height = Self::row_height(ui.style(), ui.spacing());
 
-        self.draw_table(ui, text_height, 7.0, pinned);
+        self.draw_table(ui, text_height, 7.0, pinned)
     }
 
     pub fn row_height(style: &Arc<Style>, spacing: &Spacing) -> f32 {
@@ -315,10 +330,10 @@ impl ArrayTable {
             .max(spacing.interact_size.y);
         text_height
     }
-    fn draw_table(&mut self, ui: &mut Ui, text_height: f32, text_width: f32, pinned_column_table: bool) {
+    fn draw_table(&mut self, ui: &mut Ui, text_height: f32, text_width: f32, pinned_column_table: bool) -> ArrayResponse {
         use crate::components::table::{Column, TableBuilder};
         let parent_height = ui.available_rect_before_wrap().height();
-
+        let mut array_response = ArrayResponse::default();
         let mut table = TableBuilder::new(ui)
             .striped(true)
             .resizable(true)
@@ -481,20 +496,18 @@ impl ArrayTable {
                                 let ref_mut = &mut *self.editing_value.borrow_mut();
                                 let textedit_response = ui.add(TextEdit::singleline(ref_mut));
                                 if textedit_response.lost_focus() || ui.ctx().input(|input| input.key_pressed(Key::Enter)) {
-                                    println!("lost focus {}", textedit_response.lost_focus());
                                     let pointer = PointerKey {
                                         pointer: Self::pointer_key(&self.parent_pointer, row_index, &columns.get(col_index).as_ref().unwrap().name),
                                         value_type: columns[col_index].value_type,
                                         depth: columns[col_index].depth,
-                                        index: 0,
+                                        index: row_index,
                                         position: 0,
                                     };
                                     updated_value = Some((pointer, mem::take(ref_mut)))
                                 } else {
                                     textedit_response.request_focus();
                                 }
-                            }
-                            if let Some((pointer, value)) = data {
+                            } else if let Some((pointer, value)) = data {
                                 let is_array = matches!(pointer.value_type, ValueType::Array(_));
                                 let is_object = matches!(pointer.value_type, ValueType::Object(_));
                                 if pinned_column_table && col_index == 0 {
@@ -504,7 +517,6 @@ impl ArrayTable {
                                     if !matches!(pointer.value_type, ValueType::Null) {
                                         let mut label = if is_array || is_object {
                                             Label::new(value.replace("\n", "")) // maybe we want cache
-                                            // Label::new(value)
                                         } else {
                                             Label::new(value)
                                         };
@@ -561,24 +573,16 @@ impl ArrayTable {
                 }
                 if let Some((pointer, value)) = updated_value {
                     let editing_index = mem::take(&mut *self.editing_index.borrow_mut());
-                    let (_col_index, row_index, _pinned_column_table) = editing_index.unwrap();
                     let value = if value.is_empty() {
                         None
                     } else {
                         Some(value)
                     };
-
-                    for subtable in self.windows.iter_mut() {
-                        if subtable.id() == row_index {
-                            subtable.update_nodes(pointer.clone(), value.clone());
-                            break;
-                        }
+                    if self.is_sub_table {
+                        array_response.edited_value = Some((pointer.clone(), value.clone()));
                     }
-                    if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
-                        entry.1 = value;
-                    } else {
-                        self.nodes[row_index].entries.push((pointer, value));
-                    }
+                    let (_, row_index, _) = editing_index.unwrap();
+                    self.update_value(pointer, value, row_index, true);
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -594,6 +598,25 @@ impl ArrayTable {
         }
         if request_repaint {
             ui.ctx().request_repaint();
+        }
+        array_response
+    }
+
+    fn update_value(&mut self, pointer: PointerKey, value: Option<String>, row_index: usize, should_update_subtable: bool) {
+
+        if should_update_subtable {
+            for subtable in self.windows.iter_mut() {
+                if subtable.id() == row_index {
+                    subtable.update_nodes(pointer.clone(), value.clone());
+                    break;
+                }
+            }
+        }
+
+        if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|(p, _)| p.pointer.eq(&pointer.pointer)) {
+            entry.1 = value;
+        } else {
+            self.nodes[row_index].entries.push((pointer, value));
         }
     }
 
