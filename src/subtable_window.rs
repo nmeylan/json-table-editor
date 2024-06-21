@@ -13,10 +13,10 @@ pub struct SubTable {
 
 impl SubTable {
     pub fn new(name: String, content: String, parent_value_type: ValueType,
-               index_in_json_entries_array: usize) -> Self {
+               index_in_json_entries_array: usize, depth: u8) -> Self {
         if matches!(parent_value_type, ValueType::Array(_)) {
 
-            let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
+            let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth).max_depth(10);
             let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
             Self {
@@ -26,8 +26,7 @@ impl SubTable {
                 index_in_json_entries_array,
             }
         } else {
-
-            let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).prefix(name.clone()).max_depth(10);
+            let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth).prefix(name.clone()).max_depth(10);
             let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
             Self {
                 name: name.clone(),
