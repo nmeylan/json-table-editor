@@ -11,14 +11,15 @@ use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer,
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
-use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseResult, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
+use json_flat_parser::ValueType::Object;
 
 use crate::{ArrayResponse, concat_string, Window};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
-use crate::parser::search_occurrences;
+use crate::parser::{change_depth_array, search_occurrences};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -582,20 +583,22 @@ impl ArrayTable {
                     let (_, row_index, _) = editing_index.unwrap();
                     if self.is_sub_table {
                         let mut updated_pointer = pointer.clone();
-                        self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
+                        let value_changed = self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
 
-                        let mut entries = self.nodes.iter().flat_map(|row| row.entries.clone()).collect::<Vec<FlatJsonValue<String>>>();
-                        let mut parent_pointer = PointerKey {
-                            pointer: String::new(),
-                            value_type: ValueType::Array(self.nodes.len()),
-                            depth: 0,
-                            index: 0,
-                            position: 0,
-                        };
-                        entries.push(FlatJsonValue{ pointer: parent_pointer.clone(), value: None });
-                        let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
-                        parent_pointer.pointer = self.parent_pointer.clone();
-                        array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+                        if value_changed {
+                            let mut entries = self.nodes.iter().flat_map(|row| row.entries.clone()).collect::<Vec<FlatJsonValue<String>>>();
+                            let mut parent_pointer = PointerKey {
+                                pointer: String::new(),
+                                value_type: ValueType::Array(self.nodes.len()),
+                                depth: 0,
+                                index: 0,
+                                position: 0,
+                            };
+                            entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });
+                            let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
+                            parent_pointer.pointer = self.parent_pointer.clone();
+                            array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+                        }
                     } else {
                         self.update_value(FlatJsonValue { pointer, value }, row_index, true);
                     }
@@ -618,7 +621,8 @@ impl ArrayTable {
         array_response
     }
 
-    fn update_value(&mut self, updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) {
+    fn update_value(&mut self, updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) -> bool {
+        let mut value_changed = false;
         if should_update_subtable {
             for subtable in self.windows.iter_mut() {
                 if subtable.id() == row_index {
@@ -629,19 +633,37 @@ impl ArrayTable {
         }
 
         if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|entry| entry.pointer.pointer.eq(&updated_entry.pointer.pointer)) {
-            entry.value = updated_entry.value;
+            if !entry.value.eq(&updated_entry.value) {
+                value_changed = true;
+                entry.value = updated_entry.value;
+            }
         } else {
-            let mut entries = &mut self.nodes[row_index].entries;
-            entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
+            if !updated_entry.value.is_none() {
+                value_changed = true;
+                let mut entries = &mut self.nodes[row_index].entries;
+                entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
+            }
         }
-        if !self.is_sub_table {
+        // After update we serialized root element then parse it again so nested serialized object are updated aswellgit
+        if value_changed && !self.is_sub_table {
+            let start = Instant::now();
             let root_node = self.nodes[row_index].entries.pop().unwrap();
-            println!("rootnode {}", root_node.pointer.pointer);
             let value1 = serialize_to_json_with_option::<String>(
                 &mut self.nodes[row_index].entries.clone(),
                 root_node.pointer.depth + 1);
-            self.nodes[row_index].entries.push(FlatJsonValue { pointer: root_node.pointer, value: Some(value1.to_json()) });
+            let new_root_node_serialized_json = value1.to_json();
+            let result = JSONParser::parse(new_root_node_serialized_json.as_str(),
+                                           ParseOptions::default()
+                                               .prefix(root_node.pointer.pointer.clone())
+                                               .start_depth(root_node.pointer.depth + 1).parse_array(false)
+                                               .max_depth(self.last_parsed_max_depth as u8)).unwrap().to_owned();
+            let line_number_entry = mem::take(&mut self.nodes[row_index].entries[0]);
+            self.nodes[row_index].entries.clear();
+            self.nodes[row_index].entries.push(line_number_entry);
+            self.nodes[row_index].entries.extend(result.json);
+            self.nodes[row_index].entries.push(FlatJsonValue{pointer: root_node.pointer, value: Some(new_root_node_serialized_json)});
         }
+        value_changed
     }
 
     #[inline]

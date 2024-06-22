@@ -30,7 +30,7 @@ impl SubTable {
                 row_index: index_in_json_entries_array,
             }
         } else {
-            let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth).prefix(name.clone()).max_depth(10);
+            let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth + 1).prefix(name.clone()).max_depth(10);
             let result = Self::parse(&content, &options, true);
             Self {
                 name: name.clone(),
