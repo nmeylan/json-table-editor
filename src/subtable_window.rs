@@ -18,8 +18,8 @@ impl SubTable {
                index_in_json_entries_array: usize, depth: u8) -> Self {
         if matches!(parent_value_type, ValueType::Array(_)) {
 
-            let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth).max_depth(10);
-            let result = Self::parse(&content, &options);
+            let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth + 1).max_depth(10);
+            let result = Self::parse(&content, &options, false);
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
             let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone(), parent_value_type);
             array_table.is_sub_table = true;
@@ -31,7 +31,7 @@ impl SubTable {
             }
         } else {
             let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth).prefix(name.clone()).max_depth(10);
-            let result = Self::parse(&content, &options);
+            let result = Self::parse(&content, &options, true);
             Self {
                 name: name.clone(),
                 array_table: None,
@@ -41,10 +41,10 @@ impl SubTable {
         }
     }
 
-    fn parse(content: &String, options: &ParseOptions) -> ParseResult<String> {
+    fn parse(content: &String, options: &ParseOptions, state_seen_start_parse_at: bool) -> ParseResult<String> {
         let mut lexer = Lexer::new(content.as_str().as_bytes());
         let mut parser = Parser::new(&mut lexer);
-        parser.state_seen_start_parse_at = true;
+        parser.state_seen_start_parse_at = state_seen_start_parse_at;
         let result = parser.parse(&options, options.start_depth).unwrap().to_owned();
         result
     }

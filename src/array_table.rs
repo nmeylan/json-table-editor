@@ -579,11 +579,26 @@ impl ArrayTable {
                     } else {
                         Some(value)
                     };
-                    if self.is_sub_table {
-                        array_response.edited_value = Some(FlatJsonValue { pointer: pointer.clone(), value: value.clone() });
-                    }
                     let (_, row_index, _) = editing_index.unwrap();
-                    self.update_value(FlatJsonValue { pointer, value }, row_index, true);
+                    if self.is_sub_table {
+                        let mut updated_pointer = pointer.clone();
+                        self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
+
+                        let mut entries = self.nodes.iter().flat_map(|row| row.entries.clone()).collect::<Vec<FlatJsonValue<String>>>();
+                        let mut parent_pointer = PointerKey {
+                            pointer: String::new(),
+                            value_type: ValueType::Array(self.nodes.len()),
+                            depth: 0,
+                            index: 0,
+                            position: 0,
+                        };
+                        entries.push(FlatJsonValue{ pointer: parent_pointer.clone(), value: None });
+                        let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
+                        parent_pointer.pointer = self.parent_pointer.clone();
+                        array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+                    } else {
+                        self.update_value(FlatJsonValue { pointer, value }, row_index, true);
+                    }
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -616,10 +631,12 @@ impl ArrayTable {
         if let Some(entry) = self.nodes[row_index].entries.iter_mut().find(|entry| entry.pointer.pointer.eq(&updated_entry.pointer.pointer)) {
             entry.value = updated_entry.value;
         } else {
-            self.nodes[row_index].entries.push(FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
+            let mut entries = &mut self.nodes[row_index].entries;
+            entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
         }
         if !self.is_sub_table {
             let root_node = self.nodes[row_index].entries.pop().unwrap();
+            println!("rootnode {}", root_node.pointer.pointer);
             let value1 = serialize_to_json_with_option::<String>(
                 &mut self.nodes[row_index].entries.clone(),
                 root_node.pointer.depth + 1);
