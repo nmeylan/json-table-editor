@@ -12,6 +12,7 @@ use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseResult, PointerKey, ValueType};
+use json_flat_parser::serializer::serialize_to_json_with_option;
 
 use crate::{ArrayResponse, concat_string, Window};
 use crate::components::icon;
@@ -582,7 +583,7 @@ impl ArrayTable {
                         array_response.edited_value = Some(FlatJsonValue { pointer: pointer.clone(), value: value.clone() });
                     }
                     let (_, row_index, _) = editing_index.unwrap();
-                    self.update_value(FlatJsonValue { pointer, value}, row_index, true);
+                    self.update_value(FlatJsonValue { pointer, value }, row_index, true);
                 }
                 if self.hovered_row_index != hovered_row_index {
                     self.hovered_row_index = hovered_row_index;
@@ -618,11 +619,11 @@ impl ArrayTable {
             self.nodes[row_index].entries.push(FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
         }
         if !self.is_sub_table {
-            let root_pointer = concat_string!(&self.parent_pointer, "/", row_index.to_string());
-            if let Some(entry) = self.nodes[row_index].entries.pop() {
-                // let value1 = JSONParser::serialize(&mut self.nodes[row_index].entries);
-                println!("{:?}", entry.value);
-            }
+            let root_node = self.nodes[row_index].entries.pop().unwrap();
+            let value1 = serialize_to_json_with_option::<String>(
+                &mut self.nodes[row_index].entries.clone(),
+                root_node.pointer.depth + 1);
+            self.nodes[row_index].entries.push(FlatJsonValue { pointer: root_node.pointer, value: Some(value1.to_json()) });
         }
     }
 

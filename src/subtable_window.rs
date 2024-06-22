@@ -1,5 +1,7 @@
 use egui::{Context, Resize, Ui};
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
+use json_flat_parser::lexer::Lexer;
+use json_flat_parser::parser::Parser;
 use crate::array_table::{ArrayTable};
 use crate::{ArrayResponse, View};
 use crate::object_table::ObjectTable;
@@ -17,7 +19,7 @@ impl SubTable {
         if matches!(parent_value_type, ValueType::Array(_)) {
 
             let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth).max_depth(10);
-            let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
+            let result = Self::parse(&content, &options);
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
             let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone(), parent_value_type);
             array_table.is_sub_table = true;
@@ -29,7 +31,7 @@ impl SubTable {
             }
         } else {
             let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(name.clone()).start_depth(depth).prefix(name.clone()).max_depth(10);
-            let mut result = JSONParser::parse(content.as_str(), options).unwrap().to_owned();
+            let result = Self::parse(&content, &options);
             Self {
                 name: name.clone(),
                 array_table: None,
@@ -37,6 +39,14 @@ impl SubTable {
                 row_index: index_in_json_entries_array,
             }
         }
+    }
+
+    fn parse(content: &String, options: &ParseOptions) -> ParseResult<String> {
+        let mut lexer = Lexer::new(content.as_str().as_bytes());
+        let mut parser = Parser::new(&mut lexer);
+        parser.state_seen_start_parse_at = true;
+        let result = parser.parse(&options, options.start_depth).unwrap().to_owned();
+        result
     }
     pub(crate) fn name(&self) -> &String {
         &self.name
