@@ -20,9 +20,7 @@
 
 Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps
 
-
-
-https://github.com/nmeylan/json-table-editor/assets/1909074/3e7deb79-96b3-4c9e-ba11-064949f27520
+![view demo video](https://github.com/nmeylan/json-table-editor/blob/master/github/json-table-editor-alpha-2024-06-23.mp4)
 
 
 ## Performance and Memory usage
