@@ -360,7 +360,7 @@ impl ArrayTable {
                     table = table.scroll_to_row(self.scroll_to_row.parse::<usize>().unwrap_or_else(|_| {
                         self.scroll_to_row.clear();
                         0
-                    }), Some(Align::Center));
+                    }), Some(Align::TOP));
                 }
                 ScrollToRowMode::MatchingTerm => {
                     if changed_scroll_to_row_value.elapsed().as_millis() >= 300 {

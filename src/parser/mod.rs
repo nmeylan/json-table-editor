@@ -192,6 +192,7 @@ const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
 #[cfg(not(windows))]
 const LINE_ENDING: &'static [u8] = ",\n".as_bytes();
 pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>, file_path: &Path) -> std::io::Result<()> {
+    let start = Instant::now();
     let mut file = fs::File::create(&file_path)?;
     let mut file = BufWriter::new(file);
     if !parent_pointer.is_empty() {
@@ -232,7 +233,9 @@ pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>,
             }
         }
     }
-    file.flush()
+    file.flush()?;
+    println!("serialize and save file took {}ms", start.elapsed().as_millis());
+    Ok(())
 }
 
 pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntries<String>>, prefix: &str, filters: &HashMap<String, Vec<String>>) -> Vec<usize> {
