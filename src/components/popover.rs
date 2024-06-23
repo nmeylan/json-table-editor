@@ -1,7 +1,11 @@
+/// Heavily inspired from egui codebase
+///
+/// Credit egui_extras: https://github.com/emilk/egui
+/// Modification are:
+/// - Open popover when clicking on a button
 use egui::{InnerResponse, Response, ScrollArea, Ui, WidgetInfo, WidgetType};
 
 use egui::{*};
-
 
 pub struct PopupMenu {
     id_source: Id,

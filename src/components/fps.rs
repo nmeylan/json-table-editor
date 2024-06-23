@@ -1,3 +1,5 @@
+/// Heavily inspired from egui codebase
+///
 use egui::util::History;
 
 pub struct FrameHistory {

@@ -1,6 +1,9 @@
-//! Credit egui_extras
-//! This file bring following modification
-//! - add_empty() method to create empty column, in a fast manner, without interaction, thus not requiring id
+/// Heavily inspired from egui codebase
+///
+/// Credit egui_extras: https://github.com/emilk/egui
+/// Modifications are:
+/// - Do not render non visibile columns
+/// - Optimization for empty cell
 
 
 /// Size hint for table column/strip cell.
