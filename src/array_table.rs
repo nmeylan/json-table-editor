@@ -134,8 +134,8 @@ pub struct ArrayTable {
 impl super::View<ArrayResponse> for ArrayTable {
     fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
         use egui_extras::{Size, StripBuilder};
-        self.windows(ui.ctx());
         let mut array_response = ArrayResponse::default();
+        self.windows(ui.ctx(), &mut array_response);
         StripBuilder::new(ui)
             .size(Size::remainder())
             .vertical(|mut strip| {
@@ -173,7 +173,7 @@ impl super::View<ArrayResponse> for ArrayTable {
                                 scroll_area = scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
                             }
                             scroll_area.show(ui, |ui| {
-                                array_response = self.table_ui(ui, false);
+                                array_response = array_response.union(self.table_ui(ui, false));
                             });
                         });
                     });
@@ -243,7 +243,7 @@ impl ArrayTable {
             is_sub_table: false,
         }
     }
-    pub fn windows(&mut self, ctx: &Context) {
+    pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
         let mut closed_windows = vec![];
         let mut updated_values = vec![];
         for window in self.windows.iter_mut() {
@@ -261,7 +261,9 @@ impl ArrayTable {
             }
         }
         for updated_value in updated_values {
-            self.update_value(updated_value.0, updated_value.1, updated_value.2);
+            if self.update_value(updated_value.0.clone(), updated_value.1, updated_value.2) {
+                array_response.edited_value = Some(updated_value.0.clone())
+            }
         }
         self.windows.retain(|w| !closed_windows.contains(w.name()));
     }
@@ -641,7 +643,10 @@ impl ArrayTable {
                             array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
                         }
                     } else {
-                        self.update_value(FlatJsonValue { pointer, value }, row_index, true);
+                        let value_changed = self.update_value(FlatJsonValue { pointer: pointer.clone(), value: value.clone() }, row_index, true);
+                        if value_changed {
+                            array_response.edited_value = Some(FlatJsonValue { pointer, value });
+                        }
                     }
                 }
                 if self.hovered_row_index != hovered_row_index {

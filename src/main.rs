@@ -8,7 +8,7 @@ pub mod parser;
 mod object_table;
 pub mod fonts;
 
-use std::{env, fs, io};
+use std::{env, fs, io, mem};
 
 use std::collections::{BTreeSet};
 use std::fs::File;
@@ -25,7 +25,7 @@ use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, Valu
 use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
-use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER};
+use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER, FOLDER_OPEN, SAVE};
 
 /// Something to view in the demo windows
 pub trait View<R> {
@@ -46,9 +46,19 @@ pub trait Window {
     fn show(&mut self, ctx: &egui::Context, open: &mut bool);
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct ArrayResponse {
-    pub (crate) edited_value: Option<FlatJsonValue<String>>,
+    pub(crate) edited_value: Option<FlatJsonValue<String>>,
+}
+
+impl ArrayResponse {
+    pub fn union(&mut self, other: ArrayResponse) -> Self {
+        let mut new_response = mem::take(self);
+        if (new_response.edited_value.is_none() && other.edited_value.is_some()) {
+            new_response.edited_value = other.edited_value;
+        }
+        new_response
+    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -95,6 +105,8 @@ struct MyApp {
     parsing_invalid_pointers: Vec<String>,
     selected_pointer: Option<String>,
     min_depth: u8,
+    unsaved_changes: bool,
+    show_fps: bool
 }
 
 impl MyApp {
@@ -128,6 +140,8 @@ impl MyApp {
             parsing_invalid_pointers: vec![],
             selected_pointer: None,
             min_depth: 0,
+            unsaved_changes: false,
+            show_fps: true,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -207,6 +221,14 @@ impl MyApp {
                 .map(|entry| entry.pointer.pointer.clone()).collect();
         }
     }
+
+    fn file_picker(&mut self) {
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
+            self.selected_file = Some(path);
+            self.should_parse_again = true;
+            self.table = None;
+        }
+    }
 }
 
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
@@ -221,15 +243,30 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        self.frame_history
-            .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
+        let mut title = format!("json table editor - {}{}",
+                                self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()),
+                                if self.unsaved_changes { " *" } else { "" }
+        );
+
+        if self.show_fps {
+            self.frame_history
+                .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
+            title = format!("{} - {:.2}", title, self.frame_history.fps())
+        }
+
         ctx.send_viewport_cmd_to(
             ctx.parent_viewport_id(),
-            egui::ViewportCommand::Title(format!("{} - {}", self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()), self.frame_history.fps())),
+            egui::ViewportCommand::Title(title),
         );
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
+                if self.table.is_some() {
+                    if icon::button(ui, FOLDER_OPEN).clicked() {
+                        self.file_picker();
+                    }
+                    if icon::button(ui, SAVE).clicked() {}
+                }
                 if let Some(ref mut table) = self.table {
                     let slider_response = ui.add(
                         egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
@@ -347,7 +384,10 @@ impl eframe::App for MyApp {
             });
 
             if let Some(ref mut table) = self.table {
-                table.ui(ui);
+                let response1 = table.ui(ui);
+                if response1.edited_value.is_some() {
+                    self.unsaved_changes = true;
+                }
             } else if self.selected_file.is_none() {
                 ui.allocate_ui_at_rect(ui.max_rect(),
                                        |ui| {
@@ -355,10 +395,7 @@ impl eframe::App for MyApp {
                                                ui.heading("Select or drop a json file")
                                            });
                                            if response.inner.clicked() {
-                                               if let Some(path) = rfd::FileDialog::new().pick_file() {
-                                                   self.selected_file = Some(path);
-                                                   self.should_parse_again = true;
-                                               }
+                                               self.file_picker();
                                            }
                                        },
                 );
