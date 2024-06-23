@@ -37,7 +37,10 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
             let mut parse_result = previous_parse_result.clone_except_json();
             parse_result.json = mem::take(&mut json_array_entry.entries);
             let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
+            let last_index = parse_result.json.len().max(1) - 1;
             JSONParser::change_depth_owned(&mut parse_result, options).unwrap();
+            let new_last_index = parse_result.json.len().max(1) - 1;
+            parse_result.json.swap(last_index, new_last_index);
             let mut vec = parse_result.json;
 
             for j in 0..vec.len() {
@@ -145,8 +148,11 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                             seen_count: 1,
                             order: unique_keys.len(),
                         };
-                        if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
-                            column.seen_count += 1;
+                        if let Some(existing_column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                            existing_column.seen_count += 1;
+                            if existing_column.value_type.eq(&ValueType::Null) {
+                                existing_column.value_type = column.value_type;
+                            }
                         } else {
                             unique_keys.push(column);
                         }
@@ -198,7 +204,7 @@ pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntries<String>>, pre
                     break;
                 }
                 if !filters_clone.is_empty() {
-                    if !filters_clone.contains(entry.value.as_ref().unwrap()) {
+                    if entry.value.as_ref().is_none() || !filters_clone.contains(entry.value.as_ref().unwrap()) {
                         should_add_row = false;
                         break;
                     }

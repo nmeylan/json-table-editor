@@ -200,6 +200,7 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &S
                 }
             })
         }
+        unique_values.sort_by(|a, b| a.cmp(b));
         unique_values
     }
 }
