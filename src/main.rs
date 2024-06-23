@@ -26,6 +26,7 @@ use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER, FOLDER_OPEN, SAVE};
+use crate::parser::save_to_file;
 
 /// Something to view in the demo windows
 pub trait View<R> {
@@ -254,20 +255,38 @@ impl eframe::App for MyApp {
             title = format!("{} - {:.2}", title, self.frame_history.fps())
         }
 
-        ctx.send_viewport_cmd_to(
-            ctx.parent_viewport_id(),
-            egui::ViewportCommand::Title(title),
-        );
+        ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title), );
+
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if self.table.is_some() {
-                    if icon::button(ui, FOLDER_OPEN).clicked() {
-                        self.file_picker();
-                    }
-                    if icon::button(ui, SAVE).clicked() {}
+                    ui.menu_button("File", |ui| {
+                        ui.set_min_width(220.0);
+                        ui.style_mut().wrap = Some(false);
+                        if ui.button("Open json file").clicked() {
+                            ui.close_menu();
+                            self.file_picker();
+                        }
+                        ui.separator();
+                        if ui.button("Save").clicked() {
+                            ui.close_menu();
+                            let table = self.table.as_ref().unwrap();
+                            save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+                        }
+                        ui.separator();
+                        if ui.button("Save as").clicked() {
+                            ui.close_menu();
+                            if let Some(path) = rfd::FileDialog::new().save_file() {
+                                self.selected_file = Some(path);
+                                let table = self.table.as_ref().unwrap();
+                                save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+                            }
+                        }
+                    });
                 }
                 if let Some(ref mut table) = self.table {
+                    ui.separator();
                     let slider_response = ui.add(
                         egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
                     );
@@ -294,8 +313,8 @@ impl eframe::App for MyApp {
                             let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
                             let scroll_to_row_response = ui.add(text_edit);
                             if !table.matching_rows.is_empty() {
-                                let response_prev = icon::button(ui, CHEVRON_UP);
-                                let response_next = icon::button(ui, CHEVRON_DOWN);
+                                let response_prev = icon::button(ui, CHEVRON_UP, "Previous occurrence");
+                                let response_next = icon::button(ui, CHEVRON_DOWN, "Next occurrence");
                                 ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
 
                                 if response_prev.clicked() {

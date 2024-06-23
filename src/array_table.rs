@@ -108,7 +108,7 @@ pub struct ArrayTable {
     columns_filter: HashMap<String, Vec<String>>,
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
-    parent_pointer: String,
+    pub parent_pointer: String,
     parent_value_type: ValueType,
     windows: Vec<SubTable>,
     pub(crate) is_sub_table: bool,
@@ -417,13 +417,13 @@ impl ArrayTable {
                                 if column.name.eq("") {
                                     return;
                                 }
-                                let response = icon::button(ui, THUMBTACK);
+                                let response = icon::button(ui, THUMBTACK, if pinned_column_table { "Unpin column" } else { "Pin column to left" });
                                 if response.clicked() {
                                     pinned_column = Some(index);
                                 }
                                 let column_id = Id::new(&name);
                                 PopupMenu::new(column_id.with("filter"))
-                                    .show_ui(ui, |ui| icon::button(ui, FILTER),
+                                    .show_ui(ui, |ui| icon::button(ui, FILTER, "Filter column by"),
                                              |ui| {
                                                  let mut checked_filtered_values = self.columns_filter.get(&column.name);
                                                  let mut chcked = if let Some(filters) = checked_filtered_values {
@@ -758,7 +758,7 @@ impl ArrayTable {
     }
 
     #[inline]
-    fn nodes(&self) -> &Vec<JsonArrayEntries<String>> {
+    pub(crate) fn nodes(&self) -> &Vec<JsonArrayEntries<String>> {
         &self.nodes
     }
 

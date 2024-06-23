@@ -1,10 +1,14 @@
 pub mod read_file;
 
 use std::collections::HashMap;
-use std::mem;
+use std::{fs, mem};
+use std::fmt::format;
+use std::io::{BufWriter, Write};
+use std::path::Path;
 use std::sync::{Arc, Mutex, RwLock};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+use egui::TextBuffer;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use rayon::iter::ParallelIterator;
 use rayon::iter::IndexedParallelIterator;
@@ -181,6 +185,54 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
     res.reverse();
     unique_keys.sort();
     Ok((res, unique_keys))
+}
+
+#[cfg(windows)]
+const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
+#[cfg(not(windows))]
+const LINE_ENDING: &'static [u8] = ",\n".as_bytes();
+pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>, file_path: &Path) -> std::io::Result<()> {
+    let mut file = fs::File::create(&file_path)?;
+    let mut file = BufWriter::new(file);
+    if !parent_pointer.is_empty() {
+        let split = parent_pointer.split("/");
+        for frag in split {
+            if frag.len() == 0 {
+                continue;
+            }
+            let b = &frag.as_bytes()[0];
+            if *b >= 0x30 && *b <= 0x39 {
+                file.write("[".as_bytes()).unwrap();
+            } else {
+                file.write(format!("{{\"{}\":", frag).as_bytes()).unwrap();
+            }
+        }
+    }
+    file.write("[".as_bytes()).unwrap();
+    for (i, entry) in array.iter().enumerate() {
+        if let Some(serialized_entry) = entry.entries.last() {
+            file.write_all(serialized_entry.value.as_ref().unwrap().as_bytes()).unwrap();
+            if i < array.len() - 1 {
+                file.write(LINE_ENDING).unwrap();
+            }
+        }
+    }
+    file.write("]".as_bytes()).unwrap();
+    if !parent_pointer.is_empty() {
+        let split = parent_pointer.split("/");
+        for frag in split {
+            if frag.len() == 0 {
+                continue;
+            }
+            let b = &frag.as_bytes()[0];
+            if *b >= 0x30 && *b <= 0x39 {
+                file.write("]".as_bytes()).unwrap();
+            } else {
+                file.write("}".as_bytes()).unwrap();
+            }
+        }
+    }
+    file.flush()
 }
 
 pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntries<String>>, prefix: &str, filters: &HashMap<String, Vec<String>>) -> Vec<usize> {
