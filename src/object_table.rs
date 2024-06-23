@@ -83,11 +83,27 @@ impl ObjectTable {
                         let rect = ui.available_rect_before_wrap();
                         let cell_zone = ui.interact(rect, Id::new(&entry.pointer.pointer), Sense::click());
                         let response = entry.value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
-                            .unwrap_or_else(|| ui.label(""));
-                        if cell_zone.clicked() || response.clicked() {
+                            .unwrap_or_else(|| ui.label("")).union(cell_zone);
+                        if response.double_clicked() {
                             *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or(String::new());
                             *editing_index = Some(row_index);
                         }
+                        response.context_menu(|ui| {
+                            if ui.button("Edit").clicked() {
+                                *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or(String::new());
+                                *editing_index = Some(row_index);
+                                ui.close_menu();
+                            }
+                            if ui.button("Copy").clicked() {
+                                ui.ctx().copy_text(entry.value.clone().unwrap_or(String::new()));
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if ui.button("Copy pointer").clicked() {
+                                ui.ctx().copy_text(entry.pointer.pointer.clone());
+                                ui.close_menu();
+                            }
+                        });
                         Some(response)
                     }
                 });

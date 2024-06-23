@@ -489,10 +489,10 @@ impl ArrayTable {
                     let row_index = self.filtered_nodes[row.index()];
                     let node = self.nodes().get(row_index);
 
-                    if let Some(data) = node.as_ref() {
+                    if let Some(row_data) = node.as_ref() {
                         row.cols(false, |ui, col_index| {
                             let cell_id = row_index * columns.len() + col_index + if pinned_column_table { self.seed1 } else { self.seed2 };
-                            let data = self.get_pointer(columns, &data.entries(), col_index, data.index());
+                            let cell_data = self.get_pointer(columns, &row_data.entries(), col_index, row_data.index());
                             let mut editing_index = self.editing_index.borrow_mut();
                             if editing_index.is_some() && editing_index.unwrap() == (col_index, row_index, pinned_column_table) {
                                 let ref_mut = &mut *self.editing_value.borrow_mut();
@@ -509,7 +509,7 @@ impl ArrayTable {
                                 } else {
                                     textedit_response.request_focus();
                                 }
-                            } else if let Some(entry) = data {
+                            } else if let Some(entry) = cell_data {
                                 let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                                 let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                                 if pinned_column_table && col_index == 0 {
@@ -527,46 +527,86 @@ impl ArrayTable {
                                         let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
                                         label = label.sense(Sense::click());
-                                        let response = label.ui(ui);
-                                        if cell_zone.clicked() || response.clicked() {
+                                        let response = label.ui(ui).union(cell_zone);
+                                        if response.double_clicked() {
+                                            *self.editing_value.borrow_mut() = value.clone();
+                                            *editing_index = Some((col_index, row_index, pinned_column_table));
+                                        }
+                                        response.context_menu(|ui| {
+                                            if ui.button("Edit").clicked() {
+                                                *self.editing_value.borrow_mut() = value.clone();
+                                                *editing_index = Some((col_index, row_index, pinned_column_table));
+                                                ui.close_menu();
+                                            }
+                                            if ui.button("Copy").clicked() {
+                                                ui.ctx().copy_text(value.clone());
+                                                ui.close_menu();
+                                            }
                                             let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                                             let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                                             if is_array || is_object {
-                                                let content = value.clone();
-                                                subtable = Some(SubTable::new(entry.pointer.pointer.clone(), content,
-                                                                              if matches!(entry.pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
-                                                                              row_index, entry.pointer.depth,
-                                                ));
-                                            } else {
-                                                *self.editing_value.borrow_mut() = value.clone();
-                                                *editing_index = Some((col_index, row_index, pinned_column_table));
+                                                ui.separator();
+                                                if ui.button(format!("Open {} in sub table", if is_array { "array" } else { "object" })).clicked() {
+                                                    ui.close_menu();
+                                                    let content = value.clone();
+                                                    subtable = Some(SubTable::new(entry.pointer.pointer.clone(), content,
+                                                                                  if matches!(entry.pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
+                                                                                  row_index, entry.pointer.depth,
+                                                    ));
+                                                }
                                             }
-                                        }
-                                        if cell_zone.hovered() || response.hovered() {
-                                            if matches!(entry.pointer.value_type, ValueType::Array(_)) || matches!(entry.pointer.value_type, ValueType::Object(_)) {
-                                                ui.ctx().set_cursor_icon(CursorIcon::ZoomIn);
+                                            if !self.is_sub_table {
+                                                ui.separator();
+                                                if ui.button(format!("Open row in sub table")).clicked() {
+                                                    ui.close_menu();
+                                                    let root_node = row_data.entries.last().unwrap();
+                                                    subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
+                                                                                  ValueType::Object(true),
+                                                                                  row_index, root_node.pointer.depth,
+                                                    ));
+                                                }
                                             }
+                                            ui.separator();
+                                            if ui.button("Copy pointer").clicked() {
+                                                ui.ctx().copy_text(entry.pointer.pointer.clone());
+                                                ui.close_menu();
+                                            }
+                                        });
+                                        if response.hovered() {
+                                            ui.ctx().set_cursor_icon(CursorIcon::Cell);
                                         }
-                                        return Some(response.union(cell_zone));
-                                    }
-                                } else {
-                                    let rect = ui.available_rect_before_wrap();
-                                    let cell_zone = ui.interact(rect, Id::new(&entry.pointer.pointer), Sense::click());
-                                    if cell_zone.clicked() {
-                                        *self.editing_value.borrow_mut() = String::new();
-                                        *editing_index = Some((col_index, row_index, pinned_column_table));
+                                        return Some(response);
                                     }
                                 }
-                            } else {
-                                let rect = ui.available_rect_before_wrap();
-                                let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
-                                if cell_zone.clicked() {
+                            }
+                            let rect = ui.available_rect_before_wrap();
+                            let response = ui.interact(rect, Id::new(cell_id), Sense::click());
+                            if response.double_clicked() {
+                                *self.editing_value.borrow_mut() = String::new();
+                                *editing_index = Some((col_index, row_index, pinned_column_table));
+                            }
+                            response.context_menu(|ui| {
+                                if ui.button("Edit").clicked() {
                                     *self.editing_value.borrow_mut() = String::new();
                                     *editing_index = Some((col_index, row_index, pinned_column_table));
+                                    ui.close_menu();
                                 }
-                                return Some(cell_zone);
+                                if !self.is_sub_table {
+                                    ui.separator();
+                                    if ui.button(format!("Open row in sub table")).clicked() {
+                                        ui.close_menu();
+                                        let root_node = row_data.entries.last().unwrap();
+                                        subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
+                                                                      ValueType::Object(true),
+                                                                      row_index, root_node.pointer.depth,
+                                        ));
+                                    }
+                                }
+                            });
+                            if response.hovered() {
+                                ui.ctx().set_cursor_icon(CursorIcon::Cell);
                             }
-                            None
+                            return Some(response);
                         });
                     }
                 });
@@ -661,7 +701,7 @@ impl ArrayTable {
             self.nodes[row_index].entries.clear();
             self.nodes[row_index].entries.push(line_number_entry);
             self.nodes[row_index].entries.extend(result.json);
-            self.nodes[row_index].entries.push(FlatJsonValue{pointer: root_node.pointer, value: Some(new_root_node_serialized_json)});
+            self.nodes[row_index].entries.push(FlatJsonValue { pointer: root_node.pointer, value: Some(new_root_node_serialized_json) });
         }
         value_changed
     }
