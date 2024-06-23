@@ -2,18 +2,18 @@ pub mod read_file;
 
 use std::collections::HashMap;
 use std::{fs, mem};
-use std::fmt::format;
+
 use std::io::{BufWriter, Write};
 use std::path::Path;
-use std::sync::{Arc, Mutex, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
 use std::time::Instant;
-use egui::TextBuffer;
+
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use rayon::iter::ParallelIterator;
 use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
-use rayon::prelude::{ParallelSlice, ParallelSliceMut};
+use rayon::prelude::{ParallelSliceMut};
 use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
 #[macro_export]
 macro_rules! concat_string {
@@ -31,19 +31,19 @@ macro_rules! concat_string {
 
 pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_array: Vec<JsonArrayEntries<String>>, depth: usize) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>, usize), String> {
     let mut len = json_array.len();
-    let mut new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
-    let start = Instant::now();
+    let new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
+    let _start = Instant::now();
     if len < 8 {
         len = 8;
     }
-    let mut chunks = json_array.par_chunks_mut(len / 8);
+    let chunks = json_array.par_chunks_mut(len / 8);
 
-    let unique_keys_by_chunks = chunks.into_par_iter().map(|mut chunk| {
+    let unique_keys_by_chunks = chunks.into_par_iter().map(|chunk| {
         let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
         for json_array_entry in chunk {
             let mut parse_result = previous_parse_result.clone_except_json();
             parse_result.json = mem::take(&mut json_array_entry.entries);
-            let mut options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
+            let options = ParseOptions::default().parse_array(false).max_depth(depth as u8);
             let last_index = parse_result.json.len().max(1) - 1;
             JSONParser::change_depth_owned(&mut parse_result, options).unwrap();
             let new_last_index = parse_result.json.len().max(1) - 1;
@@ -53,7 +53,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
             for j in 0..vec.len() {
                 let entry = &mut vec[j];
                 let _i = json_array_entry.index.to_string();
-                let (prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+                let prefix_len = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                     let prefix = concat_string!(started_parsing_at, "/", _i);
                     prefix.len()
                 } else if let Some(ref prefix) = previous_parse_result.parsing_prefix {
@@ -78,10 +78,8 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
                     };
                     if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
                         column.seen_count += 1;
-                    } else {
-                        if !column.name.contains("#") {
-                            unique_keys.push(column);
-                        }
+                    } else if !column.name.contains('#') {
+                        unique_keys.push(column);
                     }
                 }
                 entry.pointer.index = json_array_entry.index;
@@ -96,10 +94,8 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
         for column_chunk in unique_keys_chunk {
             if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column_chunk)) {
                 column.seen_count += column_chunk.seen_count;
-            } else {
-                if !column_chunk.name.contains("#") {
-                    unique_keys.push(column_chunk);
-                }
+            } else if !column_chunk.name.contains('#') {
+                unique_keys.push(column_chunk);
             }
         }
     }
@@ -120,7 +116,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
     let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
     let mut res: Vec<JsonArrayEntries<String>> = Vec::with_capacity(root_array_len);
     let mut j = previous_parse_result.json.len() - 1;
-    let mut estimated_capacity = 16;
+    let estimated_capacity = 16;
     for i in (0..root_array_len).rev() {
         let mut flat_json_values: Vec<FlatJsonValue<String>> = Vec::with_capacity(estimated_capacity);
         let mut is_first_entry = true;
@@ -193,15 +189,15 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
 #[cfg(windows)]
 const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
 #[cfg(not(windows))]
-const LINE_ENDING: &'static [u8] = ",\n".as_bytes();
+const LINE_ENDING: &[u8] = ",\n".as_bytes();
 pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>, file_path: &Path) -> std::io::Result<()> {
     let start = Instant::now();
-    let mut file = fs::File::create(&file_path)?;
+    let file = fs::File::create(file_path)?;
     let mut file = BufWriter::new(file);
     if !parent_pointer.is_empty() {
-        let split = parent_pointer.split("/");
+        let split = parent_pointer.split('/');
         for frag in split {
-            if frag.len() == 0 {
+            if frag.is_empty() {
                 continue;
             }
             let b = &frag.as_bytes()[0];
@@ -223,9 +219,9 @@ pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>,
     }
     file.write("]".as_bytes()).unwrap();
     if !parent_pointer.is_empty() {
-        let split = parent_pointer.split("/");
+        let split = parent_pointer.split('/');
         for frag in split {
-            if frag.len() == 0 {
+            if frag.is_empty() {
                 continue;
             }
             let b = &frag.as_bytes()[0];
@@ -261,11 +257,9 @@ pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntries<String>>, pre
                     should_add_row = false;
                     break;
                 }
-                if !filters_clone.is_empty() {
-                    if entry.value.as_ref().is_none() || !filters_clone.contains(entry.value.as_ref().unwrap()) {
-                        should_add_row = false;
-                        break;
-                    }
+                if !filters_clone.is_empty() && (entry.value.as_ref().is_none() || !filters_clone.contains(entry.value.as_ref().unwrap())) {
+                    should_add_row = false;
+                    break;
                 }
             } else {
                 should_add_row = false;

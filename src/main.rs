@@ -8,7 +8,7 @@ pub mod parser;
 mod object_table;
 pub mod fonts;
 
-use std::{env, fs, io, mem};
+use std::{env, mem};
 
 use std::collections::{BTreeSet};
 use std::fs::File;
@@ -20,12 +20,12 @@ use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::{CreationContext, NativeOptions};
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, Id, ImageSource, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
-use crate::panels::{SelectColumnsPanel, SelectColumnsPanel_id};
+use egui::{Align2, Button, Color32, ComboBox, Context, Id, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
+use crate::panels::{SelectColumnsPanel};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
-use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, FILTER, FOLDER_OPEN, SAVE};
+use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::parser::save_to_file;
 
 /// Something to view in the demo windows
@@ -55,7 +55,7 @@ struct ArrayResponse {
 impl ArrayResponse {
     pub fn union(&mut self, other: ArrayResponse) -> Self {
         let mut new_response = mem::take(self);
-        if (new_response.edited_value.is_none() && other.edited_value.is_some()) {
+        if new_response.edited_value.is_none() && other.edited_value.is_some() {
             new_response.edited_value = other.edited_value;
         }
         new_response
@@ -190,7 +190,7 @@ impl MyApp {
             if let Some(ref start_at) = self.selected_pointer {
                 options = options.start_parse_at(start_at.clone());
             }
-            let mut result = JSONParser::parse(content.as_mut_str(), options).unwrap().to_owned();
+            let result = JSONParser::parse(content.as_mut_str(), options).unwrap().to_owned();
             let parsing_max_depth = result.parsing_max_depth;
             println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
             let parse_result = result.clone_except_json();
@@ -200,7 +200,7 @@ impl MyApp {
             println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
 
             let max_depth = parse_result.max_json_depth;
-            let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth as u8);
+            let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth);
             let mut prefix = "".to_owned();
             if let Some(ref start_at) = self.selected_pointer {
                 prefix = start_at.clone();
@@ -216,7 +216,7 @@ impl MyApp {
             self.selected_pointer = None;
         } else {
             let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
-            let mut result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
+            let result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
             self.should_parse_again = true;
             self.parsing_invalid = true;
             self.parsing_invalid_pointers = result.json.iter()
@@ -429,10 +429,8 @@ impl eframe::App for MyApp {
                         self.parsing_invalid_pointers.iter().for_each(|pointer| {
                             if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
                                 ui.radio(true, pointer.as_str());
-                            } else {
-                                if ui.radio(false, pointer.as_str()).clicked() {
-                                    self.selected_pointer = Some(pointer.clone());
-                                }
+                            } else if ui.radio(false, pointer.as_str()).clicked() {
+                                self.selected_pointer = Some(pointer.clone());
                             }
                         });
                         let sense = if self.selected_pointer.is_none() {
@@ -456,7 +454,7 @@ impl eframe::App for MyApp {
                 }
                 // });
             }
-        }).response;
+        });
     }
 }
 

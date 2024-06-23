@@ -423,8 +423,8 @@ impl<'l> StripLayout<'l> {
         }
 
         let response = if let Some(add_cell_contents) = add_cell_contents {
-            let response = add_cell_contents(&mut child_ui, cell_index);
-            response
+            
+            add_cell_contents(&mut child_ui, cell_index)
         } else {
             None
         };
@@ -1493,7 +1493,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
     ///
     /// Returns the used space (`min_rect`) plus the [`Response`] of the whole cell.
     #[cfg_attr(debug_assertions, track_caller)]
-    pub fn col(&mut self, mut add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> (Rect, Response) {
+    pub fn col(&mut self, add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> (Rect, Response) {
         let col_index = self.col_index;
 
         let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
@@ -1506,7 +1506,6 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 "Added more `Table` columns than were pre-allocated ({} pre-allocated)",
                 self.widths.len()
             );
-            8.0 // anything will look wrong, so pick something that is obviously wrong
         };
 
         let width = CellSize::Absolute(width);

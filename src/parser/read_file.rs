@@ -13,9 +13,9 @@ impl<R: Read> LfToCrlfReader<R> {
 }
 
 impl<R: Read> Read for LfToCrlfReader<R> {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut read_bytes = 0;
-        match self.inner.read(&mut buf) {
+        match self.inner.read(buf) {
             Ok(0) => return Ok(0), // End of file
             Ok(n) => {
                 let mut i = 0;

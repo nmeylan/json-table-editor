@@ -52,14 +52,14 @@ impl PopupMenu {
     ) -> InnerResponse<Option<R>> {
         let Self {
             id_source,
-            width,
+            width: _,
             height,
         } = self;
 
         let button_id = ui.make_persistent_id(id_source);
 
         ui.horizontal(|ui| {
-            let mut ir = popup(
+            let ir = popup(
                 ui,
                 button,
                 button_id,
@@ -83,7 +83,7 @@ fn popup<'c, R>(
 ) -> InnerResponse<Option<R>> {
     let popup_id = button_id.with("popup");
 
-    let is_popup_open = ui.memory(|m| m.is_popup_open(popup_id));
+    let _is_popup_open = ui.memory(|m| m.is_popup_open(popup_id));
 
     let popup_height = 100.0;
     // let popup_height = ui.memory(|m| m.areas().get(popup_id).map_or(100.0, |state| state.size.y));

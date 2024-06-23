@@ -1,5 +1,5 @@
-use egui::{Context, Resize, Ui};
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
+use egui::{Context, Ui};
+use json_flat_parser::{FlatJsonValue, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;
 use crate::array_table::{ArrayTable};
@@ -45,7 +45,7 @@ impl SubTable {
         let mut lexer = Lexer::new(content.as_str().as_bytes());
         let mut parser = Parser::new(&mut lexer);
         parser.state_seen_start_parse_at = state_seen_start_parse_at;
-        let result = parser.parse(&options, options.start_depth).unwrap().to_owned();
+        let result = parser.parse(options, options.start_depth).unwrap().to_owned();
         result
     }
     pub(crate) fn name(&self) -> &String {

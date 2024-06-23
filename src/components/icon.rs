@@ -9,6 +9,6 @@ pub fn icon(name: &'static str) -> egui::RichText {
 
 pub fn button(ui: &mut Ui, name: &'static str, tooltip: &str) -> Response {
     let button = Button::new(icon::icon(name));
-    let response = ui.add(button).on_hover_ui(|ui| { ui.label(tooltip); } );
-    response
+    
+    ui.add(button).on_hover_ui(|ui| { ui.label(tooltip); } )
 }

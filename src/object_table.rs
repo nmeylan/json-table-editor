@@ -13,7 +13,7 @@ pub struct ObjectTable {
 
     // Handling interaction
 
-    pub editing_index: RefCell<Option<(usize)>>,
+    pub editing_index: RefCell<Option<usize>>,
     pub editing_value: RefCell<String>,
 }
 
@@ -37,7 +37,7 @@ impl ObjectTable {
         }
     }
 
-    fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) -> ArrayResponse {
+    fn table_ui(&mut self, ui: &mut egui::Ui, _pinned: bool) -> ArrayResponse {
         let text_height = egui::TextStyle::Body
             .resolve(ui.style())
             .size
@@ -85,17 +85,17 @@ impl ObjectTable {
                         let response = entry.value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
                             .unwrap_or_else(|| ui.label("")).union(cell_zone);
                         if response.double_clicked() {
-                            *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or(String::new());
+                            *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                             *editing_index = Some(row_index);
                         }
                         response.context_menu(|ui| {
                             if ui.button("Edit").clicked() {
-                                *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or(String::new());
+                                *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                                 *editing_index = Some(row_index);
                                 ui.close_menu();
                             }
                             if ui.button("Copy").clicked() {
-                                ui.ctx().copy_text(entry.value.clone().unwrap_or(String::new()));
+                                ui.ctx().copy_text(entry.value.clone().unwrap_or_default());
                                 ui.close_menu();
                             }
                             ui.separator();
@@ -122,11 +122,9 @@ impl ObjectTable {
                         entry.value = value.clone();
                         value_changed = true;
                     }
-                } else {
-                    if !value.is_none() {
-                        value_changed = true;
-                        self.nodes.insert(self.nodes.len() - 1, FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() });
-                    }
+                } else if value.is_some() {
+                    value_changed = true;
+                    self.nodes.insert(self.nodes.len() - 1, FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() });
                 }
                 if !value_changed {
                     return;
@@ -146,7 +144,7 @@ impl ObjectTable {
                             array_entries.push(node.clone());
                         }
                     }
-                    let mut parent_pointer = PointerKey {
+                    let parent_pointer = PointerKey {
                         pointer: String::new(),
                         value_type: ValueType::Array(array_entries.len()),
                         depth: 0,
@@ -174,7 +172,7 @@ impl super::View<ArrayResponse> for ObjectTable {
             .vertical(|mut strip| {
                 strip.cell(|ui| {
                     ui.vertical(|ui| {
-                        let mut scroll_area = egui::ScrollArea::horizontal();
+                        let scroll_area = egui::ScrollArea::horizontal();
                         scroll_area.show(ui, |ui| {
                             array_response = self.table_ui(ui, false);
                         });

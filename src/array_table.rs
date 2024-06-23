@@ -13,13 +13,13 @@ use egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
-use json_flat_parser::ValueType::Object;
+
 
 use crate::{ArrayResponse, concat_string, Window};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
-use crate::parser::{change_depth_array, search_occurrences};
+use crate::parser::{search_occurrences};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -74,16 +74,14 @@ impl Ord for Column {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum ScrollToRowMode {
+    #[default]
     RowNumber,
     MatchingTerm,
 }
 
-impl Default for ScrollToRowMode {
-    fn default() -> Self {
-        ScrollToRowMode::RowNumber
-    }
-}
+
 
 impl ScrollToRowMode {
     pub fn as_str(&self) -> &'static str {
@@ -205,7 +203,7 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &S
     }
 }
 
-pub const NON_NULL_FILTER_VALUE: &'static str = "__non_null";
+pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
 
 impl ArrayTable {
     pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
@@ -269,7 +267,7 @@ impl ArrayTable {
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) -> Option<usize> {
-        if depth <= self.last_parsed_max_depth as u8 {
+        if depth <= self.last_parsed_max_depth {
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
@@ -330,11 +328,11 @@ impl ArrayTable {
     }
 
     pub fn row_height(style: &Arc<Style>, spacing: &Spacing) -> f32 {
-        let text_height = egui::TextStyle::Body
+        
+        egui::TextStyle::Body
             .resolve(style)
             .size
-            .max(spacing.interact_size.y);
-        text_height
+            .max(spacing.interact_size.y)
     }
     fn draw_table(&mut self, ui: &mut Ui, text_height: f32, text_width: f32, pinned_column_table: bool) -> ArrayResponse {
         use crate::components::table::{Column, TableBuilder};
@@ -407,7 +405,7 @@ impl ArrayTable {
                 header.cols(true, |ui, index| {
                     let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                     let column = columns.get(index).unwrap();
-                    let name = format!("{}", column.name.clone());
+                    let name = column.name.clone().to_string();
                     let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
                     let label = Label::new(&name);
                     let response = ui.vertical(|ui| {
@@ -426,7 +424,7 @@ impl ArrayTable {
                                 PopupMenu::new(column_id.with("filter"))
                                     .show_ui(ui, |ui| icon::button(ui, FILTER, "Filter column by"),
                                              |ui| {
-                                                 let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                 let checked_filtered_values = self.columns_filter.get(&column.name);
                                                  let mut chcked = if let Some(filters) = checked_filtered_values {
                                                      filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
                                                  } else {
@@ -439,11 +437,11 @@ impl ArrayTable {
                                                  if matches!(column.value_type, ValueType::String) {
                                                      let values = ui.memory_mut(|mem| {
                                                          let cache = mem.caches.cache::<ColumnFilterCache>();
-                                                         let values = cache.get((column, &self.nodes, &self.parent_pointer));
-                                                         values
+                                                         
+                                                         cache.get((column, &self.nodes, &self.parent_pointer))
                                                      });
-                                                     if values.len() > 0 {
-                                                         let mut checked_filtered_values = self.columns_filter.get(&column.name);
+                                                     if !values.is_empty() {
+                                                         let checked_filtered_values = self.columns_filter.get(&column.name);
                                                          ui.separator();
                                                          values.iter().for_each(|value| {
                                                              let mut chcked = if let Some(filters) = checked_filtered_values {
@@ -522,7 +520,7 @@ impl ArrayTable {
                                 } else if let Some(value) = entry.value.as_ref() {
                                     if !matches!(entry.pointer.value_type, ValueType::Null) {
                                         let mut label = if is_array || is_object {
-                                            Label::new(value.replace("\n", "")) // maybe we want cache
+                                            Label::new(value.replace('\n', "")) // maybe we want cache
                                         } else {
                                             Label::new(value)
                                         };
@@ -560,7 +558,7 @@ impl ArrayTable {
                                             }
                                             if !self.is_sub_table {
                                                 ui.separator();
-                                                if ui.button(format!("Open row in sub table")).clicked() {
+                                                if ui.button("Open row in sub table".to_string()).clicked() {
                                                     ui.close_menu();
                                                     let root_node = row_data.entries.last().unwrap();
                                                     subtable = Some(SubTable::new(root_node.pointer.pointer.clone(),
@@ -597,7 +595,7 @@ impl ArrayTable {
                                 }
                                 if !self.is_sub_table {
                                     ui.separator();
-                                    if ui.button(format!("Open row in sub table")).clicked() {
+                                    if ui.button("Open row in sub table".to_string()).clicked() {
                                         ui.close_menu();
                                         let root_node = row_data.entries.last().unwrap();
                                         subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
@@ -610,7 +608,7 @@ impl ArrayTable {
                             if response.hovered() {
                                 ui.ctx().set_cursor_icon(CursorIcon::Cell);
                             }
-                            return Some(response);
+                            Some(response)
                         });
                     }
                 });
@@ -626,7 +624,7 @@ impl ArrayTable {
                     };
                     let (_, row_index, _) = editing_index.unwrap();
                     if self.is_sub_table {
-                        let mut updated_pointer = pointer.clone();
+                        let updated_pointer = pointer.clone();
                         let value_changed = self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
 
                         if value_changed {
@@ -697,12 +695,10 @@ impl ArrayTable {
                 value_changed = true;
                 entry.value = updated_entry.value;
             }
-        } else {
-            if !updated_entry.value.is_none() {
-                value_changed = true;
-                let mut entries = &mut self.nodes[row_index].entries;
-                entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
-            }
+        } else if updated_entry.value.is_some() {
+            value_changed = true;
+            let entries = &mut self.nodes[row_index].entries;
+            entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
         }
         // After update we serialized root element then parse it again so nested serialized object are updated aswellgit
         if value_changed && !self.is_sub_table {
@@ -715,7 +711,7 @@ impl ArrayTable {
                                            ParseOptions::default()
                                                .prefix(root_node.pointer.pointer.clone())
                                                .start_depth(root_node.pointer.depth + 1).parse_array(false)
-                                               .max_depth(self.last_parsed_max_depth as u8)).unwrap().to_owned();
+                                               .max_depth(self.last_parsed_max_depth)).unwrap().to_owned();
             let line_number_entry = mem::take(&mut self.nodes[row_index].entries[0]);
             self.nodes[row_index].entries.clear();
             self.nodes[row_index].entries.push(line_number_entry);
