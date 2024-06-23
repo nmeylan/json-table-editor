@@ -385,6 +385,13 @@ impl eframe::App for MyApp {
                         if Button::new("Parse again").sense(sense).ui(ui).clicked() {
                             self.open_json();
                         }
+                        if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
+                            self.selected_file = None;
+                            self.selected_pointer = None;
+                            self.should_parse_again = true;
+                            self.parsing_invalid = false;
+                            self.parsing_invalid_pointers.clear();
+                        }
                     });
                 } else if self.should_parse_again {
                     self.open_json();
