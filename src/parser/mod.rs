@@ -30,9 +30,12 @@ macro_rules! concat_string {
 
 
 pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_array: Vec<JsonArrayEntries<String>>, depth: usize) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>, usize), String> {
-    let len = json_array.len();
+    let mut len = json_array.len();
     let mut new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
     let start = Instant::now();
+    if len < 8 {
+        len = 8;
+    }
     let mut chunks = json_array.par_chunks_mut(len / 8);
 
     let unique_keys_by_chunks = chunks.into_par_iter().map(|mut chunk| {

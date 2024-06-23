@@ -161,6 +161,7 @@ impl MyApp {
 
         let size = (metadata1.len() / 1024 / 1024) as usize;
         let max_depth = if size < 100 {
+            // 1
             u8::MAX
         } else {
             1 // should start after prefix

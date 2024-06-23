@@ -292,6 +292,7 @@ impl ArrayTable {
             self.column_selected = column_selected;
             self.nodes = new_json_array;
             self.last_parsed_max_depth = depth;
+            self.parse_result.as_mut().unwrap().parsing_max_depth = depth;
             self.parse_result.as_mut().unwrap().max_json_depth = new_max_depth;
             Some(new_max_depth)
         }
@@ -531,6 +532,10 @@ impl ArrayTable {
 
                                         label = label.sense(Sense::click());
                                         let response = label.ui(ui).union(cell_zone);
+
+                                        let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
+                                        let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
+
                                         if response.double_clicked() {
                                             *self.editing_value.borrow_mut() = value.clone();
                                             *editing_index = Some((col_index, row_index, pinned_column_table));
@@ -545,17 +550,12 @@ impl ArrayTable {
                                                 ui.ctx().copy_text(value.clone());
                                                 ui.close_menu();
                                             }
-                                            let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
-                                            let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                                             if is_array || is_object {
                                                 ui.separator();
                                                 if ui.button(format!("Open {} in sub table", if is_array { "array" } else { "object" })).clicked() {
                                                     ui.close_menu();
                                                     let content = value.clone();
-                                                    subtable = Some(SubTable::new(entry.pointer.pointer.clone(), content,
-                                                                                  if matches!(entry.pointer.value_type, ValueType::Array(_)) { ValueType::Array(0) } else { ValueType::Object(true) },
-                                                                                  row_index, entry.pointer.depth,
-                                                    ));
+                                                    subtable = Self::open_subtable(row_index, entry, content);
                                                 }
                                             }
                                             if !self.is_sub_table {
@@ -563,7 +563,8 @@ impl ArrayTable {
                                                 if ui.button(format!("Open row in sub table")).clicked() {
                                                     ui.close_menu();
                                                     let root_node = row_data.entries.last().unwrap();
-                                                    subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
+                                                    subtable = Some(SubTable::new(root_node.pointer.pointer.clone(),
+                                                                                  root_node.value.as_ref().unwrap().clone(),
                                                                                   ValueType::Object(true),
                                                                                   row_index, root_node.pointer.depth,
                                                     ));
@@ -667,6 +668,19 @@ impl ArrayTable {
         array_response
     }
 
+    fn open_subtable(row_index: usize, entry: &FlatJsonValue<String>, content: String) -> Option<SubTable> {
+        // if matches!(entry.pointer.value_type, ValueType::Object(false)) {
+        //     let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(entry.pointer.pointer.clone())
+        //         .start_depth(entry.pointer.depth + 1).prefix(entry.pointer.pointer.clone()).max_depth(10);
+        //     let result = Self::parse(&content, &options, true);
+        //     entry.pointer.value_type = ValueType::Object(true);
+        // }
+        Some(SubTable::new(entry.pointer.pointer.clone(), content,
+                           entry.pointer.value_type,
+                           row_index, entry.pointer.depth,
+        ))
+    }
+
     fn update_value(&mut self, updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) -> bool {
         let mut value_changed = false;
         if should_update_subtable {
@@ -692,7 +706,6 @@ impl ArrayTable {
         }
         // After update we serialized root element then parse it again so nested serialized object are updated aswellgit
         if value_changed && !self.is_sub_table {
-            let start = Instant::now();
             let root_node = self.nodes[row_index].entries.pop().unwrap();
             let value1 = serialize_to_json_with_option::<String>(
                 &mut self.nodes[row_index].entries.clone(),
