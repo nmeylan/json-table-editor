@@ -529,7 +529,7 @@ impl ArrayTable {
                                         let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
                                         label = label.sense(Sense::click());
-                                        let response = label.ui(ui).union(cell_zone);
+                                        let mut response = label.ui(ui).union(cell_zone);
 
                                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
@@ -577,6 +577,12 @@ impl ArrayTable {
                                         if response.hovered() {
                                             ui.ctx().set_cursor_icon(CursorIcon::Cell);
                                         }
+
+                                        if value.len() > 100 {
+                                            response = response.on_hover_ui(|ui| {
+                                                ui.label(value);
+                                            });
+                                        };
                                         return Some(response);
                                     }
                                 }
