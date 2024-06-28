@@ -82,7 +82,6 @@ pub enum ScrollToRowMode {
 }
 
 
-
 impl ScrollToRowMode {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -114,6 +113,8 @@ pub struct ArrayTable {
     seed2: usize, // seed for Id
     pub matching_rows: Vec<usize>,
     pub matching_row_selected: usize,
+    pub matching_columns: Vec<usize>,
+    pub matching_column_selected: usize,
     pub scroll_to_column: String,
     pub scroll_to_row: String,
     pub scroll_to_row_mode: ScrollToRowMode,
@@ -121,6 +122,7 @@ pub struct ArrayTable {
     // Handle interaction
     pub next_frame_reset_scroll: bool,
     pub changed_scroll_to_column_value: bool,
+    pub changed_matching_column_selected: bool,
     pub changed_matching_row_selected: bool,
     pub changed_scroll_to_row_value: Option<Instant>,
 
@@ -151,16 +153,23 @@ impl super::View<ArrayResponse> for ArrayTable {
                             let mut scroll_to_x = None;
                             if self.changed_scroll_to_column_value {
                                 self.changed_scroll_to_column_value = false;
-                                let mut index = self.column_selected.iter().position(|c| {
-                                    c.name.to_lowercase().eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
-                                });
-                                if index.is_none() {
-                                    index = self.column_selected.iter().position(|c| {
-                                        c.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase())
-                                    });
+                                self.changed_matching_column_selected = true;
+                                self.matching_columns.clear();
+                                self.matching_column_selected = 0;
+                                if !self.scroll_to_column.is_empty() {
+                                    for (index, column) in self.column_selected.iter().enumerate() {
+                                        if column.name.to_lowercase().eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
+                                            || column.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase()) {
+                                            self.matching_columns.push(index);
+                                        }
+                                    }
                                 }
-                                if let Some(index) = index {
-                                    if let Some(offset) = self.columns_offset.get(index) {
+                            }
+
+                            if self.changed_matching_column_selected {
+                                self.changed_matching_column_selected = false;
+                                if !self.matching_columns.is_empty() {
+                                    if let Some(offset) = self.columns_offset.get(self.matching_columns[self.matching_column_selected]) {
                                         scroll_to_x = Some(*offset);
                                     }
                                 }
@@ -243,6 +252,8 @@ impl ArrayTable {
             windows: vec![],
             matching_rows: vec![],
             matching_row_selected: 0,
+            matching_columns: vec![],
+            matching_column_selected: 0,
             scroll_to_column: "".to_string(),
             changed_scroll_to_column_value: false,
             last_parsed_max_depth,
@@ -251,6 +262,7 @@ impl ArrayTable {
             scroll_to_row: "".to_string(),
             changed_scroll_to_row_value: None,
             changed_matching_row_selected: false,
+            changed_matching_column_selected: false,
             editing_index: RefCell::new(None),
             editing_value: RefCell::new(String::new()),
             is_sub_table: false,
@@ -343,7 +355,6 @@ impl ArrayTable {
     }
 
     pub fn row_height(style: &Arc<Style>, spacing: &Spacing) -> f32 {
-        
         egui::TextStyle::Body
             .resolve(style)
             .size
@@ -452,7 +463,7 @@ impl ArrayTable {
                                                  if Self::is_filterable(column) {
                                                      let values = ui.memory_mut(|mem| {
                                                          let cache = mem.caches.cache::<ColumnFilterCache>();
-                                                         
+
                                                          cache.get((column, &self.nodes, &self.parent_pointer))
                                                      });
                                                      if !values.is_empty() {

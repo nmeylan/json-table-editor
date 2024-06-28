@@ -237,7 +237,7 @@ impl MyApp {
         }
     }
 
-    fn goto_next_occurrence(table: &mut ArrayTable) -> bool {
+    fn goto_next_matching_row_occurrence(table: &mut ArrayTable) -> bool {
         if table.matching_rows.len() == 0 {
             return false;
         }
@@ -247,6 +247,19 @@ impl MyApp {
             table.matching_row_selected += 1;
         }
         table.changed_matching_row_selected = true;
+        true
+    }
+
+    fn goto_next_matching_column_occurrence(table: &mut ArrayTable) -> bool {
+        if table.matching_columns.len() == 0 {
+            return false;
+        }
+        if table.matching_column_selected == table.matching_columns.len() - 1 {
+            table.matching_column_selected = 0;
+        } else {
+            table.matching_column_selected += 1;
+        }
+        table.changed_matching_column_selected = true;
         true
     }
 }
@@ -308,14 +321,34 @@ impl eframe::App for MyApp {
                 }
                 if let Some(ref mut table) = self.table {
                     ui.separator();
-                    let slider_response = ui.add(
+                    let change_depth_slider_response = ui.add(
                         egui::Slider::new(&mut self.depth, self.min_depth..=self.max_depth).text("Depth"),
                     );
                     ui.add(Separator::default().vertical());
                     let scroll_to_column_response = ui.allocate_ui(Vec2::new(180.0, ui.spacing().interact_size.y), |ui| {
-                        ui.add(Label::new("Scroll to column: ").wrap(false));
-                        let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("named");
-                        ui.add(text_edit)
+                        ui.horizontal(|ui| {
+                            ui.add(Label::new("Scroll to column: ").wrap(false));
+                            let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("named");
+                            let response = ui.add(text_edit);
+                            if !table.matching_columns.is_empty() {
+                                let response_prev = icon::button(ui, CHEVRON_UP, Some("Previous occurrence"), None);
+                                let response_next = icon::button(ui, CHEVRON_DOWN, Some("Next occurrence"), None);
+                                ui.label(RichText::new(format!("{}/{}", table.matching_column_selected + 1, table.matching_columns.len())));
+
+                                if response_prev.clicked() {
+                                    if table.matching_column_selected == 0 {
+                                        table.matching_column_selected = table.matching_columns.len() - 1;
+                                    } else {
+                                        table.matching_column_selected -= 1;
+                                    }
+                                    table.changed_matching_column_selected = true;
+                                }
+                                if response_next.clicked() {
+                                    Self::goto_next_matching_column_occurrence(table);
+                                }
+                            }
+                            response
+                        }).inner
                     }).inner;
 
                     ui.add(Separator::default().vertical());
@@ -347,7 +380,7 @@ impl eframe::App for MyApp {
                                     table.changed_matching_row_selected = true;
                                 }
                                 if response_next.clicked() {
-                                    Self::goto_next_occurrence(table);
+                                    Self::goto_next_matching_row_occurrence(table);
                                 }
                             }
                             (scroll_to_row_mode_response, scroll_to_row_response)
@@ -358,6 +391,10 @@ impl eframe::App for MyApp {
                     // interaction handling
                     if scroll_to_column_response.changed() {
                         table.changed_scroll_to_column_value = true;
+                    } else if scroll_to_column_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
+                        if Self::goto_next_matching_column_occurrence(table) {
+                            scroll_to_column_response.request_focus();
+                        }
                     }
                     if scroll_to_row_response.changed() {
                         table.changed_scroll_to_row_value = Some(Instant::now());
@@ -365,14 +402,15 @@ impl eframe::App for MyApp {
                             table.reset_search();
                         }
                     } else if scroll_to_row_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
-                        if Self::goto_next_occurrence(table) {
+                        if Self::goto_next_matching_row_occurrence(table) {
                             scroll_to_row_response.request_focus();
                         }
                     }
                     if scroll_to_row_mode_response.inner.is_some() && scroll_to_row_mode_response.inner.unwrap() {
                         table.reset_search();
                     }
-                    if slider_response.changed() {
+                    if change_depth_slider_response.changed() {
+                        table.changed_scroll_to_column_value = true;
                         if let Some(new_max_depth) = table.update_max_depth(self.depth) {
                             self.max_depth = new_max_depth as u8;
                         }
