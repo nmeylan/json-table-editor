@@ -189,7 +189,7 @@ type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, CacheA>
 impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &String), IndexSet<String>> for CacheA {
     fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntries<String>>, &String)) -> IndexSet<String> {
         let mut unique_values = IndexSet::new();
-        if matches!(column.value_type, ValueType::String) {
+        if ArrayTable::is_filterable(column) {
             nodes.iter().enumerate().map(|(i, row)| {
                 ArrayTable::get_pointer_for_column(parent_pointer, &&row.entries, i, column).filter(|entry| entry.value.is_some()).map(|entry| entry.value.clone().unwrap())
             }).for_each(|value| {
@@ -198,7 +198,22 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &S
                 }
             })
         }
-        unique_values.sort_by(|a, b| a.cmp(b));
+        if matches!(column.value_type, ValueType::Number) {
+            unique_values.sort_by(|a, b| {
+                let num_a = a.parse::<f64>();
+                let num_b = b.parse::<f64>();
+
+                // Compare parsed numbers; handle parse errors by pushing them to the end
+                match (num_a, num_b) {
+                    (Ok(a), Ok(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+                    (Ok(_), Err(_)) => std::cmp::Ordering::Less, // Numbers are less than errors
+                    (Err(_), Ok(_)) => std::cmp::Ordering::Greater, // Errors are greater than numbers
+                    (Err(_), Err(_)) => std::cmp::Ordering::Equal, // Treat errors equally
+                }
+            });
+        } else {
+            unique_values.sort_by(|a, b| a.cmp(b));
+        }
         unique_values
     }
 }
@@ -416,14 +431,14 @@ impl ArrayTable {
                                 if column.name.eq("") {
                                     return;
                                 }
-                                let response = icon::button(ui, THUMBTACK, if pinned_column_table { "Unpin column" } else { "Pin column to left" });
+                                let response = icon::button(ui, THUMBTACK, Some(if pinned_column_table { "Unpin column" } else { "Pin column to left" }), None);
                                 if response.clicked() {
                                     pinned_column = Some(index);
                                 }
                                 let column_id = Id::new(&name);
                                 let checked_filtered_values = self.columns_filter.get(&column.name);
                                 PopupMenu::new(column_id.with("filter"))
-                                    .show_ui(ui, |ui| icon::button_with_color(ui, FILTER, "Filter column by", if checked_filtered_values.is_some() { Some(ACTIVE_COLOR) } else { None }),
+                                    .show_ui(ui, |ui| icon::button(ui, FILTER, None, if checked_filtered_values.is_some() { Some(ACTIVE_COLOR) } else { None }),
                                              |ui| {
                                                  let mut chcked = if let Some(filters) = checked_filtered_values {
                                                      filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
@@ -434,7 +449,7 @@ impl ArrayTable {
                                                      clicked_filter_non_null_column = Some(name);
                                                  }
 
-                                                 if matches!(column.value_type, ValueType::String) {
+                                                 if Self::is_filterable(column) {
                                                      let values = ui.memory_mut(|mem| {
                                                          let cache = mem.caches.cache::<ColumnFilterCache>();
                                                          
@@ -670,6 +685,11 @@ impl ArrayTable {
             ui.ctx().request_repaint();
         }
         array_response
+    }
+
+    #[inline]
+    fn is_filterable(column: &Column) -> bool {
+        !(matches!(column.value_type, ValueType::Object(_)) || matches!(column.value_type, ValueType::Array(_)) || matches!(column.value_type, ValueType::Null))
     }
 
     fn open_subtable(row_index: usize, entry: &FlatJsonValue<String>, content: String) -> Option<SubTable> {

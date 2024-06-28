@@ -321,8 +321,8 @@ impl eframe::App for MyApp {
                             let text_edit = TextEdit::singleline(&mut table.scroll_to_row).hint_text(hint_text);
                             let scroll_to_row_response = ui.add(text_edit);
                             if !table.matching_rows.is_empty() {
-                                let response_prev = icon::button(ui, CHEVRON_UP, "Previous occurrence");
-                                let response_next = icon::button(ui, CHEVRON_DOWN, "Next occurrence");
+                                let response_prev = icon::button(ui, CHEVRON_UP, Some("Previous occurrence"), None);
+                                let response_next = icon::button(ui, CHEVRON_DOWN, Some("Next occurrence"), None);
                                 ui.label(RichText::new(format!("{}/{}", table.matching_row_selected + 1, table.matching_rows.len())));
 
                                 if response_prev.clicked() {
