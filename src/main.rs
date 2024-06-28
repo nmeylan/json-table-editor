@@ -214,11 +214,13 @@ impl MyApp {
             self.should_parse_again = false;
             self.parsing_invalid = false;
             self.selected_pointer = None;
+            self.unsaved_changes = false;
         } else {
             let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
             let result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
             self.should_parse_again = true;
             self.parsing_invalid = true;
+            self.unsaved_changes = false;
             self.parsing_invalid_pointers = result.json.iter()
                 .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
                 .map(|entry| entry.pointer.pointer.clone()).collect();
@@ -275,6 +277,7 @@ impl eframe::App for MyApp {
                             ui.close_menu();
                             let table = self.table.as_ref().unwrap();
                             save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+                            self.unsaved_changes = false;
                         }
                         ui.separator();
                         if ui.button("Save as").clicked() {
@@ -283,6 +286,7 @@ impl eframe::App for MyApp {
                                 self.selected_file = Some(path);
                                 let table = self.table.as_ref().unwrap();
                                 save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+                                self.unsaved_changes = false;
                             }
                         }
                     });
