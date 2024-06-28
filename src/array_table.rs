@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Color32, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
@@ -15,7 +15,7 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ArrayResponse, concat_string, Window};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, Window};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
@@ -421,10 +421,10 @@ impl ArrayTable {
                                     pinned_column = Some(index);
                                 }
                                 let column_id = Id::new(&name);
+                                let checked_filtered_values = self.columns_filter.get(&column.name);
                                 PopupMenu::new(column_id.with("filter"))
-                                    .show_ui(ui, |ui| icon::button(ui, FILTER, "Filter column by"),
+                                    .show_ui(ui, |ui| icon::button_with_color(ui, FILTER, "Filter column by", if checked_filtered_values.is_some() { Some(ACTIVE_COLOR) } else { None }),
                                              |ui| {
-                                                 let checked_filtered_values = self.columns_filter.get(&column.name);
                                                  let mut chcked = if let Some(filters) = checked_filtered_values {
                                                      filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
                                                  } else {

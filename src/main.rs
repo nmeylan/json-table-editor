@@ -28,6 +28,8 @@ use crate::components::icon;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::parser::save_to_file;
 
+pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
+
 /// Something to view in the demo windows
 pub trait View<R> {
     fn ui(&mut self, ui: &mut egui::Ui) -> R;
