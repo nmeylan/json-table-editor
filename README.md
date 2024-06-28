@@ -16,7 +16,7 @@
 - Go to row number
 - Search for matching terms
 
-![](./github/json-editor.png)
+![](.github/json-editor.png)
 
 Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps
 
