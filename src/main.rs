@@ -20,7 +20,7 @@ use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::{CreationContext, NativeOptions};
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, IconData, Id, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align2, Button, Color32, ComboBox, Context, IconData, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
@@ -110,7 +110,7 @@ struct MyApp {
     selected_pointer: Option<String>,
     min_depth: u8,
     unsaved_changes: bool,
-    show_fps: bool
+    show_fps: bool,
 }
 
 impl MyApp {
@@ -236,6 +236,19 @@ impl MyApp {
             self.table = None;
         }
     }
+
+    fn goto_next_occurrence(table: &mut ArrayTable) -> bool {
+        if table.matching_rows.len() == 0 {
+            return false;
+        }
+        if table.matching_row_selected == table.matching_rows.len() - 1 {
+            table.matching_row_selected = 0;
+        } else {
+            table.matching_row_selected += 1;
+        }
+        table.changed_matching_row_selected = true;
+        true
+    }
 }
 
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
@@ -261,7 +274,7 @@ impl eframe::App for MyApp {
             title = format!("{} - {:.2}", title, self.frame_history.fps())
         }
 
-        ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title), );
+        ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title));
 
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
@@ -334,12 +347,7 @@ impl eframe::App for MyApp {
                                     table.changed_matching_row_selected = true;
                                 }
                                 if response_next.clicked() {
-                                    if table.matching_row_selected == table.matching_rows.len() - 1 {
-                                        table.matching_row_selected = 0;
-                                    } else {
-                                        table.matching_row_selected += 1;
-                                    }
-                                    table.changed_matching_row_selected = true;
+                                    Self::goto_next_occurrence(table);
                                 }
                             }
                             (scroll_to_row_mode_response, scroll_to_row_response)
@@ -355,6 +363,10 @@ impl eframe::App for MyApp {
                         table.changed_scroll_to_row_value = Some(Instant::now());
                         if table.scroll_to_row.is_empty() {
                             table.reset_search();
+                        }
+                    } else if scroll_to_row_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
+                        if Self::goto_next_occurrence(table) {
+                            scroll_to_row_response.request_focus();
                         }
                     }
                     if scroll_to_row_mode_response.inner.is_some() && scroll_to_row_mode_response.inner.unwrap() {
