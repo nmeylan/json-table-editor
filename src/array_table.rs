@@ -15,7 +15,8 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, Window};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string,  Window};
+use crate::compatibility::InstantWrapper;
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
@@ -124,7 +125,11 @@ pub struct ArrayTable {
     pub changed_scroll_to_column_value: bool,
     pub changed_matching_column_selected: bool,
     pub changed_matching_row_selected: bool,
+
+    #[cfg(not(target_arch = "wasm32"))]
     pub changed_scroll_to_row_value: Option<Instant>,
+    #[cfg(target_arch = "wasm32")]
+    pub changed_scroll_to_row_value: Option<InstantWrapper>,
 
     pub editing_index: RefCell<Option<(usize, usize, bool)>>,
     pub editing_value: RefCell<String>,
@@ -811,7 +816,7 @@ impl ArrayTable {
     pub fn reset_search(&mut self) {
         self.scroll_to_row.clear();
         self.matching_rows.clear();
-        self.changed_scroll_to_row_value = Some(Instant::now().sub(Duration::from_millis(1000)));
+        self.changed_scroll_to_row_value = Some(crate::compatibility::now().sub(Duration::from_millis(1000)));
         self.matching_row_selected = 0;
     }
 }

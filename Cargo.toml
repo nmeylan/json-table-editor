@@ -10,12 +10,22 @@ eframe = { version = "0.27.2", default-features = false, features = [
     "default_fonts",
     "glow",
     "wayland",
+
+    "wgpu",
     "x11"] }
 egui = { version = "0.27.2", default-features = false, features = [] }
 egui_extras = { version = "0.27.2", default-features = false, features = ["svg"] }
-json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "2b168da", features = ["indexmap", "simdutf8"]}
+json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "51c3f76", features = ["indexmap", "simdutf8"]}
 rayon = {version = "1.10.0"}
 rfd = {version = "0.14.1"}
 indexmap = "2.2.6"
 #[patch."https://github.com/nmeylan/json-parser-flat-format.git"]
 #json-flat-parser = {path = "/home/nmeylan/dev/ragnarok/json-flat-parser"}
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.92"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3.69", features = ["console"], default-features = false }
+
+[profile.release]
+opt-level = 2

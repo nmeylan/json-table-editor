@@ -7,6 +7,8 @@ mod subtable_window;
 pub mod parser;
 mod object_table;
 pub mod fonts;
+mod web;
+mod compatibility;
 
 use std::{env, mem};
 
@@ -16,9 +18,10 @@ use std::io::Read;
 use std::fmt::Write;
 
 use std::path::{PathBuf};
+use std::sync::{Arc, Mutex};
 use crate::components::fps::FrameHistory;
 use std::time::{Instant};
-use eframe::{CreationContext, NativeOptions};
+use eframe::{CreationContext};
 use eframe::Theme::Light;
 use egui::{Align2, Button, Color32, ComboBox, Context, IconData, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
@@ -72,28 +75,31 @@ struct Pos<T> {
 
 
 fn main() {
-    let options = NativeOptions {
-        default_theme: Light,
-        persist_window: false,
-        viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap()),
-        // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
-        ..eframe::NativeOptions::default()
-    };
-    eframe::run_native("JSON table editor", options, Box::new(|cc| {
-        egui_extras::install_image_loaders(&cc.egui_ctx);
-        let mut app = MyApp::new(cc);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let options = eframe::NativeOptions {
+            default_theme: Light,
+            persist_window: false,
+            viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap()),
+            // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
+            ..eframe::NativeOptions::default()
+        };
+        eframe::run_native("JSON table editor", options, Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            let mut app = MyApp::new(cc);
 
-        let args: Vec<_> = env::args().collect();
-        if args.len() >= 2 {
-            println!("Opening {}", args[1].as_str());
-            app.selected_file = Some(PathBuf::from(args[1].as_str()));
-            app.should_parse_again = true;
-        }
-        if args.len() >= 3 {
-            app.selected_pointer = Some(args[2].clone());
-        }
-        Box::new(app)
-    })).unwrap();
+            let args: Vec<_> = env::args().collect();
+            if args.len() >= 2 {
+                println!("Opening {}", args[1].as_str());
+                app.selected_file = Some(PathBuf::from(args[1].as_str()));
+                app.should_parse_again = true;
+            }
+            if args.len() >= 3 {
+                app.selected_pointer = Some(args[2].clone());
+            }
+            Box::new(app)
+        })).unwrap();
+    }
 }
 
 struct MyApp {
@@ -111,6 +117,7 @@ struct MyApp {
     min_depth: u8,
     unsaved_changes: bool,
     show_fps: bool,
+    web_loaded_json: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
 impl MyApp {
@@ -128,7 +135,6 @@ impl MyApp {
         );
         cc.egui_ctx.set_fonts(fonts);
         // let path = Path::new(args[1].as_str());
-
         Self {
             frame_history: FrameHistory::default(),
             table: None,
@@ -146,6 +152,7 @@ impl MyApp {
             min_depth: 0,
             unsaved_changes: false,
             show_fps: true,
+            web_loaded_json: Arc::new(Mutex::new(None)),
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -168,15 +175,20 @@ impl MyApp {
         } else {
             1 // should start after prefix
         };
-        let start = Instant::now();
         let mut content = String::with_capacity(metadata1.len() as usize);
         // let mut reader = LfToCrlfReader::new(file);
         // reader.read_to_string(&mut content);
         file.read_to_string(&mut content);
-        println!("Read file took {}ms", start.elapsed().as_millis());
+
+        self.open_json_content(max_depth, content.as_bytes());
+    }
+
+    fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
         let mut found_array = false;
         let mut found_object = false;
-        for byte in content.as_bytes() {
+        let size = json.len() / 1024 / 1024;
+        log!("open_json_content with size {}mb, found array {}", size, found_array);
+        for byte in json {
             if *byte == b'[' {
                 found_array = true;
                 break;
@@ -187,19 +199,21 @@ impl MyApp {
             }
         }
         if found_array || self.selected_pointer.is_some() {
-            let start = Instant::now();
+            let start = crate::compatibility::now();
             let mut options = ParseOptions::default().parse_array(false).max_depth(max_depth);
             if let Some(ref start_at) = self.selected_pointer {
                 options = options.start_parse_at(start_at.clone());
             }
-            let result = JSONParser::parse(content.as_mut_str(), options).unwrap().to_owned();
+            let parse_result = JSONParser::parse_bytes(json, options);
+
+            let result = parse_result.unwrap().to_owned();
             let parsing_max_depth = result.parsing_max_depth;
-            println!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
+            log!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
             let parse_result = result.clone_except_json();
 
-            let start = Instant::now();
+            let start = crate::compatibility::now();
             let (result1, columns) = crate::parser::as_array(result).unwrap();
-            println!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
+            log!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
 
             let max_depth = parse_result.max_json_depth;
             let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth);
@@ -219,16 +233,22 @@ impl MyApp {
             self.unsaved_changes = false;
         } else {
             let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
-            let result = JSONParser::parse(content.as_mut_str(), options.clone()).unwrap();
+            let result = JSONParser::parse_bytes(json, options.clone()).unwrap();
             self.should_parse_again = true;
             self.parsing_invalid = true;
             self.unsaved_changes = false;
+            #[cfg(target_arch = "wasm32")]
+            {
+                let mut json_guard = self.web_loaded_json.lock().unwrap();
+                *json_guard = Some(json.to_vec());
+            }
             self.parsing_invalid_pointers = result.json.iter()
                 .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
                 .map(|entry| entry.pointer.pointer.clone()).collect();
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn file_picker(&mut self) {
         if let Some(path) = rfd::FileDialog::new().pick_file() {
             self.selected_file = Some(path);
@@ -262,6 +282,22 @@ impl MyApp {
         table.changed_matching_column_selected = true;
         true
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn web_try_open_json_bytes(&mut self)  {
+        let mut json_guard = self.web_loaded_json.try_lock();
+        let has_json = json_guard.is_ok();
+        if has_json {
+            let mut json_guard = json_guard.unwrap();
+            let has_json = json_guard.is_some();
+            if has_json {
+                let option = mem::take(&mut *json_guard);
+                drop(json_guard);
+                self.open_json_content(u8::MAX, option.unwrap().as_slice());
+                self.selected_file = Some(PathBuf::default());
+            }
+        }
+    }
 }
 
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
@@ -276,48 +312,51 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        let mut title = format!("json table editor - {}{}",
-                                self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()),
-                                if self.unsaved_changes { " *" } else { "" }
-        );
+        #[cfg(not(target_arch = "wasm32"))] {
+            let mut title = format!("json table editor - {}{}",
+                                    self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()),
+                                    if self.unsaved_changes { " *" } else { "" }
+            );
 
-        if self.show_fps {
-            self.frame_history
-                .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
-            title = format!("{} - {:.2}", title, self.frame_history.fps())
+            if self.show_fps {
+                self.frame_history
+                    .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
+                title = format!("{} - {:.2}", title, self.frame_history.fps())
+            }
+
+            ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title));
         }
-
-        ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title));
-
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if self.table.is_some() {
-                    ui.menu_button("File", |ui| {
-                        ui.set_min_width(220.0);
-                        ui.style_mut().wrap = Some(false);
-                        if ui.button("Open json file").clicked() {
-                            ui.close_menu();
-                            self.file_picker();
-                        }
-                        ui.separator();
-                        if ui.button("Save").clicked() {
-                            ui.close_menu();
-                            let table = self.table.as_ref().unwrap();
-                            save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
-                            self.unsaved_changes = false;
-                        }
-                        ui.separator();
-                        if ui.button("Save as").clicked() {
-                            ui.close_menu();
-                            if let Some(path) = rfd::FileDialog::new().save_file() {
-                                self.selected_file = Some(path);
+                    #[cfg(not(target_arch = "wasm32"))] {
+                        ui.menu_button("File", |ui| {
+                            ui.set_min_width(220.0);
+                            ui.style_mut().wrap = Some(false);
+                            if ui.button("Open json file").clicked() {
+                                ui.close_menu();
+                                self.file_picker();
+                            }
+                            ui.separator();
+                            if ui.button("Save").clicked() {
+                                ui.close_menu();
                                 let table = self.table.as_ref().unwrap();
                                 save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
                                 self.unsaved_changes = false;
                             }
-                        }
-                    });
+                            ui.separator();
+                            if ui.button("Save as").clicked() {
+                                ui.close_menu();
+                                if let Some(path) = rfd::FileDialog::new().save_file() {
+                                    self.selected_file = Some(path);
+                                    let table = self.table.as_ref().unwrap();
+                                    save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+                                    self.unsaved_changes = false;
+                                }
+                            }
+                        });
+                    }
                 }
                 if let Some(ref mut table) = self.table {
                     ui.separator();
@@ -397,7 +436,7 @@ impl eframe::App for MyApp {
                         }
                     }
                     if scroll_to_row_response.changed() {
-                        table.changed_scroll_to_row_value = Some(Instant::now());
+                        table.changed_scroll_to_row_value = Some(crate::compatibility::now());
                         if table.scroll_to_row.is_empty() {
                             table.reset_search();
                         }
@@ -451,12 +490,17 @@ impl eframe::App for MyApp {
             // Collect dropped files:
             ctx.input(|i| {
                 if !i.raw.dropped_files.is_empty() {
-                    self.selected_file = Some(i.raw.dropped_files.clone().pop().unwrap().path.unwrap());
+                    let file = i.raw.dropped_files.clone().pop().unwrap();
                     self.table = None;
                     self.selected_pointer = None;
                     self.should_parse_again = true;
                     self.parsing_invalid = false;
                     self.parsing_invalid_pointers.clear();
+                    if let Some(bytes) = file.bytes {
+                        self.open_json_content(u8::MAX, bytes.as_ref());
+                    } else {
+                        self.selected_file = Some(file.path.unwrap());
+                    }
                 }
             });
 
@@ -471,8 +515,26 @@ impl eframe::App for MyApp {
                                            let response = ui.centered_and_justified(|ui| {
                                                ui.heading("Select or drop a json file")
                                            });
-                                           if response.inner.clicked() {
-                                               self.file_picker();
+                                           #[cfg(not(target_arch = "wasm32"))] {
+                                               if response.inner.clicked() {
+                                                   self.file_picker();
+                                               }
+                                           }
+
+                                           #[cfg(target_arch = "wasm32")]
+                                           {
+                                               let mut json = self.web_loaded_json.clone();
+                                               let future = async move {
+                                                   if response.inner.clicked() {
+                                                       if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
+                                                           let mut json = json.lock().unwrap();
+                                                           *json = Some(file_handle.read().await);
+                                                       }
+                                                   }
+                                               };
+                                               wasm_bindgen_futures::spawn_local(future);
+                                               self.web_try_open_json_bytes();
+
                                            }
                                        },
                 );
@@ -495,7 +557,12 @@ impl eframe::App for MyApp {
                             Sense::click()
                         };
                         if Button::new("Parse again").sense(sense).ui(ui).clicked() {
-                            self.open_json();
+                            #[cfg(not(target_arch = "wasm32"))] {
+                                self.open_json();
+                            }
+                            #[cfg(target_arch = "wasm32")] {
+                                self.web_try_open_json_bytes();
+                            }
                         }
                         if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
                             self.selected_file = None;
@@ -506,7 +573,12 @@ impl eframe::App for MyApp {
                         }
                     });
                 } else if self.should_parse_again {
-                    self.open_json();
+                    #[cfg(not(target_arch = "wasm32"))] {
+                        self.open_json();
+                    }
+                    #[cfg(target_arch = "wasm32")] {
+                        self.web_try_open_json_bytes();
+                    }
                 }
                 // });
             }

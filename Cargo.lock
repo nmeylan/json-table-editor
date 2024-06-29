@@ -790,6 +790,7 @@ dependencies = [
  "objc",
  "parking_lot",
  "percent-encoding",
+ "pollster",
  "raw-window-handle 0.5.2",
  "raw-window-handle 0.6.1",
  "static_assertions",
@@ -798,6 +799,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "web-time",
+ "wgpu",
  "winapi",
  "winit",
 ]
@@ -1479,12 +1481,15 @@ dependencies = [
  "json-flat-parser",
  "rayon",
  "rfd",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
 name = "json-flat-parser"
 version = "0.1.0"
-source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=2b168da#2b168da052f2d9ba6a65cc3877108a75ecbc7332"
+source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=51c3f76#51c3f765311412c6007e1a089580e17130f22be1"
 dependencies = [
  "indexmap",
  "simdutf8",
@@ -1577,9 +1582,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.21"
+version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90ed8c1e510134f979dbc4f070f87d4313098b704861a105fe34231c70a3901c"
+checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
 
 [[package]]
 name = "malloc_buf"
@@ -2755,9 +2760,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.42"
+version = "0.4.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76bc14366121efc8dbb487ab05bcc9d346b3b5ec0eaa76e46594cabbe51762c0"
+checksum = "bde2032aeb86bdfaecc8b261eef3cba735cc426c1f3a3416d1e0791be95fc461"
 dependencies = [
  "cfg-if",
  "js-sys",
@@ -2951,6 +2956,7 @@ dependencies = [
  "cfg_aliases",
  "js-sys",
  "log",
+ "naga",
  "parking_lot",
  "profiling",
  "raw-window-handle 0.6.1",
@@ -3000,6 +3006,7 @@ dependencies = [
  "arrayvec",
  "ash",
  "bitflags 2.5.0",
+ "block",
  "cfg_aliases",
  "core-graphics-types",
  "glow",

@@ -32,7 +32,7 @@ macro_rules! concat_string {
 pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_array: Vec<JsonArrayEntries<String>>, depth: usize) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>, usize), String> {
     let mut len = json_array.len();
     let new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
-    let _start = Instant::now();
+
     if len < 8 {
         len = 8;
     }
@@ -191,7 +191,7 @@ const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
 #[cfg(not(windows))]
 const LINE_ENDING: &[u8] = ",\n".as_bytes();
 pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>, file_path: &Path) -> std::io::Result<()> {
-    let start = Instant::now();
+    // let start = crate::compatibility::now();
     let file = fs::File::create(file_path)?;
     let mut file = BufWriter::new(file);
     if !parent_pointer.is_empty() {
@@ -233,7 +233,7 @@ pub fn save_to_file(parent_pointer: &str, array: &Vec<JsonArrayEntries<String>>,
         }
     }
     file.flush()?;
-    println!("serialize and save file took {}ms", start.elapsed().as_millis());
+    // println!("serialize and save file took {}ms", start.elapsed().as_millis());
     Ok(())
 }
 
