@@ -1,6 +1,8 @@
 # Important
 **Memory usage**: While this tool allow to edit large json file smoothly, it consumes a lot of memory due to technical decision which tradeoff memory in favor of better performance for navigation, edition and serialization.
 
+[Web demo](https://nmeylan.github.io/json-table-editor/web/) 
+
 # Features
 ## Implemented
 - *lag-free* visualisation of large json array: only visible rows and columns are rendered

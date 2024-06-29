@@ -128,7 +128,7 @@ pub struct ArrayTable {
     #[cfg(not(target_arch = "wasm32"))]
     pub changed_scroll_to_row_value: Option<Instant>,
     #[cfg(target_arch = "wasm32")]
-    pub changed_scroll_to_row_value: Option<InstantWrapper>,
+    pub changed_scroll_to_row_value: Option<crate::compatibility::InstantWrapper>,
 
     pub editing_index: RefCell<Option<(usize, usize, bool)>>,
     pub editing_value: RefCell<String>,
