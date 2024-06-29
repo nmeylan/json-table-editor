@@ -1,10 +1,10 @@
 # Important
-**Memory usage**: While this tool allow to edit large json file smoothly, it consumes a lot of memory due to technical decision which tradeoff memory in favor of better performance for navigation, edition and serialization.
+**Memory usage**: While this tool allow to edit large json file smoothly, it consumes a lot of memory due to technical decision which tradeoff memory in favor of better performance for navigation, edition and serialization. Read below section "Performance and Memory usage" for more details
 
 [Web demo](https://nmeylan.github.io/json-table-editor/web/) 
 
 # Genesis
-I wanted to edit a [small json file](https://github.com/nmeylan/rust-ro/blob/master/config/skill.json) of 1.5mb, using a table view, javascript based tools like http://json2table.com/# and https://jsongrid.com/json-grid were too slow and barely usable, so I decided to attempt to do it myself
+I wanted to edit a [small json file](https://github.com/nmeylan/rust-ro/blob/master/config/skill.json) of 1.5mb, using a table view, javascript based tools like http://json2table.com/# and https://jsongrid.com/json-grid were too slow to edit this file and barely usable, so I decided to attempt to do it myself
 
 # Features
 ## Implemented
