@@ -15,7 +15,7 @@ CRATE_NAME="json-editor"
 FEATURES="all-features"
 
 OPEN=false
-OPTIMIZE=false
+OPTIMIZE=true
 BUILD=release
 BUILD_FLAGS="--release"
 WGPU=true

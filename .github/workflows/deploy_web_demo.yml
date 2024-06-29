@@ -1,0 +1,51 @@
+name: Deploy web demo
+
+on:
+ release:
+   types: ["published"]
+
+
+permissions:
+  contents: write # for committing to gh-pages branch
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  RUSTFLAGS: --cfg=web_sys_unstable_apis -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  # Single deploy job since we're just deploying
+  deploy:
+    name: Deploy web demo
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          target: wasm32-unknown-unknown
+          toolchain: 1.76.0
+          override: true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "web-demo-"
+
+      - name: "Install wasmopt / binaryen"
+        run: |
+          sudo apt-get update && sudo apt-get install binaryen
+
+      - run: |
+          scripts/build_web.sh
+
+      - name: Deploy
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: web_demo
+          single-commit: true
