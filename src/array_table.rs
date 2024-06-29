@@ -16,7 +16,6 @@ use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
 use crate::{ACTIVE_COLOR, ArrayResponse, concat_string,  Window};
-use crate::compatibility::InstantWrapper;
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};

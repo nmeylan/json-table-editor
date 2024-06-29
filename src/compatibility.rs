@@ -15,7 +15,7 @@ macro_rules! log {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn now() -> std::time::Instant {
-    crate::compatibility::now()
+    Instant::now()
 }
 #[cfg(target_arch = "wasm32")]
 pub fn now() -> crate::compatibility::InstantWrapper {
