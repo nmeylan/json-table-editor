@@ -3,6 +3,9 @@
 
 [Web demo](https://nmeylan.github.io/json-table-editor/web/) 
 
+# Genesis
+I wanted to edit a [small json file](https://github.com/nmeylan/rust-ro/blob/master/config/skill.json) of 1.5mb, using a table view, javascript based tools like http://json2table.com/# and https://jsongrid.com/json-grid were too slow and barely usable, so I decided to attempt to do it myself
+
 # Features
 ## Implemented
 - *lag-free* visualisation of large json array: only visible rows and columns are rendered
@@ -36,8 +39,8 @@ While it is not the fastest parser on the market, it is still faster to use our 
 As this structure is flat, it also allows to parse only a subset of json files by defining a depth limit, the json files is still fully read but after a given depth, 
 content is not deserialize we only keep raw content as String which then can be parse later, by changing depth.
 
-This mecanism allow fast parsing of big json files, but consume more memory as for each depth level we store the full string and the parsed content.
-Additionally, this mecanism allow to serialize only row that have been changed, unchanged rows are already serialized, speeding up edition of big files.
+This mechanism allow fast parsing of big json files, but consume more memory as for each depth level we store the full string and the parsed content.
+Additionally, this mechanism allow to serialize only row that have been changed, unchanged rows are already serialized, speeding up edition of big files.
 
 ## Todo
 - Add new column
