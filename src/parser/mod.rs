@@ -1,5 +1,3 @@
-pub mod read_file;
-
 use std::collections::HashMap;
 use std::{fs, mem};
 
@@ -7,11 +5,10 @@ use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
-use std::time::Instant;
+
 
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use rayon::iter::ParallelIterator;
-use rayon::iter::IndexedParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::{ParallelSliceMut};
 use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
@@ -122,7 +119,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
         let mut is_first_entry = true;
         let _i = i.to_string();
         loop {
-            if j >= 0 && !previous_parse_result.json.is_empty() {
+            if !previous_parse_result.json.is_empty() {
                 let entry = &previous_parse_result.json[j];
                 let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                     let prefix = concat_string!(started_parsing_at, "/", _i);
@@ -273,7 +270,7 @@ pub fn filter_columns(previous_parse_result: &Vec<JsonArrayEntries<String>>, pre
     }
     res
 }
-pub fn search_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>, term: &str) -> Vec<usize> {
+pub fn search_occurrences(previous_parse_result: &[JsonArrayEntries<String>], term: &str) -> Vec<usize> {
     let mut res: Vec<usize> = vec![];
     for json_array_entry in previous_parse_result.iter() {
         for entry in &json_array_entry.entries {

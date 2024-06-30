@@ -36,15 +36,6 @@ impl Size {
         }
     }
 
-    /// Relative size relative to all available space. Values must be in range `0.0..=1.0`.
-    pub fn relative(fraction: f32) -> Self {
-        egui::egui_assert!((0.0..=1.0).contains(&fraction));
-        Self::Relative {
-            fraction,
-            range: Rangef::new(0.0, f32::INFINITY),
-        }
-    }
-
     /// Multiple remainders each get the same space.
     pub fn remainder() -> Self {
         Self::Remainder {
@@ -78,14 +69,6 @@ impl Size {
         self
     }
 
-    /// Allowed range of movement (in points), if in a resizable [`Table`](crate::array_table::ArrayTable).
-    pub fn range(self) -> Rangef {
-        match self {
-            Self::Absolute { range, .. }
-            | Self::Relative { range, .. }
-            | Self::Remainder { range, .. } => range,
-        }
-    }
 }
 
 #[derive(Clone, Default)]
@@ -164,16 +147,13 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 
-use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Widget, Color32, Stroke};
+use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
 use egui::scroll_area::ScrollAreaOutput;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
     /// Absolute size in points
     Absolute(f32),
-
-    /// Take all available space
-    Remainder,
 }
 
 /// Cells are positioned in two dimensions, cells go in one direction and form lines.
@@ -246,11 +226,9 @@ impl<'l> StripLayout<'l> {
             max: Pos2 {
                 x: match width {
                     CellSize::Absolute(width) => self.cursor.x + width,
-                    CellSize::Remainder => self.rect.right(),
                 },
                 y: match height {
                     CellSize::Absolute(height) => self.cursor.y + height,
-                    CellSize::Remainder => self.rect.bottom(),
                 },
             },
         }
@@ -268,10 +246,6 @@ impl<'l> StripLayout<'l> {
                 self.cursor.y = rect.bottom() + self.ui.spacing().item_spacing.y;
             }
         }
-    }
-
-    pub(crate) fn empty(&mut self, width: CellSize, height: CellSize) {
-        self.set_pos(self.cell_rect(&width, &height));
     }
 
     /// This is the innermost part of [`crate::ArrayTable`] and [`crate::Strip`].
@@ -476,43 +450,9 @@ pub struct Column {
 }
 
 impl Column {
-    /// Automatically sized based on content.
-    ///
-    /// If you have many thousands of rows and are therefore using [`TableBody::rows`]
-    /// or [`TableBody::heterogeneous_rows`], then the automatic size will only be based
-    /// on the currently visible rows.
-    pub fn auto() -> Self {
-        Self::auto_with_initial_suggestion(100.0)
-    }
 
-    /// Automatically sized.
-    ///
-    /// The given fallback is a loose suggestion, that may be used to wrap
-    /// cell contents, if they contain a wrapping layout.
-    /// In most cases though, the given value is ignored.
-    pub fn auto_with_initial_suggestion(suggested_width: f32) -> Self {
-        Self::new(InitialColumnSize::Automatic(suggested_width))
-    }
-
-    /// With this initial width.
     pub fn initial(width: f32) -> Self {
         Self::new(InitialColumnSize::Absolute(width))
-    }
-
-    /// Always this exact width, never shrink or grow.
-    pub fn exact(width: f32) -> Self {
-        Self::new(InitialColumnSize::Absolute(width))
-            .range(width..=width)
-            .clip(true)
-    }
-
-    /// Take all the space remaining after the other columns have
-    /// been sized.
-    ///
-    /// If you have multiple [`Column::remainder`] they all
-    /// share the remaining space equally.
-    pub fn remainder() -> Self {
-        Self::new(InitialColumnSize::Remainder)
     }
 
     fn new(initial_width: InitialColumnSize) -> Self {
@@ -545,31 +485,6 @@ impl Column {
     #[inline]
     pub fn clip(mut self, clip: bool) -> Self {
         self.clip = clip;
-        self
-    }
-
-    /// Won't shrink below this width (in points).
-    ///
-    /// Default: 0.0
-    #[inline]
-    pub fn at_least(mut self, minimum: f32) -> Self {
-        self.width_range.min = minimum;
-        self
-    }
-
-    /// Won't grow above this width (in points).
-    ///
-    /// Default: [`f32::INFINITY`]
-    #[inline]
-    pub fn at_most(mut self, maximum: f32) -> Self {
-        self.width_range.max = maximum;
-        self
-    }
-
-    /// Allowed range of movement (in points), if in a resizable [`Table`].
-    #[inline]
-    pub fn range(mut self, range: impl Into<Rangef>) -> Self {
-        self.width_range = range.into();
         self
     }
 
@@ -709,46 +624,12 @@ impl<'a> TableBuilder<'a> {
         self
     }
 
-    /// Make the columns resizable by dragging.
-    ///
-    /// You can set this for individual columns with [`Column::resizable`].
-    /// [`Self::resizable`] is used as a fallback for any column for which you don't call
-    /// [`Column::resizable`].
-    ///
-    /// If the _last_ column is [`Column::remainder`], then it won't be resizable
-    /// (and instead use up the remainder).
-    ///
-    /// Default is `false`.
     #[inline]
     pub fn resizable(mut self, resizable: bool) -> Self {
         self.resizable = resizable;
         self
     }
 
-    /// Enable vertical scrolling in body (default: `true`)
-    #[inline]
-    pub fn vscroll(mut self, vscroll: bool) -> Self {
-        self.scroll_options.vscroll = vscroll;
-        self
-    }
-
-    /// Enables scrolling the table's contents using mouse drag (default: `true`).
-    ///
-    /// See [`ScrollArea::drag_to_scroll`] for more.
-    #[inline]
-    pub fn drag_to_scroll(mut self, drag_to_scroll: bool) -> Self {
-        self.scroll_options.drag_to_scroll = drag_to_scroll;
-        self
-    }
-
-    /// Should the scroll handle stick to the bottom position even as the content size changes
-    /// dynamically? The scroll handle remains stuck until manually changed, and will become stuck
-    /// once again when repositioned to the bottom. Default: `false`.
-    #[inline]
-    pub fn stick_to_bottom(mut self, stick: bool) -> Self {
-        self.scroll_options.stick_to_bottom = stick;
-        self
-    }
 
     /// Set a row to scroll to.
     ///
@@ -794,19 +675,6 @@ impl<'a> TableBuilder<'a> {
         self
     }
 
-    /// For each axis (x,y):
-    /// * If true, add blank space outside the table, keeping the table small.
-    /// * If false, add blank space inside the table, expanding the table to fit the containing ui.
-    ///
-    /// Default: `true`.
-    ///
-    /// See [`ScrollArea::auto_shrink`] for more.
-    #[inline]
-    pub fn auto_shrink(mut self, auto_shrink: impl Into<Vec2b>) -> Self {
-        self.scroll_options.auto_shrink = auto_shrink.into();
-        self
-    }
-
     /// Set the visibility of both horizontal and vertical scroll bars.
     ///
     /// With `ScrollBarVisibility::VisibleWhenNeeded` (default), the scroll bar will be visible only when needed.
@@ -827,15 +695,6 @@ impl<'a> TableBuilder<'a> {
     #[inline]
     pub fn column(mut self, column: Column) -> Self {
         self.columns.push(column);
-        self
-    }
-
-    /// Allocate space for several columns at once.
-    #[inline]
-    pub fn columns(mut self, column: Column, count: usize) -> Self {
-        for _ in 0..count {
-            self.columns.push(column);
-        }
         self
     }
 
@@ -951,56 +810,6 @@ impl<'a> TableBuilder<'a> {
             is_pinned_column_table,
         }
     }
-
-    /// Create table body without a header row
-    pub fn body<F>(self, add_body_contents: F)
-        where
-            F: for<'b> FnOnce(TableBody<'b>),
-    {
-        let available_width = self.available_width();
-
-        let Self {
-            ui,
-            columns,
-            striped,
-            resizable,
-            cell_layout,
-            scroll_options,
-            sense,
-            is_pinned_column_table
-        } = self;
-
-        let striped = striped.unwrap_or(ui.visuals().striped);
-
-        let state_id = ui.id().with("__table_state");
-
-        let initial_widths =
-            to_sizing(&columns).to_lengths(available_width, ui.spacing().item_spacing.x);
-        let max_used_widths = vec![0.0; initial_widths.len()];
-        let (had_state, state) = TableState::load(ui, initial_widths, state_id);
-        let is_first_frame = !had_state;
-        let first_frame_auto_size_columns = is_first_frame && columns.iter().any(|c| c.is_auto());
-
-        let table_top = ui.cursor().top();
-
-        Table {
-            ui,
-            table_top,
-            state_id,
-            columns,
-            available_width,
-            state,
-            max_used_widths,
-            first_frame_auto_size_columns,
-            resizable,
-            striped,
-            cell_layout,
-            scroll_options,
-            sense,
-            is_pinned_column_table,
-        }
-            .body(None, None, None, add_body_contents);
-    }
 }
 
 // ----------------------------------------------------------------------------
@@ -1064,12 +873,6 @@ pub struct Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    /// Access the contained [`egui::Ui`].
-    ///
-    /// You can use this to e.g. modify the [`egui::Style`] with [`egui::Ui::style_mut`].
-    pub fn ui_mut(&mut self) -> &mut egui::Ui {
-        self.ui
-    }
 
     /// Create table body after adding a header row
     pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<(usize, usize, bool)>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
@@ -1348,19 +1151,6 @@ pub struct TableBody<'a> {
 }
 
 impl<'a> TableBody<'a> {
-    /// Access the contained [`egui::Ui`].
-    ///
-    /// You can use this to e.g. modify the [`egui::Style`] with [`egui::Ui::style_mut`].
-    pub fn ui_mut(&mut self) -> &mut egui::Ui {
-        self.layout.ui
-    }
-
-    /// Where in screen-space is the table body?
-    pub fn max_rect(&self) -> Rect {
-        self.layout
-            .rect
-            .translate(egui::vec2(0.0, self.scroll_offset_y()))
-    }
 
     fn scroll_offset_y(&self) -> f32 {
         self.start_y - self.layout.rect.top()
@@ -1370,39 +1160,6 @@ impl<'a> TableBody<'a> {
         self.start_x - self.layout.rect.left()
     }
 
-    /// Return a vector containing all column widths for this table body.
-    ///
-    /// This is primarily meant for use with [`TableBody::heterogeneous_rows`] in cases where row
-    /// heights are expected to according to the width of one or more cells -- for example, if text
-    /// is wrapped rather than clipped within the cell.
-    pub fn widths(&self) -> &[f32] {
-        self.widths
-    }
-
-    /// Add many rows with same height.
-    ///
-    /// Is a lot more performant than adding each individual row as non visible rows must not be rendered.
-    ///
-    /// If you need many rows with different heights, use [`Self::heterogeneous_rows`] instead.
-    ///
-    /// ### Example
-    /// ```
-    /// # egui::__run_test_ui(|ui| {
-    /// use egui_extras::{TableBuilder, Column};
-    /// TableBuilder::new(ui)
-    ///     .column(Column::remainder().at_least(100.0))
-    ///     .body(|mut body| {
-    ///         let row_height = 18.0;
-    ///         let num_rows = 10_000;
-    ///         body.rows(row_height, num_rows, |mut row| {
-    ///             let row_index = row.index();
-    ///             row.col(|ui| {
-    ///                 ui.label(format!("First column of row {row_index}"));
-    ///             });
-    ///         });
-    ///     });
-    /// # });
-    /// ```
     pub fn rows(
         mut self,
         row_height_sans_spacing: f32,
@@ -1682,20 +1439,6 @@ impl<'a, 'b> TableRow<'a, 'b> {
         column_response
     }
 
-    /// Set the selection highlight state for cells added after a call to this function.
-    #[inline]
-    pub fn set_selected(&mut self, selected: bool) {
-        self.selected = selected;
-    }
-
-    /// Returns a union of the [`Response`]s of the cells added to the row up to this point.
-    ///
-    /// You need to add at least one row to the table before calling this function.
-    pub fn response(&self) -> Response {
-        self.response
-            .clone()
-            .expect("Should only be called after `col`")
-    }
 
     /// Returns the index of the row.
     #[inline]

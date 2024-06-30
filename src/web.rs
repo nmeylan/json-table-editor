@@ -1,6 +1,6 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-use crate::MyApp;
+
 
 /// Our handle to the web app from JavaScript.
 #[derive(Clone)]

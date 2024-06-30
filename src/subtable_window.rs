@@ -21,7 +21,7 @@ impl SubTable {
             let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth + 1).max_depth(10);
             let result = Self::parse(&content, &options, false);
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
-            let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone(), parent_value_type);
+            let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone());
             array_table.is_sub_table = true;
             Self {
                 name,

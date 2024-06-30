@@ -23,11 +23,6 @@ impl FrameHistory {
         }
         self.frame_times.add(now, previous_frame_time); // projected
     }
-
-    pub fn mean_frame_time(&self) -> f32 {
-        self.frame_times.average().unwrap_or_default()
-    }
-
     pub fn fps(&self) -> f32 {
         1.0 / self.frame_times.mean_time_interval().unwrap_or_default()
     }

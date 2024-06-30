@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use egui::{Align, Color32, Context, CursorIcon, Id, Key, Label, Sense, Style, TextBuffer, TextEdit, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
@@ -15,7 +15,7 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string,  Window};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
 use crate::fonts::{FILTER, THUMBTACK};
@@ -106,7 +106,6 @@ pub struct ArrayTable {
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
     pub parent_pointer: String,
-    parent_value_type: ValueType,
     windows: Vec<SubTable>,
     pub(crate) is_sub_table: bool,
     seed1: usize, // seed for Id
@@ -152,7 +151,7 @@ impl super::View<ArrayResponse> for ArrayTable {
                         ui.push_id("table-pinned-column", |ui| {
                             ui.vertical(|ui| {
                                 ui.set_max_width(parent_width_available / 2.0);
-                                let mut scroll_area = egui::ScrollArea::horizontal();
+                                let scroll_area = egui::ScrollArea::horizontal();
                                 scroll_area.show(ui, |ui| {
                                     self.table_ui(ui, true);
                                 });
@@ -240,7 +239,7 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &S
 pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
 
 impl ArrayTable {
-    pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column>, depth: u8, parent_pointer: String, parent_value_type: ValueType) -> Self {
+    pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column>, depth: u8, parent_pointer: String) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
             column_selected: Self::selected_columns(&all_columns, depth),
@@ -258,7 +257,6 @@ impl ArrayTable {
             seed1: Id::new(&parent_pointer).value() as usize,
             seed2: Id::new(format!("{}pinned", &parent_pointer)).value() as usize,
             parent_pointer,
-            parent_value_type,
             windows: vec![],
             matching_rows: vec![],
             matching_row_selected: 0,

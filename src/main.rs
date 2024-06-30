@@ -1,7 +1,6 @@
 extern crate core;
 
 mod array_table;
-mod panels;
 mod components;
 mod subtable_window;
 pub mod parser;
@@ -20,16 +19,15 @@ use std::fmt::Write;
 use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
 use crate::components::fps::FrameHistory;
-use std::time::{Instant};
+
 use eframe::{CreationContext};
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, CursorIcon, IconData, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
-use crate::panels::{SelectColumnsPanel};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
-use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, QUESTION_CIRCLE};
+use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
@@ -67,13 +65,6 @@ impl ArrayResponse {
         new_response
     }
 }
-
-#[derive(Default, Debug, Clone)]
-struct Pos<T> {
-    x: T,
-    y: T,
-}
-
 
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
@@ -144,9 +135,7 @@ impl MyApp {
         Self {
             frame_history: FrameHistory::default(),
             table: None,
-            windows: vec![
-                Box::<SelectColumnsPanel>::default()
-            ],
+            windows: vec![],
             max_depth: 0,
             open: Default::default(),
             depth: 0,
@@ -184,14 +173,13 @@ impl MyApp {
         let mut content = String::with_capacity(metadata1.len() as usize);
         // let mut reader = LfToCrlfReader::new(file);
         // reader.read_to_string(&mut content);
-        file.read_to_string(&mut content);
+        file.read_to_string(&mut content).unwrap();
 
         self.open_json_content(max_depth, content.as_bytes());
     }
 
     fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
         let mut found_array = false;
-        let mut found_object = false;
         let size = json.len() / 1024 / 1024;
         log!("open_json_content with size {}mb, found array {}", size, found_array);
         for byte in json {
@@ -200,7 +188,6 @@ impl MyApp {
                 break;
             }
             if *byte == b'{' {
-                found_object = true;
                 break;
             }
         }
@@ -227,7 +214,7 @@ impl MyApp {
             if let Some(ref start_at) = self.selected_pointer {
                 prefix = start_at.clone();
             }
-            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, prefix, ValueType::Array(0));
+            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, prefix);
             self.table = Some(table);
             self.depth = depth;
             self.max_depth = max_depth as u8;
@@ -264,7 +251,7 @@ impl MyApp {
     }
 
     fn goto_next_matching_row_occurrence(table: &mut ArrayTable) -> bool {
-        if table.matching_rows.len() == 0 {
+        if table.matching_rows.is_empty() {
             return false;
         }
         if table.matching_row_selected == table.matching_rows.len() - 1 {
@@ -277,7 +264,7 @@ impl MyApp {
     }
 
     fn goto_next_matching_column_occurrence(table: &mut ArrayTable) -> bool {
-        if table.matching_columns.len() == 0 {
+        if table.matching_columns.is_empty() {
             return false;
         }
         if table.matching_column_selected == table.matching_columns.len() - 1 {
@@ -436,20 +423,16 @@ impl eframe::App for MyApp {
                     // interaction handling
                     if scroll_to_column_response.changed() {
                         table.changed_scroll_to_column_value = true;
-                    } else if scroll_to_column_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
-                        if Self::goto_next_matching_column_occurrence(table) {
-                            scroll_to_column_response.request_focus();
-                        }
+                    } else if scroll_to_column_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) && Self::goto_next_matching_column_occurrence(table) {
+                        scroll_to_column_response.request_focus();
                     }
                     if scroll_to_row_response.changed() {
                         table.changed_scroll_to_row_value = Some(crate::compatibility::now());
                         if table.scroll_to_row.is_empty() {
                             table.reset_search();
                         }
-                    } else if scroll_to_row_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
-                        if Self::goto_next_matching_row_occurrence(table) {
-                            scroll_to_row_response.request_focus();
-                        }
+                    } else if scroll_to_row_response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) && Self::goto_next_matching_row_occurrence(table) {
+                        scroll_to_row_response.request_focus();
                     }
                     if scroll_to_row_mode_response.inner.is_some() && scroll_to_row_mode_response.inner.unwrap() {
                         table.reset_search();
@@ -477,7 +460,7 @@ impl eframe::App for MyApp {
                         ui.separator();
                         ui.label(format!("Start pointer: {}", table.parent_pointer));
                     }
-                    if table.columns_filter.len() > 0 {
+                    if !table.columns_filter.is_empty() {
                         ui.separator();
                         if ui.label(RichText::new(format!("{} active filters", table.columns_filter.len())).underline())
                             .on_hover_ui(|ui| {
@@ -579,7 +562,7 @@ impl eframe::App for MyApp {
                         ui.heading("Select which array you want to parse");
                         self.parsing_invalid_pointers.iter().for_each(|pointer| {
                             if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
-                                ui.radio(true, pointer.as_str());
+                                let _ = ui.radio(true, pointer.as_str());
                             } else if ui.radio(false, pointer.as_str()).clicked() {
                                 self.selected_pointer = Some(pointer.clone());
                             }
