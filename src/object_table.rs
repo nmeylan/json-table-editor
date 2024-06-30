@@ -15,6 +15,7 @@ pub struct ObjectTable {
 
     pub editing_index: RefCell<Option<usize>>,
     pub editing_value: RefCell<String>,
+    pub focused_cell: Option<(usize, usize, bool)>
 }
 
 impl ObjectTable {
@@ -34,6 +35,7 @@ impl ObjectTable {
             arrays,
             editing_index: RefCell::new(None),
             editing_value: RefCell::new("".to_string()),
+            focused_cell: None,
         }
     }
 
@@ -61,10 +63,11 @@ impl ObjectTable {
             .header(text_height * 2.0, |mut header| {
                 header.col(|ui, _| { Some(ui.label("Pointer")) });
                 header.col(|ui, _| { Some(ui.label("Value")) });
-            }).body(None, None, |body| {
+            }).body(None, None, self.focused_cell, |body| {
             let mut updated_value: Option<(PointerKey, String)> = None;
             body.rows(text_height, self.filtered_nodes.len(), |mut row| {
-                let row_index = self.filtered_nodes[row.index()];
+                let table_row_index = row.index();
+                let row_index = self.filtered_nodes[table_row_index];
                 let entry = &self.nodes[row_index];
                 row.col(|c, _| Some(c.label(&entry.pointer.pointer)));
                 row.col(|ui, _| {
@@ -82,13 +85,14 @@ impl ObjectTable {
                     } else {
                         let rect = ui.available_rect_before_wrap();
                         let cell_zone = ui.interact(rect, Id::new(&entry.pointer.pointer), Sense::click());
-                        let response = entry.value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
-                            .unwrap_or_else(|| ui.label("")).union(cell_zone);
+                        let response = cell_zone.union(entry.value.as_ref().map(|v| ui.add(Label::new(v).sense(Sense::click())))
+                            .unwrap_or_else(|| ui.label("")));
                         if response.double_clicked() {
                             *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                             *editing_index = Some(row_index);
                         }
                         response.context_menu(|ui| {
+                            self.focused_cell = Some((1, table_row_index, false));
                             if ui.button("Edit").clicked() {
                                 *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                                 *editing_index = Some(row_index);
@@ -104,6 +108,12 @@ impl ObjectTable {
                                 ui.close_menu();
                             }
                         });
+
+                        if let Some((_, focused_row, _)) = self.focused_cell {
+                            if focused_row == table_row_index && !response.context_menu_opened(){
+                                self.focused_cell = None;
+                            }
+                        }
                         Some(response)
                     }
                 });

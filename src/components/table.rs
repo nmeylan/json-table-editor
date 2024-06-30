@@ -164,7 +164,7 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 
-use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Widget, Color32};
+use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Widget, Color32, Stroke};
 use egui::scroll_area::ScrollAreaOutput;
 
 #[derive(Clone, Copy)]
@@ -200,6 +200,7 @@ pub(crate) struct StripLayoutFlags {
     pub(crate) striped: bool,
     pub(crate) hovered: bool,
     pub(crate) selected: bool,
+    pub(crate) selected_cell: bool,
     pub(crate) highlighted: bool,
 }
 
@@ -319,6 +320,13 @@ impl<'l> StripLayout<'l> {
                 gapless_rect,
                 egui::Rounding::ZERO,
                 Color32::YELLOW,
+            );
+        }
+        if flags.selected_cell {
+            self.ui.painter().rect_stroke(
+                gapless_rect.shrink(2.0),
+                egui::Rounding::ZERO,
+                Stroke{color: Color32::DARK_GRAY, width: 2.0},
             );
         }
 
@@ -662,6 +670,7 @@ pub struct TableBuilder<'a> {
     cell_layout: egui::Layout,
     scroll_options: TableScrollOptions,
     sense: egui::Sense,
+    is_pinned_column_table: bool
 }
 
 impl<'a> TableBuilder<'a> {
@@ -675,12 +684,18 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options: Default::default(),
             sense: egui::Sense::hover(),
+            is_pinned_column_table: false,
         }
     }
 
     /// Enable striped row background for improved readability.
     ///
     /// Default is whatever is in [`egui::Visuals::striped`].
+    #[inline]
+    pub fn set_is_pinned_column_table(mut self, is_pinned_column_table: bool) -> Self {
+        self.is_pinned_column_table = is_pinned_column_table;
+        self
+    }
     #[inline]
     pub fn striped(mut self, striped: bool) -> Self {
         self.striped = Some(striped);
@@ -847,6 +862,7 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options,
             sense,
+            is_pinned_column_table
         } = self;
 
         let striped = striped.unwrap_or(ui.visuals().striped);
@@ -910,6 +926,10 @@ impl<'a> TableBuilder<'a> {
                 selected: false,
                 response: &mut response,
                 highlighted: false,
+                highlighted_cell: None,
+                selected_cell: None,
+                hovered_cell_index_id: None,
+                is_pinned_column_table,
             });
             layout.allocate_rect();
         });
@@ -928,6 +948,7 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options,
             sense,
+            is_pinned_column_table,
         }
     }
 
@@ -946,6 +967,7 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options,
             sense,
+            is_pinned_column_table
         } = self;
 
         let striped = striped.unwrap_or(ui.visuals().striped);
@@ -975,8 +997,9 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options,
             sense,
+            is_pinned_column_table,
         }
-            .body(None, None, add_body_contents);
+            .body(None, None, None, add_body_contents);
     }
 }
 
@@ -1037,6 +1060,7 @@ pub struct Table<'a> {
     scroll_options: TableScrollOptions,
 
     sense: egui::Sense,
+    is_pinned_column_table: bool
 }
 
 impl<'a> Table<'a> {
@@ -1048,7 +1072,7 @@ impl<'a> Table<'a> {
     }
 
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<(usize, usize, bool)>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
         where
             F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -1065,7 +1089,7 @@ impl<'a> Table<'a> {
             striped,
             cell_layout,
             scroll_options,
-            sense,
+            sense, is_pinned_column_table,
         } = self;
 
         let TableScrollOptions {
@@ -1101,6 +1125,7 @@ impl<'a> Table<'a> {
 
         let number_of_columns = widths_ref.len();
 
+        let mut hovered_cell_index = None;
         let scroll_area_output = scroll_area.show(ui, move |ui| {
             let mut columns_offset = Vec::with_capacity(number_of_columns);
             let mut scroll_to_y_range = None;
@@ -1110,7 +1135,12 @@ impl<'a> Table<'a> {
             // Hide first-frame-jitters when auto-sizing.
             ui.add_visible_ui(!first_frame_auto_size_columns, |ui| {
                 let hovered_row_index_id = self.state_id.with("__table_hovered_row");
+                let hovered_cell_index_id = self.state_id.with("__table_hovered_cell");
                 let mut hovered_row_index = ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
+                hovered_cell_index = ui.data_mut(|data| data.remove_temp::<(usize, usize, bool)>(hovered_cell_index_id));
+                if focused_cell.is_some() {
+                    hovered_cell_index = focused_cell;
+                }
                 if hovered_row_index.is_none() {
                     hovered_row_index = stored_hovered_row_index;
                 }
@@ -1152,8 +1182,11 @@ impl<'a> Table<'a> {
                     scroll_offset_x,
                     first_col_visible_width: first_col_visible_offset,
                     hovered_row_index,
+                    hovered_cell_index,
                     hovered_row_index_id,
                     search_matching_row_index,
+                    hovered_cell_index_id,
+                    is_pinned_column_table,
                 });
 
                 if scroll_to_row.is_some() && scroll_to_y_range.is_none() {
@@ -1218,7 +1251,6 @@ impl<'a> Table<'a> {
 
                 if resize_response.double_clicked() {
                     // Resize to the minimum of what is needed.
-
                     *column_width = width_range.clamp(max_used_widths[i]);
                 } else if resize_response.dragged() {
                     if let Some(pointer) = ui.ctx().pointer_latest_pos() {
@@ -1304,12 +1336,15 @@ pub struct TableBody<'a> {
     scroll_to_y_range: &'a mut Option<Rangef>,
 
     hovered_row_index: Option<usize>,
+    hovered_cell_index: Option<(usize, usize, bool)>,
+    hovered_cell_index_id: egui::Id,
 
     /// Used to store the hovered row index between frames.
     hovered_row_index_id: egui::Id,
     pub scroll_offset_x: f32,
     pub first_col_visible_width: f32,
     pub search_matching_row_index: Option<usize>,
+    is_pinned_column_table: bool
 }
 
 impl<'a> TableBody<'a> {
@@ -1416,9 +1451,13 @@ impl<'a> TableBody<'a> {
                 striped: self.striped && (row_index + self.row_index) % 2 == 0,
                 hovered: self.hovered_row_index == Some(row_index),
                 highlighted: self.search_matching_row_index == Some(row_index),
+                highlighted_cell: None,
+                selected_cell: self.hovered_cell_index,
                 selected: false,
                 response: &mut response,
                 remainder_with: 0.0,
+                hovered_cell_index_id: Some(self.hovered_cell_index_id),
+                is_pinned_column_table: self.is_pinned_column_table,
             });
             self.capture_hover_state(&response, row_index);
         }
@@ -1437,8 +1476,6 @@ impl<'a> TableBody<'a> {
         self.layout.skip_space(egui::vec2(0.0, height));
     }
 
-    // Capture the hover information for the just created row. This is used in the next render
-    // to ensure that the entire row is highlighted.
     fn capture_hover_state(&mut self, response: &Option<Response>, row_index: usize) {
         let is_row_hovered = response.as_ref().map_or(false, |r| r.hovered());
         if is_row_hovered {
@@ -1480,6 +1517,10 @@ pub struct TableRow<'a, 'b> {
     response: &'b mut Option<Response>,
     pub remainder_with: f32,
     pub highlighted: bool,
+    pub highlighted_cell: Option<usize>,
+    pub selected_cell: Option<(usize, usize, bool)>,
+    hovered_cell_index_id: Option<egui::Id>,
+    is_pinned_column_table: bool
 }
 
 pub struct ColumnResponse {
@@ -1489,6 +1530,15 @@ pub struct ColumnResponse {
 }
 
 impl<'a, 'b> TableRow<'a, 'b> {
+
+    fn capture_hover_cell_state(&mut self, cell_index: (usize, usize, bool)) {
+        if let Some(hovered_cell_index_id) = self.hovered_cell_index_id {
+            self.layout
+                .ui
+                .data_mut(|data| data.insert_temp(hovered_cell_index_id, cell_index));
+        }
+    }
+
     /// Add the contents of a column.
     ///
     /// Returns the used space (`min_rect`) plus the [`Response`] of the whole cell.
@@ -1510,12 +1560,19 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
         let width = CellSize::Absolute(width);
         let height = CellSize::Absolute(self.height);
+        let selected_cell = if self.selected_cell.is_some() {
+            let cell = self.selected_cell.unwrap();
+            self.row_index == cell.1 && cell.0 == col_index
+        } else {
+            false
+        };
 
         let flags = StripLayoutFlags {
             clip,
             striped: self.striped,
             hovered: self.hovered,
             selected: self.selected,
+            selected_cell,
             highlighted: self.highlighted,
         };
 
@@ -1537,6 +1594,10 @@ impl<'a, 'b> TableRow<'a, 'b> {
                 .as_ref()
                 .map_or(response.clone(), |r| r.union(response.clone())),
         );
+
+        if response.hovered() {
+            self.capture_hover_cell_state((col_index, self.row_index, false));
+        }
 
         (used_rect, response)
     }
@@ -1565,11 +1626,18 @@ impl<'a, 'b> TableRow<'a, 'b> {
             let height = CellSize::Absolute(self.height);
 
 
+            let selected_cell = if self.selected_cell.is_some() {
+                let cell = self.selected_cell.unwrap();
+                cell.1 == self.row_index && cell.0 == *col_index && self.is_pinned_column_table == cell.2
+            } else {
+                false
+            };
             let flags = StripLayoutFlags {
                 clip,
                 striped: self.striped,
                 hovered: self.hovered,
                 selected: self.selected,
+                selected_cell,
                 highlighted: self.highlighted,
             };
 
@@ -1600,6 +1668,9 @@ impl<'a, 'b> TableRow<'a, 'b> {
                     .map_or(response.clone(), |r| r.union(response.clone())),
             );
             last_index = *col_index;
+        }
+        if let Some(hovered_col_index) = column_response.hovered_col_index {
+            self.capture_hover_cell_state((hovered_col_index, self.row_index, self.is_pinned_column_table));
         }
         if !self.columns.is_empty() && is_header && last_index < self.columns.len() - 1 {
             self.layout.add_empty(

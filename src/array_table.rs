@@ -118,6 +118,7 @@ pub struct ArrayTable {
     pub scroll_to_column: String,
     pub scroll_to_row: String,
     pub scroll_to_row_mode: ScrollToRowMode,
+    pub focused_cell: Option<(usize, usize, bool)>,
 
     // Handle interaction
     pub next_frame_reset_scroll: bool,
@@ -270,6 +271,7 @@ impl ArrayTable {
             editing_index: RefCell::new(None),
             editing_value: RefCell::new(String::new()),
             is_sub_table: false,
+            focused_cell: None,
         }
     }
     pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
@@ -375,6 +377,7 @@ impl ArrayTable {
             .cell_layout(egui::Layout::left_to_right(egui::Align::LEFT))
             .min_scrolled_height(0.0)
             .max_scroll_height(parent_height)
+            .set_is_pinned_column_table(pinned_column_table)
             .scroll_bar_visibility(if pinned_column_table { ScrollBarVisibility::AlwaysHidden } else { ScrollBarVisibility::AlwaysVisible })
             ;
 
@@ -512,13 +515,16 @@ impl ArrayTable {
                     self.on_filter_column_value(clicked_column.clone());
                 }
             })
-            .body(self.hovered_row_index, search_highlight_row, |body| {
+            .body(self.hovered_row_index, search_highlight_row, self.focused_cell, |body| {
                 // Mutation after interaction
                 let mut subtable = None;
+                let mut focused_cell = None;
+                let mut focused_changed = false;
                 let mut updated_value: Option<(PointerKey, String)> = None;
                 let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
                 let hovered_row_index = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
-                    let row_index = self.filtered_nodes[row.index()];
+                    let table_row_index = row.index();
+                    let row_index = self.filtered_nodes[table_row_index];
                     let node = self.nodes().get(row_index);
 
                     if let Some(row_data) = node.as_ref() {
@@ -559,7 +565,7 @@ impl ArrayTable {
                                         let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
                                         label = label.sense(Sense::click());
-                                        let mut response = label.ui(ui).union(cell_zone);
+                                        let mut response = cell_zone.union(label.ui(ui));
 
                                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
@@ -567,6 +573,10 @@ impl ArrayTable {
                                         if response.double_clicked() {
                                             *self.editing_value.borrow_mut() = value.clone();
                                             *editing_index = Some((col_index, row_index, pinned_column_table));
+                                        }
+                                        if response.secondary_clicked() {
+                                            focused_cell = Some((col_index, table_row_index, pinned_column_table));
+                                            focused_changed = true;
                                         }
                                         response.context_menu(|ui| {
                                             if ui.button("Edit").clicked() {
@@ -604,6 +614,13 @@ impl ArrayTable {
                                                 ui.close_menu();
                                             }
                                         });
+
+                                        if let Some((focused_col, focused_row, focused_is_pinned_table)) = self.focused_cell {
+                                            if focused_is_pinned_table == pinned_column_table && focused_row == table_row_index && focused_col == col_index && !response.context_menu_opened(){
+                                                focused_cell = None;
+                                                focused_changed = true;
+                                            }
+                                        }
                                         if response.hovered() {
                                             ui.ctx().set_cursor_icon(CursorIcon::Cell);
                                         }
@@ -623,6 +640,11 @@ impl ArrayTable {
                                 *self.editing_value.borrow_mut() = String::new();
                                 *editing_index = Some((col_index, row_index, pinned_column_table));
                             }
+
+                            if response.secondary_clicked() {
+                                focused_cell = Some((col_index, table_row_index, pinned_column_table));
+                                focused_changed = true;
+                            }
                             response.context_menu(|ui| {
                                 if ui.button("Edit").clicked() {
                                     *self.editing_value.borrow_mut() = String::new();
@@ -641,6 +663,13 @@ impl ArrayTable {
                                     }
                                 }
                             });
+
+                            if let Some((focused_col, focused_row, focused_is_pinned_table)) = self.focused_cell {
+                                if focused_is_pinned_table == pinned_column_table && focused_row == table_row_index && focused_col == col_index && !response.context_menu_opened(){
+                                    focused_cell = None;
+                                    focused_changed = true;
+                                }
+                            }
                             if response.hovered() {
                                 ui.ctx().set_cursor_icon(CursorIcon::Cell);
                             }
@@ -648,6 +677,9 @@ impl ArrayTable {
                         });
                     }
                 });
+                if focused_changed {
+                    self.focused_cell = focused_cell;
+                }
                 if let Some(subtable) = subtable {
                     self.windows.push(subtable);
                 }
