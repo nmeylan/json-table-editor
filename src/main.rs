@@ -23,12 +23,13 @@ use crate::components::fps::FrameHistory;
 use std::time::{Instant};
 use eframe::{CreationContext};
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, IconData, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align2, Button, Color32, ComboBox, Context, CursorIcon, IconData, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::panels::{SelectColumnsPanel};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
-use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
+use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP, QUESTION_CIRCLE};
 use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
@@ -86,6 +87,11 @@ fn main() {
         };
         eframe::run_native("JSON table editor", options, Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            let mut style = (*cc.egui_ctx.style()).clone();
+            style.spacing.scroll.floating = false;
+            style.spacing.scroll.bar_width = 4.0;
+            style.spacing.scroll.bar_inner_margin = 6.0;
+            cc.egui_ctx.set_style(style);
             let mut app = MyApp::new(cc);
 
             let args: Vec<_> = env::args().collect();
@@ -284,7 +290,7 @@ impl MyApp {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn web_try_open_json_bytes(&mut self)  {
+    fn web_try_open_json_bytes(&mut self) {
         let mut json_guard = self.web_loaded_json.try_lock();
         let has_json = json_guard.is_ok();
         if has_json {
@@ -470,7 +476,17 @@ impl eframe::App for MyApp {
                     if !table.parent_pointer.is_empty() {
                         ui.separator();
                         ui.label(format!("Start pointer: {}", table.parent_pointer));
-
+                    }
+                    if table.columns_filter.len() > 0 {
+                        ui.separator();
+                        if ui.label(RichText::new(format!("{} active filters", table.columns_filter.len())).underline())
+                            .on_hover_ui(|ui| {
+                                ui.vertical(|ui| {
+                                    table.columns_filter.iter().for_each(|(k, _)| { ui.label(k); })
+                                });
+                            }).hovered() {
+                            ui.ctx().set_cursor_icon(CursorIcon::Help);
+                        }
                     }
                 });
             });
@@ -552,7 +568,6 @@ impl eframe::App for MyApp {
                                                };
                                                wasm_bindgen_futures::spawn_local(future);
                                                self.web_try_open_json_bytes();
-
                                            }
                                        },
                 );

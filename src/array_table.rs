@@ -102,7 +102,7 @@ pub struct ArrayTable {
     pub nodes: Vec<JsonArrayEntries<String>>,
     filtered_nodes: Vec<usize>,
     scroll_y: f32,
-    columns_filter: HashMap<String, Vec<String>>,
+    pub columns_filter: HashMap<String, Vec<String>>,
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
     pub parent_pointer: String,
@@ -145,12 +145,17 @@ impl super::View<ArrayResponse> for ArrayTable {
             .size(Size::remainder())
             .vertical(|mut strip| {
                 strip.cell(|ui| {
-                    let parent_size_available = ui.available_rect_before_wrap().height();
+                    let parent_height_available = ui.available_rect_before_wrap().height();
+                    let parent_width_available = ui.available_rect_before_wrap().width();
                     ui.horizontal(|ui| {
-                        ui.set_height(parent_size_available);
+                        ui.set_height(parent_height_available);
                         ui.push_id("table-pinned-column", |ui| {
                             ui.vertical(|ui| {
-                                self.table_ui(ui, true);
+                                ui.set_max_width(parent_width_available / 2.0);
+                                let mut scroll_area = egui::ScrollArea::horizontal();
+                                scroll_area.show(ui, |ui| {
+                                    self.table_ui(ui, true);
+                                });
                             })
                         });
 
