@@ -1,4 +1,4 @@
-use std::time::{Instant};
+use std::time::{Duration,Instant};
 #[macro_export]
 macro_rules! log {
     () => {

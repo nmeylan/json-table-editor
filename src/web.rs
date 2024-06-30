@@ -30,7 +30,7 @@ impl WebHandle {
             .start(
                 canvas_id,
                 eframe::WebOptions::default(),
-                Box::new(|cc| Box::new(MyApp::new(cc))),
+                Box::new(|cc| Box::new(crate::MyApp::new(cc))),
             )
             .await
     }
@@ -44,7 +44,7 @@ impl WebHandle {
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen]
     pub fn example(&self) {
-        if let Some(_app) = self.runner.app_mut::<MyApp>() {
+        if let Some(_app) = self.runner.app_mut::<crate::MyApp>() {
             // _app.example();
         }
     }

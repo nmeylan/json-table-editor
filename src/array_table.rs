@@ -419,13 +419,24 @@ impl ArrayTable {
 
         let columns_count = if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() };
         let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
-        for i in 0..columns_count {
-            if pinned_column_table && i == 0 {
-                table = table.column(Column::initial(40.0).clip(true).resizable(true));
-                continue;
+        if columns_count <= 3 {
+            for i in 0..columns_count {
+                if pinned_column_table && i == 0 {
+                    table = table.column(Column::initial(40.0).clip(true).resizable(true));
+                } else {
+                    table = table.column(Column::auto().clip(true).resizable(true));
+                }
             }
-            table = table.column(Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width).clip(true).resizable(true));
+        } else {
+            for i in 0..columns_count {
+                if pinned_column_table && i == 0 {
+                    table = table.column(Column::initial(40.0).clip(true).resizable(true));
+                    continue;
+                }
+                table = table.column(Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width).clip(true).resizable(true));
+            }
         }
+
         let mut request_repaint = false;
         let search_highlight_row = if !self.matching_rows.is_empty() {
             Some(self.matching_rows[self.matching_row_selected])

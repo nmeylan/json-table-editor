@@ -454,6 +454,15 @@ impl Column {
     pub fn initial(width: f32) -> Self {
         Self::new(InitialColumnSize::Absolute(width))
     }
+    pub fn auto() -> Self {
+        Self::auto_with_initial_suggestion(100.0)
+    }
+    pub fn auto_with_initial_suggestion(suggested_width: f32) -> Self {
+        Self::new(InitialColumnSize::Automatic(suggested_width))
+    }
+    pub fn remainder() -> Self {
+        Self::new(InitialColumnSize::Remainder)
+    }
 
     fn new(initial_width: InitialColumnSize) -> Self {
         Self {

@@ -57,8 +57,8 @@ impl ObjectTable {
             .max_scroll_height(parent_height)
             .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
             ;
-        table = table.column(Column::initial(140.0).clip(true).resizable(true));
-        table = table.column(Column::initial(340.0).clip(true).resizable(true));
+        table = table.column(Column::auto().clip(true).resizable(true));
+        table = table.column(Column::remainder().clip(true).resizable(true));
         table
             .header(text_height * 2.0, |mut header| {
                 header.col(|ui, _| { Some(ui.label("Pointer")) });
