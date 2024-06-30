@@ -30,6 +30,7 @@ pub struct Column {
     pub value_type: ValueType,
     pub seen_count: usize,
     pub order: usize,
+    pub cache_pointer_index: Vec<Option<isize>>,
 }
 
 impl Hash for Column {
@@ -46,6 +47,7 @@ impl Column {
             value_type,
             seen_count: 0,
             order: 0,
+            cache_pointer_index: vec![],
         }
     }
 }
@@ -95,8 +97,8 @@ impl ScrollToRowMode {
 #[derive(Default)]
 pub struct ArrayTable {
     all_columns: Vec<Column>,
-    column_selected: Vec<Column>,
-    column_pinned: Vec<Column>,
+    column_selected: RefCell<Vec<Column>>,
+    column_pinned: RefCell<Vec<Column>>,
     pub max_depth: u8,
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResult<String>>,
@@ -167,7 +169,7 @@ impl super::View<ArrayResponse> for ArrayTable {
                                 self.matching_columns.clear();
                                 self.matching_column_selected = 0;
                                 if !self.scroll_to_column.is_empty() {
-                                    for (index, column) in self.column_selected.iter().enumerate() {
+                                    for (index, column) in self.column_selected.borrow().iter().enumerate() {
                                         if column.name.to_lowercase().eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
                                             || column.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase()) {
                                             self.matching_columns.push(index);
@@ -243,7 +245,7 @@ impl ArrayTable {
     pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column>, depth: u8, parent_pointer: String) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
-            column_selected: Self::selected_columns(&all_columns, depth),
+            column_selected: RefCell::new(Self::selected_columns(&all_columns, depth)),
             all_columns,
             max_depth: depth,
             filtered_nodes: (0..nodes.len()).collect::<Vec<usize>>(),
@@ -251,7 +253,7 @@ impl ArrayTable {
             parse_result,
             // states
             next_frame_reset_scroll: false,
-            column_pinned: vec![Column::new("/#".to_string(), ValueType::Number)],
+            column_pinned: RefCell::new(vec![Column::new("/#".to_string(), ValueType::Number)]),
             scroll_y: 0.0,
             hovered_row_index: None,
             columns_offset: vec![],
@@ -306,15 +308,17 @@ impl ArrayTable {
     pub fn update_selected_columns(&mut self, depth: u8) -> Option<usize> {
         if depth <= self.last_parsed_max_depth {
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
-            column_selected.retain(|c| !self.column_pinned.contains(c));
-            self.column_selected = column_selected;
-            if self.column_selected.is_empty() {
-                self.column_selected.push(Column {
+            column_selected.retain(|c| !self.column_pinned.borrow().contains(c));
+            let is_empty = column_selected.is_empty();
+            *self.column_selected.borrow_mut() = column_selected;
+            if is_empty {
+                self.column_selected.borrow_mut().push(Column {
                     name: "".to_string(),
                     depth,
                     value_type: Default::default(),
                     seen_count: 0,
                     order: 0,
+                    cache_pointer_index: vec![],
                 })
             }
             None
@@ -323,8 +327,8 @@ impl ArrayTable {
             let (new_json_array, new_columns, new_max_depth) = crate::parser::change_depth_array(previous_parse_result, mem::take(&mut self.nodes), depth as usize).unwrap();
             self.all_columns = new_columns;
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
-            column_selected.retain(|c| !self.column_pinned.contains(c));
-            self.column_selected = column_selected;
+            column_selected.retain(|c| !self.column_pinned.borrow().contains(c));
+            *self.column_selected.borrow_mut() = column_selected;
             self.nodes = new_json_array;
             self.last_parsed_max_depth = depth;
             self.parse_result.as_mut().unwrap().parsing_max_depth = depth;
@@ -418,8 +422,9 @@ impl ArrayTable {
         }
         table = table.vertical_scroll_offset(self.scroll_y);
 
-        let columns_count = if pinned_column_table { self.column_pinned.len() } else { self.column_selected.len() };
-        let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
+        let columns = if pinned_column_table { self.column_pinned.borrow() } else { self.column_selected.borrow() };
+        let columns_count = columns.len();
+
         if columns_count <= 3 {
             for i in 0..columns_count {
                 if pinned_column_table && i == 0 {
@@ -438,6 +443,7 @@ impl ArrayTable {
                 table = table.column(Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width).clip(true).resizable(true));
             }
         }
+        drop(columns);
 
         let mut request_repaint = false;
         let search_highlight_row = if !self.matching_rows.is_empty() {
@@ -466,12 +472,12 @@ impl ArrayTable {
     }
 
     fn header(&mut self, pinned_column_table: bool, mut header: TableRow) {
-    // Mutation after interaction
+        // Mutation after interaction
         let mut clicked_filter_non_null_column: Option<String> = None;
         let mut clicked_filter_column_value: Option<(String, String)> = None;
         let mut pinned_column: Option<usize> = None;
         header.cols(true, |ui, index| {
-            let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
+            let columns = if pinned_column_table { self.column_pinned.borrow() } else { self.column_selected.borrow() };
             let column = columns.get(index).unwrap();
             let name = column.name.clone().to_string();
             let strong = Label::new(WidgetText::RichText(egui::RichText::from(&name)));
@@ -532,13 +538,14 @@ impl ArrayTable {
             Some(response.inner)
         });
         if let Some(pinned_column) = pinned_column {
+            let mut column_selected_mut = self.column_selected.borrow_mut();
             if pinned_column_table {
-                let column = self.column_pinned.remove(pinned_column);
-                self.column_selected.push(column);
-                self.column_selected.sort();
+                let column = self.column_pinned.borrow_mut().remove(pinned_column);
+                column_selected_mut.push(column);
+                column_selected_mut.sort();
             } else {
-                let column = self.column_selected.remove(pinned_column);
-                self.column_pinned.push(column);
+                let column = column_selected_mut.remove(pinned_column);
+                self.column_pinned.borrow_mut().push(column);
             }
         }
         if let Some(clicked_column) = clicked_filter_non_null_column {
@@ -556,7 +563,7 @@ impl ArrayTable {
         let mut focused_cell = None;
         let mut focused_changed = false;
         let mut updated_value: Option<(PointerKey, String)> = None;
-        let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
+        let mut columns = if pinned_column_table { self.column_pinned.borrow_mut() } else { self.column_selected.borrow_mut() };
         let hovered_row_index = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
             let table_row_index = row.index();
             let row_index = self.filtered_nodes[table_row_index];
@@ -564,8 +571,12 @@ impl ArrayTable {
 
             if let Some(row_data) = node.as_ref() {
                 row.cols(false, |ui, col_index| {
+                    if pinned_column_table && col_index == 0 {
+                        let label = Label::new(row_data.entries()[0].pointer.index.to_string()).sense(Sense::click());
+                        return Some(label.ui(ui));
+                    }
                     let cell_id = row_index * columns.len() + col_index + if pinned_column_table { self.seed1 } else { self.seed2 };
-                    let cell_data = self.get_pointer(columns, &row_data.entries(), col_index, row_data.index());
+                    let cell_data = self.get_pointer2(columns.as_mut(), &row_data.entries(), col_index, row_data.index());
                     let mut editing_index = self.editing_index.borrow_mut();
                     if editing_index.is_some() && editing_index.unwrap() == (col_index, row_index, pinned_column_table) {
                         let ref_mut = &mut *self.editing_value.borrow_mut();
@@ -585,10 +596,7 @@ impl ArrayTable {
                     } else if let Some(entry) = cell_data {
                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
-                        if pinned_column_table && col_index == 0 {
-                            let label = Label::new(entry.pointer.index.to_string()).sense(Sense::click());
-                            return Some(label.ui(ui));
-                        } else if let Some(value) = entry.value.as_ref() {
+                        if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
                                 let mut label = if is_array || is_object {
                                     Label::new(value.replace('\n', "")) // maybe we want cache
@@ -726,6 +734,7 @@ impl ArrayTable {
                 Some(value)
             };
             let (_, row_index, _) = editing_index.unwrap();
+            drop(columns);
             if self.is_sub_table {
                 let updated_pointer = pointer.clone();
                 let value_changed = self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
@@ -810,7 +819,31 @@ impl ArrayTable {
         value_changed
     }
 
-    // C
+
+    #[inline]
+    fn get_pointer2<'a>(&self, columns: &mut Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<&'a FlatJsonValue<String>> {
+        if let Some(column) = columns.get_mut(index) {
+            if let Some(pointer_index) = column.cache_pointer_index[row_index] {
+                if pointer_index < 0 {
+                    return None;
+                }
+                return Some(&data[pointer_index as usize]);
+            } else {
+                let key = &column.name;
+                let key = Self::pointer_key(&self.parent_pointer, row_index, key);
+                let position = data.iter().position(|entry| {
+                    entry.pointer.pointer.eq(&key)
+                });
+                if position.is_some() {
+                    column.cache_pointer_index[row_index] = Some(position.unwrap() as isize);
+                } else {
+                    column.cache_pointer_index[row_index] = Some(-1);
+                    return None;
+                }
+            }
+        }
+        None
+    }
 
     #[inline]
     fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<&'a FlatJsonValue<String>> {
