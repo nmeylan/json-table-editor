@@ -96,7 +96,7 @@ pub struct ArrayTable {
     all_columns: Vec<Column>,
     column_selected: Vec<Column>,
     column_pinned: Vec<Column>,
-    max_depth: u8,
+    pub max_depth: u8,
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResult<String>>,
     pub nodes: Vec<JsonArrayEntries<String>>,
@@ -740,12 +740,6 @@ impl ArrayTable {
     }
 
     fn open_subtable(row_index: usize, entry: &FlatJsonValue<String>, content: String) -> Option<SubTable> {
-        // if matches!(entry.pointer.value_type, ValueType::Object(false)) {
-        //     let options = ParseOptions::default().parse_array(true).keep_object_raw_data(false).start_parse_at(entry.pointer.pointer.clone())
-        //         .start_depth(entry.pointer.depth + 1).prefix(entry.pointer.pointer.clone()).max_depth(10);
-        //     let result = Self::parse(&content, &options, true);
-        //     entry.pointer.value_type = ValueType::Object(true);
-        // }
         Some(SubTable::new(entry.pointer.pointer.clone(), content,
                            entry.pointer.value_type,
                            row_index, entry.pointer.depth,

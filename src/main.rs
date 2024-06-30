@@ -457,6 +457,24 @@ impl eframe::App for MyApp {
                 }
             });
         });
+
+        if self.table.is_some() {
+            let table = self.table.as_ref().unwrap();
+            egui::TopBottomPanel::bottom("bottom-panel").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{} rows ", table.nodes.len()));
+                    ui.separator();
+                    ui.label(format!("{} columns ", table.all_columns().len()));
+                    ui.separator();
+                    ui.label(format!("{} depth level", self.max_depth));
+                    if !table.parent_pointer.is_empty() {
+                        ui.separator();
+                        ui.label(format!("Start pointer: {}", table.parent_pointer));
+
+                    }
+                });
+            });
+        }
         egui::CentralPanel::default().show(ctx, |ui| {
             if !ctx.input(|i| i.raw.hovered_files.is_empty()) {
                 let text = ctx.input(|i| {
