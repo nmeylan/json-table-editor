@@ -72,6 +72,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
                         value_type: entry.pointer.value_type,
                         seen_count: 0,
                         order: unique_keys.len(),
+                        cache_pointer_index: vec![],
                     };
                     if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
                         column.seen_count += 1;
@@ -100,6 +101,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
     new_json_array_guard.sort_unstable_by(|a, b| a.index.cmp(&b.index));
     unique_keys.sort();
 
+    unique_keys.iter_mut().for_each(|c| c.cache_pointer_index = vec![None; new_json_array_guard.len()]);
     Ok((mem::take(&mut new_json_array_guard), unique_keys, 4))
 }
 pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>), String> {
@@ -147,6 +149,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                             value_type: entry.pointer.value_type,
                             seen_count: 1,
                             order: unique_keys.len(),
+                            cache_pointer_index: vec![],
                         };
                         if let Some(existing_column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
                             existing_column.seen_count += 1;
@@ -180,6 +183,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
     }
     res.reverse();
     unique_keys.sort();
+    unique_keys.iter_mut().for_each(|c| c.cache_pointer_index = vec![None; res.len()]);
     Ok((res, unique_keys))
 }
 
