@@ -168,7 +168,6 @@ impl MyApp {
             // 1
             u8::MAX
         } else {
-            // 2
             1 // should start after prefix
         };
         let mut content = String::with_capacity(metadata1.len() as usize);
