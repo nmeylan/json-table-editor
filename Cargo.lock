@@ -1479,6 +1479,7 @@ dependencies = [
  "egui_extras",
  "indexmap",
  "json-flat-parser",
+ "nohash-hasher",
  "rayon",
  "rfd",
  "wasm-bindgen",
@@ -1489,7 +1490,7 @@ dependencies = [
 [[package]]
 name = "json-flat-parser"
 version = "0.1.0"
-source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=51c3f76#51c3f765311412c6007e1a089580e17130f22be1"
+source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=5f2c931#5f2c931c0bf00c014835c81bd426f0d6fff09802"
 dependencies = [
  "indexmap",
  "simdutf8",

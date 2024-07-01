@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
+use egui::util::cache;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
@@ -109,6 +110,7 @@ pub struct ArrayTable {
     pub parent_pointer: String,
     windows: Vec<SubTable>,
     pub(crate) is_sub_table: bool,
+    cache: RefCell<crate::components::cache::CacheStorage>,
     seed1: usize, // seed for Id
     seed2: usize, // seed for Id
     pub matching_rows: Vec<usize>,
@@ -196,17 +198,34 @@ impl super::View<ArrayResponse> for ArrayTable {
                     });
                 });
             });
+        self.cache.borrow_mut().update();
         array_response
     }
 }
 
 #[derive(Default)]
-struct CacheA {}
+struct CacheFilterOptions {}
 
-type ColumnFilterCache = egui::util::cache::FrameCache<IndexSet<String>, CacheA>;
+#[derive(Default)]
+struct CacheGetPointer {}
 
-impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &String), IndexSet<String>> for CacheA {
-    fn compute(&mut self, (column, nodes, parent_pointer): (&Column, &Vec<JsonArrayEntries<String>>, &String)) -> IndexSet<String> {
+#[derive(Copy, Clone)]
+struct CachePointerKey {
+    pinned_column_table: bool,
+    index: usize,
+    row_index: usize,
+}
+
+impl Hash for CachePointerKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.pinned_column_table.hash(state);
+        self.index.hash(state);
+        self.row_index.hash(state);
+    }
+}
+
+impl crate::components::cache::ComputerMut<(&Column, &String), &Vec<JsonArrayEntries<String>>, IndexSet<String>> for CacheFilterOptions {
+    fn compute(&mut self, (column, parent_pointer): (&Column, &String), nodes: &Vec<JsonArrayEntries<String>>) -> IndexSet<String> {
         let mut unique_values = IndexSet::new();
         if ArrayTable::is_filterable(column) {
             nodes.iter().enumerate().map(|(i, row)| {
@@ -234,6 +253,14 @@ impl egui::util::cache::ComputerMut<(&Column, &Vec<JsonArrayEntries<String>>, &S
             unique_values.sort_by(|a, b| a.cmp(b));
         }
         unique_values
+    }
+}
+
+
+impl crate::components::cache::ComputerMut<CachePointerKey, &ArrayTable, Option<usize>> for CacheGetPointer {
+    fn compute(&mut self, cache_pointer_key: CachePointerKey, table: &ArrayTable) -> Option<usize> {
+        let columns = if cache_pointer_key.pinned_column_table { &table.column_pinned } else { &table.column_selected };
+        ArrayTable::get_pointer_index(&table.parent_pointer, columns, &table.nodes()[cache_pointer_key.row_index].entries(), cache_pointer_key.index, cache_pointer_key.row_index)
     }
 }
 
@@ -276,6 +303,7 @@ impl ArrayTable {
             editing_value: RefCell::new(String::new()),
             is_sub_table: false,
             focused_cell: None,
+            cache: Default::default(),
         }
     }
     pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
@@ -466,7 +494,7 @@ impl ArrayTable {
     }
 
     fn header(&mut self, pinned_column_table: bool, mut header: TableRow) {
-    // Mutation after interaction
+        // Mutation after interaction
         let mut clicked_filter_non_null_column: Option<String> = None;
         let mut clicked_filter_column_value: Option<(String, String)> = None;
         let mut pinned_column: Option<usize> = None;
@@ -503,11 +531,10 @@ impl ArrayTable {
                                          }
 
                                          if Self::is_filterable(column) {
-                                             let values = ui.memory_mut(|mem| {
-                                                 let cache = mem.caches.cache::<ColumnFilterCache>();
+                                             let mut cache_ref_mut = self.cache.borrow_mut();
+                                             let cache = cache_ref_mut.cache::<crate::components::cache::FrameCache<IndexSet<String>, CacheFilterOptions>>();
 
-                                                 cache.get((column, &self.nodes, &self.parent_pointer))
-                                             });
+                                             let values = cache.get((column, &self.parent_pointer), &self.nodes);
                                              if !values.is_empty() {
                                                  let checked_filtered_values = self.columns_filter.get(&column.name);
                                                  ui.separator();
@@ -550,7 +577,7 @@ impl ArrayTable {
     }
 
 
-    fn body(&mut self, text_height: f32, pinned_column_table: bool, mut array_response: &mut ArrayResponse, mut request_repaint: bool, body: TableBody) {
+    fn body<'arraytable>(&'arraytable mut self, text_height: f32, pinned_column_table: bool, mut array_response: &mut ArrayResponse, mut request_repaint: bool, body: TableBody) {
         // Mutation after interaction
         let mut subtable = None;
         let mut focused_cell = None;
@@ -565,7 +592,16 @@ impl ArrayTable {
             if let Some(row_data) = node.as_ref() {
                 row.cols(false, |ui, col_index| {
                     let cell_id = row_index * columns.len() + col_index + if pinned_column_table { self.seed1 } else { self.seed2 };
-                    let cell_data = self.get_pointer(columns, &row_data.entries(), col_index, row_data.index());
+                    let index = {
+                        let mut cache_ref_mut = self.cache.borrow_mut();
+                        let cache = cache_ref_mut.cache::<crate::components::cache::FrameCache<Option<usize>, CacheGetPointer>>();
+                        let key = CachePointerKey {
+                            pinned_column_table,
+                            index: col_index,
+                            row_index: row_data.index(),
+                        };
+                        cache.get(key, &self)
+                    };
                     let mut editing_index = self.editing_index.borrow_mut();
                     if editing_index.is_some() && editing_index.unwrap() == (col_index, row_index, pinned_column_table) {
                         let ref_mut = &mut *self.editing_value.borrow_mut();
@@ -582,7 +618,8 @@ impl ArrayTable {
                         } else {
                             textedit_response.request_focus();
                         }
-                    } else if let Some(entry) = cell_data {
+                    } else if let Some(index) = index {
+                        let entry = &row_data.entries()[index];
                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                         if pinned_column_table && col_index == 0 {
@@ -812,6 +849,17 @@ impl ArrayTable {
 
     // C
 
+    #[inline]
+    fn get_pointer_index<'a>(parent_pointer: &String, columns: &Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<(usize)> {
+        if let Some(column) = columns.get(index) {
+            let key = &column.name;
+            let key = Self::pointer_key(parent_pointer, row_index, key);
+            return data.iter().position(|entry| {
+                entry.pointer.pointer.eq(&key)
+            });
+        }
+        None
+    }
     #[inline]
     fn get_pointer<'a>(&self, columns: &Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<&'a FlatJsonValue<String>> {
         if let Some(column) = columns.get(index) {
