@@ -584,6 +584,7 @@ impl ArrayTable {
         let mut focused_cell = None;
         let mut focused_changed = false;
         let mut updated_value: Option<(PointerKey, String)> = None;
+        let mut filter_by_value: Option<(String, String)> = None;
         let columns = if pinned_column_table { &self.column_pinned } else { &self.column_selected };
         let hovered_row_index = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
             let table_row_index = row.index();
@@ -660,6 +661,12 @@ impl ArrayTable {
                                     if ui.button("Copy").clicked() {
                                         ui.ctx().copy_text(value.clone());
                                         ui.close_menu();
+                                    }
+                                    if Self::is_filterable(&columns[col_index]) {
+                                        if ui.button("Filter by this value").clicked() {
+                                            filter_by_value = Some((columns[col_index].name.clone(), value.clone()));
+                                            ui.close_menu();
+                                        }
                                     }
                                     if is_array || is_object {
                                         ui.separator();
@@ -755,6 +762,9 @@ impl ArrayTable {
         }
         if let Some(subtable) = subtable {
             self.windows.push(subtable);
+        }
+        if let Some((column_name, filter_value)) = filter_by_value {
+            self.on_filter_column_value((column_name, filter_value));
         }
         if let Some((pointer, value)) = updated_value {
             let editing_index = mem::take(&mut *self.editing_index.borrow_mut());
