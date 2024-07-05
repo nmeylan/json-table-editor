@@ -8,6 +8,7 @@ mod object_table;
 pub mod fonts;
 mod web;
 mod compatibility;
+mod panels;
 
 use std::{env, mem};
 
@@ -22,12 +23,13 @@ use crate::components::fps::FrameHistory;
 
 use eframe::{CreationContext};
 use eframe::Theme::Light;
-use egui::{Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, Label, LayerId, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align, Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, Label, LayerId, Layout, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
+use crate::panels::AboutPanel;
 use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
@@ -135,7 +137,7 @@ impl MyApp {
         Self {
             frame_history: FrameHistory::default(),
             table: None,
-            windows: vec![],
+            windows: vec![Box::<AboutPanel>::default()],
             max_depth: 0,
             open: Default::default(),
             depth: 0,
@@ -453,10 +455,10 @@ impl eframe::App for MyApp {
             }
         });
 
-        if self.table.is_some() {
-            let table = self.table.as_ref().unwrap();
-            egui::TopBottomPanel::bottom("bottom-panel").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+        egui::TopBottomPanel::bottom("bottom-panel").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                if self.table.is_some() {
+                    let table = self.table.as_ref().unwrap();
                     ui.label(format!("{} rows ", table.nodes.len()));
                     ui.separator();
                     ui.label(format!("{} columns ", table.all_columns().len()));
@@ -477,9 +479,18 @@ impl eframe::App for MyApp {
                             ui.ctx().set_cursor_icon(CursorIcon::Help);
                         }
                     }
-                });
+                }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let about_button = ui.add(Button::new("About").frame(false));
+                    if about_button.clicked() {
+                        set_open(&mut self.open, "About", true);
+                    }
+                    if about_button.hovered() {
+                        ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+                    }
+                })
             });
-        }
+        });
         egui::CentralPanel::default().show(ctx, |ui| {
             if !ctx.input(|i| i.raw.hovered_files.is_empty()) {
                 let text = ctx.input(|i| {
@@ -538,13 +549,19 @@ impl eframe::App for MyApp {
                                            let response = ui.centered_and_justified(|ui| {
                                                ui.heading("Select or drop a json file")
                                            });
-                                           #[cfg(not(target_arch = "wasm32"))] {
+                                           #[cfg(
+                                               not(
+                                                   target_arch = "wasm32"
+                                               )
+                                           )] {
                                                if response.inner.clicked() {
                                                    self.file_picker();
                                                }
                                            }
 
-                                           #[cfg(target_arch = "wasm32")]
+                                           #[cfg(
+                                               target_arch = "wasm32"
+                                           )]
                                            {
                                                let mut json = self.web_loaded_json.clone();
                                                let future = async move {
@@ -579,10 +596,14 @@ impl eframe::App for MyApp {
                             Sense::click()
                         };
                         if Button::new("Parse again").sense(sense).ui(ui).clicked() {
-                            #[cfg(not(target_arch = "wasm32"))] {
+                            #[cfg(not(
+                                target_arch = "wasm32"
+                            ))] {
                                 self.open_json();
                             }
-                            #[cfg(target_arch = "wasm32")] {
+                            #[cfg(
+                                target_arch = "wasm32"
+                            )] {
                                 self.web_try_open_json_bytes();
                             }
                         }
@@ -595,10 +616,14 @@ impl eframe::App for MyApp {
                         }
                     });
                 } else if self.should_parse_again {
-                    #[cfg(not(target_arch = "wasm32"))] {
+                    #[cfg(not(
+                        target_arch = "wasm32"
+                    ))] {
                         self.open_json();
                     }
-                    #[cfg(target_arch = "wasm32")] {
+                    #[cfg(
+                        target_arch = "wasm32"
+                    )] {
                         self.web_try_open_json_bytes();
                     }
                 }
