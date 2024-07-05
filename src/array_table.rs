@@ -332,6 +332,7 @@ impl ArrayTable {
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) -> Option<usize> {
+        self.cache.borrow_mut().update();
         if depth <= self.last_parsed_max_depth {
             let mut column_selected = Self::selected_columns(&self.all_columns, depth);
             column_selected.retain(|c| !self.column_pinned.contains(c));
