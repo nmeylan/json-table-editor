@@ -445,6 +445,12 @@ impl eframe::App for MyApp {
                     }
                 }
             });
+            #[cfg(target_arch = "wasm32")] {
+                ui.horizontal_wrapped(|ui| {
+                    ui.colored_label(Color32::RED, "Web version is only here as a demo, performances are better on desktop version.");
+                    ui.hyperlink_to("Download desktop version on GitHub for a better experience", "https://github.com/nmeylan/json-table-editor/releases");
+                });
+            }
         });
 
         if self.table.is_some() {
