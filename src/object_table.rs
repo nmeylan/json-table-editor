@@ -1,10 +1,11 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::mem;
 use egui::scroll_area::ScrollBarVisibility;
 use egui::{Id, Key, Label, Sense, TextEdit};
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use crate::ArrayResponse;
+use crate::components::table::CellLocation;
 
 pub struct ObjectTable {
     pub nodes: Vec<FlatJsonValue<String>>,
@@ -15,7 +16,7 @@ pub struct ObjectTable {
 
     pub editing_index: RefCell<Option<usize>>,
     pub editing_value: RefCell<String>,
-    pub focused_cell: Option<(usize, usize, bool)>
+    pub focused_cell: Option<CellLocation>
 }
 
 impl ObjectTable {
@@ -92,7 +93,7 @@ impl ObjectTable {
                             *editing_index = Some(row_index);
                         }
                         response.context_menu(|ui| {
-                            self.focused_cell = Some((1, table_row_index, false));
+                            self.focused_cell = Some(CellLocation{column_index: 1, row_index: table_row_index, is_pinned_column_table: false});
                             if ui.button("Edit").clicked() {
                                 *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                                 *editing_index = Some(row_index);
@@ -109,8 +110,8 @@ impl ObjectTable {
                             }
                         });
 
-                        if let Some((_, focused_row, _)) = self.focused_cell {
-                            if focused_row == table_row_index && !response.context_menu_opened(){
+                        if let Some(cell_location) = self.focused_cell {
+                            if cell_location.row_index == table_row_index && !response.context_menu_opened(){
                                 self.focused_cell = None;
                             }
                         }

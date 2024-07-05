@@ -19,7 +19,7 @@ use json_flat_parser::serializer::serialize_to_json_with_option;
 use crate::{ACTIVE_COLOR, ArrayResponse, concat_string};
 use crate::components::icon;
 use crate::components::popover::PopupMenu;
-use crate::components::table::{TableBody, TableRow};
+use crate::components::table::{CellLocation, TableBody, TableRow};
 use crate::fonts::{FILTER, THUMBTACK};
 use crate::parser::{search_occurrences};
 use crate::subtable_window::SubTable;
@@ -120,7 +120,7 @@ pub struct ArrayTable {
     pub scroll_to_column: String,
     pub scroll_to_row: String,
     pub scroll_to_row_mode: ScrollToRowMode,
-    pub focused_cell: Option<(usize, usize, bool)>,
+    pub focused_cell: Option<CellLocation>,
 
     // Handle interaction
     pub next_frame_reset_scroll: bool,
@@ -649,7 +649,7 @@ impl ArrayTable {
                                     *editing_index = Some((col_index, row_index, pinned_column_table));
                                 }
                                 if response.secondary_clicked() {
-                                    focused_cell = Some((col_index, table_row_index, pinned_column_table));
+                                    focused_cell = Some(CellLocation {column_index: col_index, row_index: table_row_index, is_pinned_column_table: pinned_column_table});
                                     focused_changed = true;
                                 }
                                 response.context_menu(|ui| {
@@ -695,8 +695,8 @@ impl ArrayTable {
                                     }
                                 });
 
-                                if let Some((focused_col, focused_row, focused_is_pinned_table)) = self.focused_cell {
-                                    if focused_is_pinned_table == pinned_column_table && focused_row == table_row_index && focused_col == col_index && !response.context_menu_opened() {
+                                if let Some(focused_cell_location) = self.focused_cell {
+                                    if focused_cell_location.is_pinned_column_table == pinned_column_table && focused_cell_location.row_index == table_row_index && focused_cell_location.column_index == col_index && !response.context_menu_opened() {
                                         focused_cell = None;
                                         focused_changed = true;
                                     }
@@ -722,7 +722,7 @@ impl ArrayTable {
                     }
 
                     if response.secondary_clicked() {
-                        focused_cell = Some((col_index, table_row_index, pinned_column_table));
+                        focused_cell = Some(CellLocation {column_index: col_index, row_index: table_row_index, is_pinned_column_table: pinned_column_table});
                         focused_changed = true;
                     }
                     response.context_menu(|ui| {
@@ -744,8 +744,8 @@ impl ArrayTable {
                         }
                     });
 
-                    if let Some((focused_col, focused_row, focused_is_pinned_table)) = self.focused_cell {
-                        if focused_is_pinned_table == pinned_column_table && focused_row == table_row_index && focused_col == col_index && !response.context_menu_opened() {
+                    if let Some(focused_cell_location) = self.focused_cell {
+                        if focused_cell_location.is_pinned_column_table == pinned_column_table && focused_cell_location.row_index == table_row_index && focused_cell_location.column_index == col_index && !response.context_menu_opened() {
                             focused_cell = None;
                             focused_changed = true;
                         }
@@ -801,8 +801,9 @@ impl ArrayTable {
                 }
             }
         }
-        if self.hovered_row_index != hovered_row_index {
-            self.hovered_row_index = hovered_row_index;
+
+        if self.hovered_row_index != hovered_row_index.0 {
+            self.hovered_row_index = hovered_row_index.0;
             request_repaint = true;
         }
     }

@@ -68,7 +68,6 @@ impl Size {
         }
         self
     }
-
 }
 
 #[derive(Clone, Default)]
@@ -300,7 +299,7 @@ impl<'l> StripLayout<'l> {
             self.ui.painter().rect_stroke(
                 gapless_rect.shrink(2.0),
                 egui::Rounding::ZERO,
-                Stroke{color: Color32::DARK_GRAY, width: 2.0},
+                Stroke { color: Color32::DARK_GRAY, width: 2.0 },
             );
         }
 
@@ -405,7 +404,6 @@ impl<'l> StripLayout<'l> {
         }
 
         let response = if let Some(add_cell_contents) = add_cell_contents {
-            
             add_cell_contents(&mut child_ui, cell_index)
         } else {
             None
@@ -450,7 +448,6 @@ pub struct Column {
 }
 
 impl Column {
-
     pub fn initial(width: f32) -> Self {
         Self::new(InitialColumnSize::Absolute(width))
     }
@@ -594,7 +591,7 @@ pub struct TableBuilder<'a> {
     cell_layout: egui::Layout,
     scroll_options: TableScrollOptions,
     sense: egui::Sense,
-    is_pinned_column_table: bool
+    is_pinned_column_table: bool,
 }
 
 impl<'a> TableBuilder<'a> {
@@ -878,15 +875,14 @@ pub struct Table<'a> {
     scroll_options: TableScrollOptions,
 
     sense: egui::Sense,
-    is_pinned_column_table: bool
+    is_pinned_column_table: bool,
 }
 
 impl<'a> Table<'a> {
-
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<(usize, usize, bool)>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
-        where
-            F: for<'b> FnOnce(TableBody<'b>),
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<CellLocation>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
+    where
+        F: for<'b> FnOnce(TableBody<'b>),
     {
         let Table {
             ui,
@@ -949,7 +945,7 @@ impl<'a> Table<'a> {
                 let hovered_row_index_id = self.state_id.with("__table_hovered_row");
                 let hovered_cell_index_id = self.state_id.with("__table_hovered_cell");
                 let mut hovered_row_index = ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
-                hovered_cell_index = ui.data_mut(|data| data.remove_temp::<(usize, usize, bool)>(hovered_cell_index_id));
+                hovered_cell_index = ui.data_mut(|data| data.remove_temp::<CellLocation>(hovered_cell_index_id));
                 if focused_cell.is_some() {
                     hovered_cell_index = focused_cell;
                 }
@@ -1118,6 +1114,13 @@ impl<'a> Table<'a> {
     }
 }
 
+#[derive(Copy, Clone, Default)]
+pub struct CellLocation {
+    pub row_index: usize,
+    pub column_index: usize,
+    pub is_pinned_column_table: bool,
+}
+
 /// The body of a table.
 ///
 /// Is created by calling `body` on a [`Table`] (after adding a header row) or [`TableBuilder`] (without a header row).
@@ -1148,7 +1151,7 @@ pub struct TableBody<'a> {
     scroll_to_y_range: &'a mut Option<Rangef>,
 
     hovered_row_index: Option<usize>,
-    hovered_cell_index: Option<(usize, usize, bool)>,
+    hovered_cell_index: Option<CellLocation>,
     hovered_cell_index_id: egui::Id,
 
     /// Used to store the hovered row index between frames.
@@ -1156,11 +1159,10 @@ pub struct TableBody<'a> {
     pub scroll_offset_x: f32,
     pub first_col_visible_width: f32,
     pub search_matching_row_index: Option<usize>,
-    is_pinned_column_table: bool
+    is_pinned_column_table: bool,
 }
 
 impl<'a> TableBody<'a> {
-
     fn scroll_offset_y(&self) -> f32 {
         self.start_y - self.layout.rect.top()
     }
@@ -1174,7 +1176,7 @@ impl<'a> TableBody<'a> {
         row_height_sans_spacing: f32,
         total_rows: usize,
         mut add_row_content: impl FnMut(TableRow<'_, '_>),
-    ) -> Option<usize> {
+    ) -> (Option<usize>, Option<CellLocation>) {
         let spacing = self.layout.ui.spacing().item_spacing;
         let row_height_with_spacing = row_height_sans_spacing + spacing.y;
 
@@ -1232,7 +1234,8 @@ impl<'a> TableBody<'a> {
             let skip_height = (total_rows - max_row) as f32 * row_height_with_spacing;
             self.add_buffer(skip_height - spacing.y);
         }
-        self.hovered_row_index
+
+        (self.hovered_row_index, self.hovered_cell_index)
     }
 
 
@@ -1284,9 +1287,9 @@ pub struct TableRow<'a, 'b> {
     pub remainder_with: f32,
     pub highlighted: bool,
     pub highlighted_cell: Option<usize>,
-    pub selected_cell: Option<(usize, usize, bool)>,
+    pub selected_cell: Option<CellLocation>,
     hovered_cell_index_id: Option<egui::Id>,
-    is_pinned_column_table: bool
+    is_pinned_column_table: bool,
 }
 
 pub struct ColumnResponse {
@@ -1296,8 +1299,7 @@ pub struct ColumnResponse {
 }
 
 impl<'a, 'b> TableRow<'a, 'b> {
-
-    fn capture_hover_cell_state(&mut self, cell_index: (usize, usize, bool)) {
+    fn capture_hover_cell_state(&mut self, cell_index: CellLocation) {
         if let Some(hovered_cell_index_id) = self.hovered_cell_index_id {
             self.layout
                 .ui
@@ -1328,7 +1330,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
         let height = CellSize::Absolute(self.height);
         let selected_cell = if self.selected_cell.is_some() {
             let cell = self.selected_cell.unwrap();
-            self.row_index == cell.1 && cell.0 == col_index
+            self.row_index == cell.row_index && cell.column_index == col_index
         } else {
             false
         };
@@ -1362,7 +1364,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
         );
 
         if response.hovered() {
-            self.capture_hover_cell_state((col_index, self.row_index, false));
+            self.capture_hover_cell_state(CellLocation { column_index: col_index, row_index: self.row_index, is_pinned_column_table: false });
         }
 
         (used_rect, response)
@@ -1394,7 +1396,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
 
             let selected_cell = if self.selected_cell.is_some() {
                 let cell = self.selected_cell.unwrap();
-                cell.1 == self.row_index && cell.0 == *col_index && self.is_pinned_column_table == cell.2
+                cell.row_index == self.row_index && cell.column_index == *col_index && self.is_pinned_column_table == cell.is_pinned_column_table
             } else {
                 false
             };
@@ -1436,7 +1438,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             last_index = *col_index;
         }
         if let Some(hovered_col_index) = column_response.hovered_col_index {
-            self.capture_hover_cell_state((hovered_col_index, self.row_index, self.is_pinned_column_table));
+            self.capture_hover_cell_state(CellLocation { column_index: hovered_col_index, row_index: self.row_index, is_pinned_column_table: self.is_pinned_column_table });
         }
         if !self.columns.is_empty() && is_header && last_index < self.columns.len() - 1 {
             self.layout.add_empty(
