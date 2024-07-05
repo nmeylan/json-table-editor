@@ -1114,11 +1114,17 @@ impl<'a> Table<'a> {
     }
 }
 
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct CellLocation {
     pub row_index: usize,
     pub column_index: usize,
     pub is_pinned_column_table: bool,
+}
+
+#[derive(Copy, Clone, Default, Debug)]
+pub struct HoverData {
+    pub hovered_row: Option<usize>,
+    pub hovered_cell: Option<CellLocation>,
 }
 
 /// The body of a table.
@@ -1176,7 +1182,7 @@ impl<'a> TableBody<'a> {
         row_height_sans_spacing: f32,
         total_rows: usize,
         mut add_row_content: impl FnMut(TableRow<'_, '_>),
-    ) -> (Option<usize>, Option<CellLocation>) {
+    ) -> HoverData {
         let spacing = self.layout.ui.spacing().item_spacing;
         let row_height_with_spacing = row_height_sans_spacing + spacing.y;
 
@@ -1235,7 +1241,10 @@ impl<'a> TableBody<'a> {
             self.add_buffer(skip_height - spacing.y);
         }
 
-        (self.hovered_row_index, self.hovered_cell_index)
+        HoverData {
+            hovered_row: self.hovered_row_index,
+            hovered_cell:  self.hovered_cell_index
+        }
     }
 
 

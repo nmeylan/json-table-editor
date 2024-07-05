@@ -23,16 +23,18 @@ use crate::components::fps::FrameHistory;
 
 use eframe::{CreationContext};
 use eframe::Theme::Light;
-use egui::{Align, Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, Label, LayerId, Layout, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use egui::{Align, Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
+use crate::components::table::HoverData;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::AboutPanel;
 use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
+
 
 /// Something to view in the demo windows
 pub trait View<R> {
@@ -56,6 +58,7 @@ pub trait Window {
 #[derive(Default, Clone)]
 struct ArrayResponse {
     pub(crate) edited_value: Option<FlatJsonValue<String>>,
+    pub(crate) hover_data: HoverData,
 }
 
 impl ArrayResponse {
@@ -63,6 +66,9 @@ impl ArrayResponse {
         let mut new_response = mem::take(self);
         if new_response.edited_value.is_none() && other.edited_value.is_some() {
             new_response.edited_value = other.edited_value;
+        }
+        if new_response.hover_data.hovered_cell.is_none() && other.hover_data.hovered_cell.is_some() {
+            new_response.hover_data.hovered_cell = other.hover_data.hovered_cell;
         }
         new_response
     }
