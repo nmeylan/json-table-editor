@@ -6,11 +6,10 @@ use std::mem;
 use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
-use egui::util::cache;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
@@ -129,7 +128,7 @@ pub struct ArrayTable {
     pub changed_matching_row_selected: bool,
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub changed_scroll_to_row_value: Option<Instant>,
+    pub changed_scroll_to_row_value: Option<std::time::Instant>,
     #[cfg(target_arch = "wasm32")]
     pub changed_scroll_to_row_value: Option<crate::compatibility::InstantWrapper>,
 

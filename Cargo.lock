@@ -1490,7 +1490,7 @@ dependencies = [
 [[package]]
 name = "json-flat-parser"
 version = "0.1.0"
-source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=5f2c931#5f2c931c0bf00c014835c81bd426f0d6fff09802"
+source = "git+https://github.com/nmeylan/json-parser-flat-format.git?rev=4f51855#4f51855753b964f212ef294b14473e19cfc3656c"
 dependencies = [
  "indexmap",
  "simdutf8",
