@@ -15,7 +15,7 @@ use std::{env, mem};
 use std::collections::{BTreeSet};
 use std::fs::File;
 use std::io::Read;
-use std::fmt::Write;
+use std::fmt::{format, Write};
 
 use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
@@ -35,6 +35,8 @@ use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
 
+pub const SHORTCUT_SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+pub const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
 
 /// Something to view in the demo windows
 pub trait View<R> {
@@ -299,6 +301,21 @@ impl MyApp {
             }
         }
     }
+
+    fn save(&mut self) {
+        let table = self.table.as_ref().unwrap();
+        save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+        self.unsaved_changes = false;
+    }
+
+    fn save_as(&mut self) {
+        if let Some(path) = rfd::FileDialog::new().save_file() {
+            self.selected_file = Some(path);
+            let table = self.table.as_ref().unwrap();
+            save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+            self.unsaved_changes = false;
+        }
+    }
 }
 
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
@@ -342,19 +359,12 @@ impl eframe::App for MyApp {
                             ui.separator();
                             if ui.button("Save").clicked() {
                                 ui.close_menu();
-                                let table = self.table.as_ref().unwrap();
-                                save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
-                                self.unsaved_changes = false;
+                                self.save();
                             }
                             ui.separator();
-                            if ui.button("Save as").clicked() {
+                            if ui.button(format!("Save as")).clicked() {
                                 ui.close_menu();
-                                if let Some(path) = rfd::FileDialog::new().save_file() {
-                                    self.selected_file = Some(path);
-                                    let table = self.table.as_ref().unwrap();
-                                    save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
-                                    self.unsaved_changes = false;
-                                }
+                                self.save_as();
                             }
                         });
                     }
@@ -622,20 +632,27 @@ impl eframe::App for MyApp {
                         }
                     });
                 } else if self.should_parse_again {
-                    #[cfg(not(
-                        target_arch = "wasm32"
-                    ))] {
+                    #[cfg(not(target_arch = "wasm32"))] {
                         self.open_json();
                     }
-                    #[cfg(
-                        target_arch = "wasm32"
-                    )] {
+                    #[cfg(target_arch = "wasm32")] {
                         self.web_try_open_json_bytes();
                     }
                 }
-                // });
             }
         });
+        if self.table.is_some() {
+            #[cfg(not(target_arch = "wasm32"))] {
+                ctx.input_mut(|i| {
+                    if i.consume_shortcut(&SHORTCUT_SAVE_AS) {
+                        self.save_as();
+                    }
+                    if i.consume_shortcut(&SHORTCUT_SAVE) {
+                        self.save();
+                    }
+                })
+            }
+        }
     }
 }
 
