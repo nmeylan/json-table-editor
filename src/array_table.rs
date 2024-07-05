@@ -888,6 +888,9 @@ impl ArrayTable {
             if !entry.value.eq(&updated_entry.value) {
                 value_changed = true;
                 entry.value = updated_entry.value;
+                if matches!(entry.pointer.value_type, ValueType::Null) {
+                    entry.pointer.value_type = updated_entry.pointer.value_type.clone();
+                }
             }
         } else if updated_entry.value.is_some() {
             value_changed = true;

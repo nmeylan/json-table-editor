@@ -307,7 +307,7 @@ impl MyApp {
         save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
         self.unsaved_changes = false;
     }
-
+    #[cfg(not(target_arch = "wasm32"))]
     fn save_as(&mut self) {
         if let Some(path) = rfd::FileDialog::new().save_file() {
             self.selected_file = Some(path);
