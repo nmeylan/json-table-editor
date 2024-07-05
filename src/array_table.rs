@@ -791,11 +791,13 @@ impl ArrayTable {
                     let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
                     parent_pointer.pointer = self.parent_pointer.clone();
                     array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+                    self.cache.borrow_mut().evict();
                 }
             } else {
                 let value_changed = self.update_value(FlatJsonValue { pointer: pointer.clone(), value: value.clone() }, row_index, true);
                 if value_changed {
                     array_response.edited_value = Some(FlatJsonValue { pointer, value });
+                    self.cache.borrow_mut().evict();
                 }
             }
         }

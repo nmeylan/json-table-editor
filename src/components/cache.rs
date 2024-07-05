@@ -2,6 +2,8 @@
 pub trait CacheTrait {
     fn update(&mut self);
 
+    fn clear(&mut self);
+
     fn len(&self) -> usize;
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
@@ -23,6 +25,11 @@ where
 impl<Value: 'static, Computer: 'static> CacheTrait for FrameCache<Value, Computer> {
     fn update(&mut self) {
         self.evice_cache();
+    }
+
+    fn clear(&mut self) {
+        self.cache.clear();
+        self.generation = self.generation.wrapping_add(1);
     }
 
     fn len(&self) -> usize {
@@ -106,6 +113,12 @@ impl CacheStorage {
     pub fn update(&mut self) {
         for cache in self.caches.values_mut() {
             cache.update();
+        }
+    }
+    /// Call once per frame to evict cache.
+    pub fn evict(&mut self) {
+        for cache in self.caches.values_mut() {
+            cache.clear();
         }
     }
 }
