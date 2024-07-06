@@ -214,7 +214,7 @@ impl super::View<ArrayResponse> for ObjectTable {
                     if is_value_column {
                         match event {
                             egui::Event::Paste(v) => {
-                                self.update_value(&mut array_response, self.nodes[row_index].pointer.clone(),  v.clone(), row_index);
+                                self.update_value(&mut array_response, self.nodes[row_index].pointer.clone(), v.clone(), row_index);
                             },
                             egui::Event::Copy => {
                                 if let Some(value) = &self.nodes[row_index].value {
