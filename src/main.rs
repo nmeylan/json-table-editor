@@ -357,12 +357,14 @@ impl eframe::App for MyApp {
                                 self.file_picker();
                             }
                             ui.separator();
-                            if ui.button("Save").clicked() {
+                            let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
+                            if ui.add(button).clicked() {
                                 ui.close_menu();
                                 self.save();
                             }
                             ui.separator();
-                            if ui.button(format!("Save as")).clicked() {
+                            let button = Button::new("Save as").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE_AS));
+                            if ui.add(button).clicked() {
                                 ui.close_menu();
                                 self.save_as();
                             }
