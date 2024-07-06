@@ -221,7 +221,6 @@ impl super::View<ArrayResponse> for ArrayTable {
                                     pointer,
                                     value_type: columns[cell_location.column_index].value_type,
                                     depth: columns[cell_location.column_index].depth,
-                                    index: row_index,
                                     position: 0,
                                 },
                                 value: Some(v.clone()),
@@ -654,7 +653,6 @@ impl ArrayTable {
                                 pointer: Self::pointer_key(&self.parent_pointer, row_index, &columns.get(col_index).as_ref().unwrap().name),
                                 value_type: columns[col_index].value_type,
                                 depth: columns[col_index].depth,
-                                index: row_index,
                                 position: 0,
                             };
                             updated_value = Some((pointer, mem::take(ref_mut)))
@@ -666,7 +664,7 @@ impl ArrayTable {
                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
                         if pinned_column_table && col_index == 0 {
-                            let label = Label::new(entry.pointer.index.to_string()).sense(Sense::click());
+                            let label = Label::new(row_index.to_string()).sense(Sense::click());
                             return Some(label.ui(ui));
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
@@ -832,7 +830,6 @@ impl ArrayTable {
                         pointer: String::new(),
                         value_type: ValueType::Array(self.nodes.len()),
                         depth: 0,
-                        index: 0,
                         position: 0,
                     };
                     entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });

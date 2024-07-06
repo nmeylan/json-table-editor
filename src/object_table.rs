@@ -171,7 +171,6 @@ impl ObjectTable {
                 pointer: String::new(),
                 value_type: ValueType::Array(array_entries.len()),
                 depth: 0,
-                index: 0,
                 position: 0,
             };
             array_entries.push(FlatJsonValue { pointer: parent_pointer, value: None });

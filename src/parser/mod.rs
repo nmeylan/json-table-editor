@@ -79,7 +79,6 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
                         unique_keys.push(column);
                     }
                 }
-                entry.pointer.index = json_array_entry.index;
             }
             let mut new_json_array_guard = new_json_array.lock().unwrap();
             new_json_array_guard.push(JsonArrayEntries::<String> { entries: vec, index: json_array_entry.index });
@@ -160,10 +159,9 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                     if is_first_entry {
                         is_first_entry = false;
                         let prefix = &entry.pointer.pointer[0..prefix_len];
-                        flat_json_values.push(FlatJsonValue { pointer: PointerKey::from_pointer_and_index(concat_string!(prefix, "/#"), ValueType::Number, 0, i, entry.pointer.position), value: Some(i.to_string())});
+                        flat_json_values.push(FlatJsonValue { pointer: PointerKey::from_pointer(concat_string!(prefix, "/#"), ValueType::Number, 0, entry.pointer.position), value: Some(i.to_string())});
                     }
                     let mut entry= previous_parse_result.json.pop().unwrap();
-                    entry.pointer.index = i;
                     flat_json_values.push(entry);
                 } else {
                     break;
