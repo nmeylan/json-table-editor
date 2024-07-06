@@ -1,11 +1,13 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
 use egui::scroll_area::ScrollBarVisibility;
-use egui::{Id, Key, Label, Sense, TextEdit};
+use egui::{Button, Id, Key, Label, Sense, TextEdit};
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
-use crate::ArrayResponse;
+use crate::{ArrayResponse, SHORTCUT_COPY};
+use crate::components::icon::ButtonWithIcon;
 use crate::components::table::CellLocation;
+use crate::fonts::{COPY, PENCIL};
 
 pub struct ObjectTable {
     pub nodes: Vec<FlatJsonValue<String>>,
@@ -94,12 +96,14 @@ impl ObjectTable {
                         }
                         response.context_menu(|ui| {
                             self.focused_cell = Some(CellLocation { column_index: 1, row_index: table_row_index, is_pinned_column_table: false });
-                            if ui.button("Edit").clicked() {
+                            let button = ButtonWithIcon::new("Edit", PENCIL);
+                            if ui.add(button).clicked() {
                                 *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                                 *editing_index = Some(row_index);
                                 ui.close_menu();
                             }
-                            if ui.button("Copy").clicked() {
+                            let button = ButtonWithIcon::new("Copy", COPY).shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
+                            if ui.add(button).clicked() {
                                 ui.ctx().copy_text(entry.value.clone().unwrap_or_default());
                                 ui.close_menu();
                             }

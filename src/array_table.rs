@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration};
-use egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
+use egui::{Align, Button, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use egui::scroll_area::ScrollBarVisibility;
 use egui::style::Spacing;
 use indexmap::IndexSet;
@@ -15,11 +15,12 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY};
 use crate::components::icon;
+use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
 use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{FILTER, THUMBTACK};
+use crate::fonts::{COPY, FILTER, PENCIL, TABLE, TABLE_CELLS, THUMBTACK};
 use crate::parser::{search_occurrences};
 use crate::subtable_window::SubTable;
 
@@ -693,24 +694,28 @@ impl ArrayTable {
                                     focused_changed = true;
                                 }
                                 response.context_menu(|ui| {
-                                    if ui.button("Edit").clicked() {
+                                    let button = ButtonWithIcon::new("Edit", PENCIL);
+                                    if ui.add(button).clicked() {
                                         *self.editing_value.borrow_mut() = value.clone();
                                         *editing_index = Some((col_index, row_index, pinned_column_table));
                                         ui.close_menu();
                                     }
-                                    if ui.button("Copy").clicked() {
+                                    let button = ButtonWithIcon::new("Copy", COPY).shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
+                                    if ui.add(button).clicked() {
                                         ui.ctx().copy_text(value.clone());
                                         ui.close_menu();
                                     }
                                     if Self::is_filterable(&columns[col_index]) {
-                                        if ui.button("Filter by this value").clicked() {
+                                        let button = ButtonWithIcon::new("Filter by this value", FILTER);
+                                        if ui.add(button).clicked() {
                                             filter_by_value = Some((columns[col_index].name.clone(), value.clone()));
                                             ui.close_menu();
                                         }
                                     }
                                     if is_array || is_object {
                                         ui.separator();
-                                        if ui.button(format!("Open {} in sub table", if is_array { "array" } else { "object" })).clicked() {
+                                        let button = ButtonWithIcon::new(format!("Open {} in sub table", if is_array { "array" } else { "object" }), TABLE_CELLS);
+                                        if ui.add(button).clicked() {
                                             ui.close_menu();
                                             let content = value.clone();
                                             subtable = Self::open_subtable(row_index, entry, content);
@@ -718,7 +723,8 @@ impl ArrayTable {
                                     }
                                     if !self.is_sub_table {
                                         ui.separator();
-                                        if ui.button("Open row in sub table".to_string()).clicked() {
+                                        let button = ButtonWithIcon::new("Open row in sub table", TABLE);
+                                        if ui.add(button).clicked() {
                                             ui.close_menu();
                                             let root_node = row_data.entries.last().unwrap();
                                             subtable = Some(SubTable::new(root_node.pointer.pointer.clone(),
@@ -766,14 +772,16 @@ impl ArrayTable {
                         focused_changed = true;
                     }
                     response.context_menu(|ui| {
-                        if ui.button("Edit").clicked() {
+                        let button = ButtonWithIcon::new("Edit", PENCIL);
+                        if ui.add(button).clicked() {
                             *self.editing_value.borrow_mut() = String::new();
                             *editing_index = Some((col_index, row_index, pinned_column_table));
                             ui.close_menu();
                         }
                         if !self.is_sub_table {
                             ui.separator();
-                            if ui.button("Open row in sub table".to_string()).clicked() {
+                            let button = ButtonWithIcon::new("Open row in sub table", TABLE);
+                            if ui.add(button).clicked() {
                                 ui.close_menu();
                                 let root_node = row_data.entries.last().unwrap();
                                 subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
