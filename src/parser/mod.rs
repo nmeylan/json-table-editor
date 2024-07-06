@@ -159,7 +159,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                     if is_first_entry {
                         is_first_entry = false;
                         let prefix = &entry.pointer.pointer[0..prefix_len];
-                        flat_json_values.push(FlatJsonValue { pointer: PointerKey::from_pointer(concat_string!(prefix, "/#"), ValueType::Number, 0, entry.pointer.position), value: Some(i.to_string())});
+                        flat_json_values.push(row_number_entry(i, entry.pointer.position, prefix));
                     }
                     let mut entry= previous_parse_result.json.pop().unwrap();
                     flat_json_values.push(entry);
@@ -179,6 +179,10 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
     res.reverse();
     unique_keys.sort();
     Ok((res, unique_keys))
+}
+
+pub fn row_number_entry(i: usize, position: usize, prefix: &str) -> FlatJsonValue<String> {
+    FlatJsonValue { pointer: PointerKey::from_pointer(concat_string!(prefix, "/#"), ValueType::Number, 0, position), value: Some(i.to_string()) }
 }
 
 #[cfg(windows)]

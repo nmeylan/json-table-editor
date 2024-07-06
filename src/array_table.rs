@@ -20,8 +20,8 @@ use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
 use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{COPY, FILTER, PENCIL, TABLE, TABLE_CELLS, THUMBTACK};
-use crate::parser::{search_occurrences};
+use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
+use crate::parser::{row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -227,7 +227,7 @@ impl super::View<ArrayResponse> for ArrayTable {
                             };
                             match flat_json_value.pointer.value_type {
                                 // When we paste an object it should not be considered as parsed
-                                ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false)},
+                                ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false) }
                                 _ => {}
                             }
                             self.update_value(flat_json_value, row_index, !self.is_sub_table);
@@ -633,7 +633,8 @@ impl ArrayTable {
         let mut focused_cell = None;
         let mut focused_changed = false;
         let mut updated_value: Option<(PointerKey, String)> = None;
-        let mut filter_by_value: Option<(String, String)> = None;
+        let mut filter_by_value: Option<(String, String)> = None; // col name, value
+        let mut insert_row_at_index: Option<(usize, u8)> = None; // table_row_index, 0 = above, 1 = below
         let columns = self.columns(pinned_column_table);
         let hover_data = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
             let table_row_index = row.index();
@@ -710,6 +711,18 @@ impl ArrayTable {
                                             ui.close_menu();
                                         }
                                     }
+                                    ui.separator();
+                                    let button = ButtonWithIcon::new("Insert row above", PLUS);
+                                    if ui.add(button).clicked() {
+                                        insert_row_at_index = Some((table_row_index, 0));
+                                        ui.close_menu();
+                                    }
+
+                                    let button = ButtonWithIcon::new("Insert row below", PLUS);
+                                    if ui.add(button).clicked() {
+                                        insert_row_at_index = Some((table_row_index, 1));
+                                        ui.close_menu();
+                                    }
                                     if is_array || is_object {
                                         ui.separator();
                                         let button = ButtonWithIcon::new(format!("Open {} in sub table", if is_array { "array" } else { "object" }), TABLE_CELLS);
@@ -776,6 +789,19 @@ impl ArrayTable {
                             *editing_index = Some((col_index, row_index, pinned_column_table));
                             ui.close_menu();
                         }
+
+                        ui.separator();
+                        let button = ButtonWithIcon::new("Insert row above", PLUS);
+                        if ui.add(button).clicked() {
+                            insert_row_at_index = Some((table_row_index, 0));
+                            ui.close_menu();
+                        }
+
+                        let button = ButtonWithIcon::new("Insert row below", PLUS);
+                        if ui.add(button).clicked() {
+                            insert_row_at_index = Some((table_row_index, 1));
+                            ui.close_menu();
+                        }
                         if !self.is_sub_table {
                             ui.separator();
                             let button = ButtonWithIcon::new("Open row in sub table", TABLE);
@@ -811,6 +837,9 @@ impl ArrayTable {
         }
         if let Some((column_name, filter_value)) = filter_by_value {
             self.on_filter_column_value((column_name, filter_value));
+        }
+        if let Some((table_row_index, above_or_below)) = insert_row_at_index {
+            self.insert_new_row(table_row_index, above_or_below);
         }
         if let Some((pointer, value)) = updated_value {
             let editing_index = mem::take(&mut *self.editing_index.borrow_mut());
@@ -849,6 +878,43 @@ impl ArrayTable {
             request_repaint = true;
         }
         array_response.hover_data = hover_data;
+    }
+
+    fn insert_new_row(&mut self, table_row_index: usize, above_or_below: u8) {
+        let row_index = self.filtered_nodes[table_row_index];
+        let depth = self.nodes[row_index].entries.last().unwrap().pointer.depth as u8;
+        let new_table_row_index = table_row_index + above_or_below as usize;
+        let new_index = row_index + above_or_below as usize;
+        for i in new_table_row_index..self.filtered_nodes.len() {
+            self.filtered_nodes[i] += 1;
+        }
+        // Performance are not good on large json but hopefully the feature is used rarely
+        // We need to update all json pointer coming after the new row
+        // For that we substring the pointer to remove the "prefix" containing the index in the json array
+        let substring_len = self.parent_pointer.len() + 1;
+        for i in new_index..self.nodes.len() {
+            self.nodes[i].index = i + 1;
+            let substring_len = substring_len + (i.checked_ilog10().unwrap_or(0) + 1) as usize;
+            let new_prefix = concat_string!(self.parent_pointer, "/", (i+1).to_string());
+            self.nodes[i].entries.iter_mut().for_each(|e| {
+                e.pointer.pointer =  concat_string!(new_prefix, e.pointer.pointer[substring_len..]);
+            })
+        }
+        let new_entry_pointer = concat_string!(self.parent_pointer, "/", new_index.to_string());
+        self.nodes.insert(new_index, JsonArrayEntries {
+            entries: vec![
+                row_number_entry(new_index, 0, new_entry_pointer.as_str()),
+                FlatJsonValue { pointer: PointerKey {
+                    pointer: new_entry_pointer,
+                    value_type: ValueType::Object(true),
+                    depth,
+                    position: 0,
+                }, value: Some("{}".to_string()) }
+            ],
+            index: new_index
+        });
+        self.filtered_nodes.insert(table_row_index + above_or_below as usize, new_index);
+        self.cache.borrow_mut().evict();
     }
 
     #[inline]
