@@ -154,6 +154,7 @@ impl ObjectTable {
                 break;
             }
         }
+        // When edited value is an element of an array
         if let Some(parent_array) = maybe_parent_array {
             let mut array_entries = Vec::with_capacity(10);
             let depth = parent_array.pointer.depth;

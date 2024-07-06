@@ -215,7 +215,7 @@ impl super::View<ArrayResponse> for ArrayTable {
                         egui::Event::Paste(v) => {
                             let columns = self.columns(cell_location.is_pinned_column_table);
                             let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
-                            let flat_json_value = FlatJsonValue::<String> {
+                            let mut flat_json_value = FlatJsonValue::<String> {
                                 pointer: PointerKey {
                                     pointer,
                                     value_type: columns[cell_location.column_index].value_type,
@@ -225,6 +225,11 @@ impl super::View<ArrayResponse> for ArrayTable {
                                 },
                                 value: Some(v.clone()),
                             };
+                            match flat_json_value.pointer.value_type {
+                                // When we paste an object it should not be considered as parsed
+                                ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false)},
+                                _ => {}
+                            }
                             self.update_value(flat_json_value, row_index, !self.is_sub_table);
                         }
                         egui::Event::Copy => {
@@ -872,7 +877,7 @@ impl ArrayTable {
         ))
     }
 
-    fn update_value(&mut self, updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) -> bool {
+    fn update_value(&mut self, mut updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) -> bool {
         let mut value_changed = false;
         if should_update_subtable {
             for subtable in self.windows.iter_mut() {
@@ -895,9 +900,10 @@ impl ArrayTable {
         } else if updated_entry.value.is_some() {
             value_changed = true;
             let entries = &mut self.nodes[row_index].entries;
+            updated_entry.pointer.position = usize::MAX;
             entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
         }
-        // After update we serialized root element then parse it again so nested serialized object are updated as well
+        // After update we serialize root element then parse it again so nested serialized object are updated as well
         if value_changed && !self.is_sub_table {
             let root_node = self.nodes[row_index].entries.pop().unwrap();
             let value1 = serialize_to_json_with_option::<String>(
