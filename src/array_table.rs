@@ -7,7 +7,7 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration};
-use eframe::egui::{Align, Button, Context, CursorIcon, Event, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, ViewportCommand, Widget, WidgetText};
+use eframe::egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::style::Spacing;
 use indexmap::IndexSet;
@@ -15,12 +15,12 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY, SHORTCUT_PASTE};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY};
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
 use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{COPY, FILTER, PASTE, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
+use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
 use crate::parser::{row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
 
@@ -200,52 +200,8 @@ impl super::View<ArrayResponse> for ArrayTable {
             });
         self.cache.borrow_mut().update();
 
-        let mut copied_value = None;
         if self.editing_index.borrow().is_none() {
-            ui.input_mut(|i| {
-                for event in i.events.iter().filter(|e| match e {
-                    egui::Event::Copy => array_response.hover_data.hovered_cell.is_some(),
-                    egui::Event::Paste(_) => array_response.hover_data.hovered_cell.is_some(),
-                    _ => false,
-                }) {
-                    let cell_location = array_response.hover_data.hovered_cell.unwrap();
-                    let row_index = self.filtered_nodes[cell_location.row_index];
-                    let index = self.get_pointer_index_from_cache(cell_location.is_pinned_column_table, &&self.nodes[row_index], cell_location.column_index);
-
-                    match event {
-                        egui::Event::Paste(v) => {
-                            let columns = self.columns(cell_location.is_pinned_column_table);
-                            let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
-                            let mut flat_json_value = FlatJsonValue::<String> {
-                                pointer: PointerKey {
-                                    pointer,
-                                    value_type: columns[cell_location.column_index].value_type,
-                                    depth: columns[cell_location.column_index].depth,
-                                    position: 0,
-                                },
-                                value: Some(v.clone()),
-                            };
-                            match flat_json_value.pointer.value_type {
-                                // When we paste an object it should not be considered as parsed
-                                ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false) }
-                                _ => {}
-                            }
-                            self.update_value(flat_json_value, row_index, !self.is_sub_table);
-                        }
-                        egui::Event::Copy => {
-                            if let Some(index) = index {
-                                if let Some(value) = &self.nodes[row_index].entries()[index].value {
-                                    copied_value = Some(value.clone());
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            });
-            if let Some(value) = copied_value {
-                ui.ctx().copy_text(value.clone());
-            }
+            self.handle_shortcut(ui, &mut array_response);
         }
         array_response
     }
@@ -516,14 +472,14 @@ impl ArrayTable {
             }
         }
 
-        let mut request_repaint = false;
+        let request_repaint = false;
         let search_highlight_row = if !self.matching_rows.is_empty() {
             Some(self.matching_rows[self.matching_row_selected])
         } else {
             None
         };
         let table_scroll_output = table
-            .header(text_height * 2.0, |mut header| {
+            .header(text_height * 2.0, |header| {
                 self.header(pinned_column_table, header);
             })
             .body(self.hovered_row_index, search_highlight_row, self.focused_cell, |body| {
@@ -627,7 +583,7 @@ impl ArrayTable {
     }
 
 
-    fn body<'arraytable>(&'arraytable mut self, text_height: f32, pinned_column_table: bool, mut array_response: &mut ArrayResponse, mut request_repaint: bool, body: TableBody) {
+    fn body(&mut self, text_height: f32, pinned_column_table: bool, array_response: &mut ArrayResponse, mut request_repaint: bool, body: TableBody) {
         // Mutation after interaction
         let mut subtable = None;
         let mut focused_cell = None;
@@ -886,7 +842,7 @@ impl ArrayTable {
 
     fn insert_new_row(&mut self, table_row_index: usize, above_or_below: u8) {
         let row_index = self.filtered_nodes[table_row_index];
-        let depth = self.nodes[row_index].entries.last().unwrap().pointer.depth as u8;
+        let depth = self.nodes[row_index].entries.last().unwrap().pointer.depth;
         let new_table_row_index = table_row_index + above_or_below as usize;
         let new_index = row_index + above_or_below as usize;
         for i in new_table_row_index..self.filtered_nodes.len() {
@@ -935,7 +891,7 @@ impl ArrayTable {
                 index: col_index,
                 row_index: row_data.index(),
             };
-            cache.get(key, &self)
+            cache.get(key, self)
         };
         index
     }
@@ -969,7 +925,7 @@ impl ArrayTable {
                 value_changed = true;
                 entry.value = updated_entry.value;
                 if matches!(entry.pointer.value_type, ValueType::Null) {
-                    entry.pointer.value_type = updated_entry.pointer.value_type.clone();
+                    entry.pointer.value_type = updated_entry.pointer.value_type;
                 }
             }
         } else if updated_entry.value.is_some() {
@@ -1002,10 +958,8 @@ impl ArrayTable {
         value_changed
     }
 
-    // C
-
     #[inline]
-    fn get_pointer_index<'a>(parent_pointer: &String, columns: &Vec<Column>, data: &&'a Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<(usize)> {
+    fn get_pointer_index(parent_pointer: &String, columns: &Vec<Column>, data: &&Vec<FlatJsonValue<String>>, index: usize, row_index: usize) -> Option<usize> {
         if let Some(column) = columns.get(index) {
             let key = &column.name;
             let key = Self::pointer_key(parent_pointer, row_index, key);
@@ -1070,5 +1024,53 @@ impl ArrayTable {
         self.matching_rows.clear();
         self.changed_scroll_to_row_value = Some(crate::compatibility::now().sub(Duration::from_millis(1000)));
         self.matching_row_selected = 0;
+    }
+
+    fn handle_shortcut(&mut self, ui: &mut Ui, array_response: &mut ArrayResponse) {
+        let mut copied_value = None;
+        ui.input_mut(|i| {
+            for event in i.events.iter().filter(|e| match e {
+                egui::Event::Copy => array_response.hover_data.hovered_cell.is_some(),
+                egui::Event::Paste(_) => array_response.hover_data.hovered_cell.is_some(),
+                _ => false,
+            }) {
+                let cell_location = array_response.hover_data.hovered_cell.unwrap();
+                let row_index = self.filtered_nodes[cell_location.row_index];
+                let index = self.get_pointer_index_from_cache(cell_location.is_pinned_column_table, &&self.nodes[row_index], cell_location.column_index);
+
+                match event {
+                    egui::Event::Paste(v) => {
+                        let columns = self.columns(cell_location.is_pinned_column_table);
+                        let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
+                        let mut flat_json_value = FlatJsonValue::<String> {
+                            pointer: PointerKey {
+                                pointer,
+                                value_type: columns[cell_location.column_index].value_type,
+                                depth: columns[cell_location.column_index].depth,
+                                position: 0,
+                            },
+                            value: Some(v.clone()),
+                        };
+                        match flat_json_value.pointer.value_type {
+                            // When we paste an object it should not be considered as parsed
+                            ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false) }
+                            _ => {}
+                        }
+                        self.update_value(flat_json_value, row_index, !self.is_sub_table);
+                    }
+                    egui::Event::Copy => {
+                        if let Some(index) = index {
+                            if let Some(value) = &self.nodes[row_index].entries()[index].value {
+                                copied_value = Some(value.clone());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+        if let Some(value) = copied_value {
+            ui.ctx().copy_text(value.clone());
+        }
     }
 }

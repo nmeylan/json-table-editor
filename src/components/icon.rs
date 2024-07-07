@@ -1,8 +1,8 @@
-use std::sync::Arc;
-use eframe::emath::{pos2, Rect, Vec2};
+
+use eframe::emath::{pos2, Vec2};
 use eframe::epaint;
-use eframe::epaint::{Fonts, Rounding, Stroke};
-use eframe::egui::{Button, Color32, Context, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget, WidgetInfo, widgets, WidgetText, WidgetType};
+use eframe::epaint::{Rounding, Stroke};
+use eframe::egui::{Button, Color32, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget, WidgetInfo, WidgetText, WidgetType};
 use crate::components::icon;
 
 pub fn icon(name: &'static str) -> egui::RichText {
@@ -162,7 +162,7 @@ impl Widget for ButtonWithIcon {
             ui.available_size() - 2.0 * button_padding
         };
 
-        let icon_size = space_available_for_icon.clone();
+        let icon_size = space_available_for_icon;
         let icon = WidgetText::from(icon_with_size(icon, icon_size.y - 2.0));
 
         let mut text_wrap_width = ui.available_width() - 2.0 * button_padding.x;
@@ -200,7 +200,7 @@ impl Widget for ButtonWithIcon {
         }
         desired_size = desired_size.at_least(min_size);
 
-        let (rect, mut response) = ui.allocate_at_least(desired_size, sense);
+        let (rect, response) = ui.allocate_at_least(desired_size, sense);
         response.widget_info(|| {
             if let Some(galley) = &galley {
                 WidgetInfo::labeled(WidgetType::Button, true, galley.text())

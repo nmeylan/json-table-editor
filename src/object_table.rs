@@ -1,7 +1,8 @@
-use std::cell::{Cell, RefCell};
+use std::cell::{RefCell};
 use std::mem;
 use eframe::egui::scroll_area::ScrollBarVisibility;
-use eframe::egui::{Button, Id, Key, Label, Sense, TextEdit};
+use eframe::egui::{Id, Key, Label, Sense, TextEdit};
+use egui::Ui;
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use crate::{ArrayResponse, SHORTCUT_COPY};
@@ -132,7 +133,7 @@ impl ObjectTable {
         array_response
     }
 
-    fn update_value(&mut self, mut array_response: &mut ArrayResponse, updated_pointer: PointerKey, value: String, row_index: usize) -> bool {
+    fn update_value(&mut self, array_response: &mut ArrayResponse, updated_pointer: PointerKey, value: String, row_index: usize) -> bool {
         let value = if value.is_empty() {
             None
         } else {
@@ -181,6 +182,41 @@ impl ObjectTable {
         }
         false
     }
+
+    fn handle_shortcut(&mut self, ui: &mut Ui, array_response: &mut ArrayResponse) {
+        let mut copied_value = None;
+        let has_hovered_cell = array_response.hover_data.hovered_cell.is_some();
+        ui.input_mut(|i| {
+            for event in i.events.iter().filter(|e| {
+                match e {
+                    egui::Event::Copy => has_hovered_cell,
+                    egui::Event::Paste(_) => has_hovered_cell,
+                    _ => false,
+                }
+            }) {
+                let cell_location = array_response.hover_data.hovered_cell.unwrap();
+                let row_index = self.filtered_nodes[cell_location.row_index];
+
+                let is_value_column = cell_location.column_index == 1;
+                if is_value_column {
+                    match event {
+                        egui::Event::Paste(v) => {
+                            self.update_value(array_response, self.nodes[row_index].pointer.clone(), v.clone(), row_index);
+                        },
+                        egui::Event::Copy => {
+                            if let Some(value) = &self.nodes[row_index].value {
+                                copied_value = Some(value.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        });
+        if let Some(value) = copied_value {
+            ui.ctx().copy_text(value.clone());
+        }
+    }
 }
 
 impl super::View<ArrayResponse> for ObjectTable {
@@ -200,38 +236,7 @@ impl super::View<ArrayResponse> for ObjectTable {
                 });
             });
         if self.editing_index.borrow().is_none() {
-            let mut copied_value = None;
-            let has_hovered_cell = array_response.hover_data.hovered_cell.is_some();
-            ui.input_mut(|i| {
-                for event in i.events.iter().filter(|e| {
-                    match e {
-                        egui::Event::Copy => has_hovered_cell,
-                        egui::Event::Paste(_) => has_hovered_cell,
-                        _ => false,
-                    }
-                }) {
-                    let cell_location = array_response.hover_data.hovered_cell.unwrap();
-                    let row_index = self.filtered_nodes[cell_location.row_index];
-
-                    let is_value_column = cell_location.column_index == 1;
-                    if is_value_column {
-                        match event {
-                            egui::Event::Paste(v) => {
-                                self.update_value(&mut array_response, self.nodes[row_index].pointer.clone(), v.clone(), row_index);
-                            },
-                            egui::Event::Copy => {
-                                if let Some(value) = &self.nodes[row_index].value {
-                                    copied_value = Some(value.clone());
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            });
-            if let Some(value) = copied_value {
-                ui.ctx().copy_text(value.clone());
-            }
+            self.handle_shortcut(ui, &mut array_response);
         }
         array_response
     }

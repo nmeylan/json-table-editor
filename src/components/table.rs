@@ -148,7 +148,7 @@ impl From<Vec<Size>> for Sizing {
 use std::mem;
 use eframe::egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
 use eframe::egui::scroll_area::ScrollAreaOutput;
-use crate::ArrayResponse;
+
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {

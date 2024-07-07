@@ -161,7 +161,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                         let prefix = &entry.pointer.pointer[0..prefix_len];
                         flat_json_values.push(row_number_entry(i, entry.pointer.position, prefix));
                     }
-                    let mut entry= previous_parse_result.json.pop().unwrap();
+                    let entry= previous_parse_result.json.pop().unwrap();
                     flat_json_values.push(entry);
                 } else {
                     break;
