@@ -1,4 +1,4 @@
-use egui::{Context, Ui};
+use eframe::egui::{Context, Ui};
 use json_flat_parser::{FlatJsonValue, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;

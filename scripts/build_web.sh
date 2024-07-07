@@ -23,7 +23,7 @@ WASM_OPT_FLAGS="-O2 --fast-math -g"
 
 OUT_FILE_NAME="json-editor"
 
-FINAL_WASM_PATH=web/${OUT_FILE_NAME}.wasm
+FINAL_WASM_PATH=web/${OUT_FILE_NAME}_bg.wasm
 
 # Clear output from old stuff:
 rm -f "${FINAL_WASM_PATH}"

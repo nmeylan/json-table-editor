@@ -4,15 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = { version = "0.27.2", default-features = false, features = [
+eframe = { version = "0.28.1", default-features = false, features = [
     "default_fonts",
     "glow",
     "wayland",
-
     "wgpu",
     "x11"] }
-egui = { version = "0.27.2", default-features = false, features = [] }
-egui_extras = { version = "0.27.2", default-features = false, features = ["svg"] }
+egui = { version = "0.28.1", default-features = false, features = [] }
+egui_extras = { version = "0.28.1", default-features = false, features = ["svg"] }
 json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "66a5ea8", features = ["indexmap", "simdutf8"]}
 rayon = {version = "1.10.0"}
 rfd = {version = "0.14.1"}

@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::mem;
-use egui::scroll_area::ScrollBarVisibility;
-use egui::{Button, Id, Key, Label, Sense, TextEdit};
+use eframe::egui::scroll_area::ScrollBarVisibility;
+use eframe::egui::{Button, Id, Key, Label, Sense, TextEdit};
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use crate::{ArrayResponse, SHORTCUT_COPY};

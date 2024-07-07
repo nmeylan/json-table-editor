@@ -15,15 +15,16 @@ use std::{env, mem};
 use std::collections::{BTreeSet};
 use std::fs::File;
 use std::io::Read;
-use std::fmt::{format, Write};
+use std::fmt::{ Write};
 
 use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
 use crate::components::fps::FrameHistory;
 
 use eframe::{CreationContext};
+use eframe::egui::Context;
 use eframe::Theme::Light;
-use egui::{Align, Align2, Button, Color32, ComboBox, Context, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
+use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
@@ -48,7 +49,7 @@ pub trait View<R> {
 /// Something to view
 pub trait Window {
     /// Is the demo enabled for this integration?
-    fn is_enabled(&self, _ctx: &egui::Context) -> bool {
+    fn is_enabled(&self, _ctx: &eframe::egui::Context) -> bool {
         true
     }
 
@@ -56,7 +57,7 @@ pub trait Window {
     fn name(&self) -> &'static str;
 
     /// Show windows, etc
-    fn show(&mut self, ctx: &egui::Context, open: &mut bool);
+    fn show(&mut self, ctx: &eframe::egui::Context, open: &mut bool);
 }
 
 #[derive(Default, Clone)]
@@ -84,7 +85,7 @@ fn main() {
         let options = eframe::NativeOptions {
             default_theme: Light,
             persist_window: false,
-            viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap()),
+            viewport: eframe::egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap())),
             // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
             ..eframe::NativeOptions::default()
         };
@@ -106,7 +107,7 @@ fn main() {
             if args.len() >= 3 {
                 app.selected_pointer = Some(args[2].clone());
             }
-            Box::new(app)
+            Ok(Box::new(app))
         })).unwrap();
     }
 }
@@ -131,15 +132,15 @@ struct MyApp {
 
 impl MyApp {
     fn new(cc: &CreationContext) -> Self {
-        let mut fonts = egui::FontDefinitions::default();
+        let mut fonts = eframe::egui::FontDefinitions::default();
 
-        let font_data = egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
+        let font_data = eframe::egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
         fonts.font_data.insert(
             "fa".into(),
             font_data,
         );
         fonts.families.insert(
-            egui::FontFamily::Name("fa".into()),
+            eframe::egui::FontFamily::Name("fa".into()),
             vec!["Ubuntu-Light".into(), "fa".into()],
         );
         cc.egui_ctx.set_fonts(fonts);
@@ -331,7 +332,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 }
 
 impl eframe::App for MyApp {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         #[cfg(not(target_arch = "wasm32"))] {
             let mut title = format!("json table editor - {}{}",
                                     self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()),
@@ -381,7 +382,7 @@ impl eframe::App for MyApp {
                     ui.add(Separator::default().vertical());
                     let scroll_to_column_response = ui.allocate_ui(Vec2::new(180.0, ui.spacing().interact_size.y), |ui| {
                         ui.horizontal(|ui| {
-                            ui.add(Label::new("Scroll to column: ").wrap(false));
+                            ui.add(Label::new("Scroll to column: ").extend());
                             let text_edit = TextEdit::singleline(&mut table.scroll_to_column).hint_text("named");
                             let response = ui.add(text_edit);
                             if !table.matching_columns.is_empty() {
@@ -409,7 +410,7 @@ impl eframe::App for MyApp {
 
                     let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
                         ui.horizontal(|ui| {
-                            ui.add(Label::new("Scroll to row: ").wrap(false));
+                            ui.add(Label::new("Scroll to row: ").extend());
                             let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
                                     || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()

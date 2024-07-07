@@ -7,20 +7,20 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration};
-use egui::{Align, Button, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
-use egui::scroll_area::ScrollBarVisibility;
-use egui::style::Spacing;
+use eframe::egui::{Align, Button, Context, CursorIcon, Event, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, ViewportCommand, Widget, WidgetText};
+use eframe::egui::scroll_area::ScrollBarVisibility;
+use eframe::egui::style::Spacing;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY, SHORTCUT_PASTE};
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
 use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
+use crate::fonts::{COPY, FILTER, PASTE, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
 use crate::parser::{row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
 
@@ -704,6 +704,10 @@ impl ArrayTable {
                                         ui.ctx().copy_text(value.clone());
                                         ui.close_menu();
                                     }
+                                    // let button = ButtonWithIcon::new("Paste", PASTE).shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_PASTE));
+                                    // if ui.add(button).clicked() {
+                                    //     ui.close_menu();
+                                    // }
                                     if Self::is_filterable(&columns[col_index]) {
                                         let button = ButtonWithIcon::new("Filter by this value", FILTER);
                                         if ui.add(button).clicked() {

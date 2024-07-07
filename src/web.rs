@@ -30,7 +30,7 @@ impl WebHandle {
             .start(
                 canvas_id,
                 eframe::WebOptions::default(),
-                Box::new(|cc| Box::new(crate::MyApp::new(cc))),
+                Box::new(|cc| Ok(Box::new(crate::MyApp::new(cc)))),
             )
             .await
     }

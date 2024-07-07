@@ -1,4 +1,5 @@
-use egui::{Context, Ui};
+use eframe::egui::Context;
+use eframe::egui::{Ui};
 
 #[derive(Default)]
 pub struct AboutPanel {

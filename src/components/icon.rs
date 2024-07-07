@@ -2,7 +2,7 @@ use std::sync::Arc;
 use eframe::emath::{pos2, Rect, Vec2};
 use eframe::epaint;
 use eframe::epaint::{Fonts, Rounding, Stroke};
-use egui::{Button, Color32, Context, NumExt, Response, Sense, Style, TextStyle, Ui, Widget, WidgetInfo, widgets, WidgetText, WidgetType};
+use eframe::egui::{Button, Color32, Context, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget, WidgetInfo, widgets, WidgetText, WidgetType};
 use crate::components::icon;
 
 pub fn icon(name: &'static str) -> egui::RichText {
@@ -33,7 +33,7 @@ pub struct ButtonWithIcon {
     icon: &'static str,
 
     shortcut_text: WidgetText,
-    wrap: Option<bool>,
+    wrap: Option<TextWrapMode>,
 
     fill: Option<Color32>,
     stroke: Option<Stroke>,
@@ -64,7 +64,11 @@ impl ButtonWithIcon {
     }
     #[inline]
     pub fn wrap(mut self, wrap: bool) -> Self {
-        self.wrap = Some(wrap);
+        if wrap {
+            self.wrap = Some(TextWrapMode::Wrap);
+        } else {
+            self.wrap = Some(TextWrapMode::Extend);
+        }
         self
     }
 
@@ -172,7 +176,7 @@ impl Widget for ButtonWithIcon {
         let icon_galley =
             icon.into_galley(ui, wrap, text_wrap_width, TextStyle::Button);
         let shortcut_galley = (!shortcut_text.is_empty())
-            .then(|| shortcut_text.into_galley(ui, Some(false), f32::INFINITY, TextStyle::Button));
+            .then(|| shortcut_text.into_galley(ui, Some(TextWrapMode::Extend), f32::INFINITY, TextStyle::Button));
 
         let mut desired_size = Vec2::ZERO;
 
@@ -199,7 +203,7 @@ impl Widget for ButtonWithIcon {
         let (rect, mut response) = ui.allocate_at_least(desired_size, sense);
         response.widget_info(|| {
             if let Some(galley) = &galley {
-                WidgetInfo::labeled(WidgetType::Button, galley.text())
+                WidgetInfo::labeled(WidgetType::Button, true, galley.text())
             } else {
                 WidgetInfo::new(WidgetType::Button)
             }

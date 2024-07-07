@@ -146,8 +146,8 @@ impl From<Vec<Size>> for Sizing {
 // Takes all available height, so if you want something below the table, put it in a strip.
 
 
-use egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
-use egui::scroll_area::ScrollAreaOutput;
+use eframe::egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
+use eframe::egui::scroll_area::ScrollAreaOutput;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -389,7 +389,7 @@ impl<'l> StripLayout<'l> {
     ) -> (Ui, Option<Response>) {
         let mut child_ui =
             self.ui
-                .child_ui_with_id_source(rect, self.cell_layout, child_ui_id_source);
+                .child_ui_with_id_source(rect, self.cell_layout, child_ui_id_source, None);
 
         if flags.clip {
             let margin = egui::Vec2::splat(self.ui.visuals().clip_rect_margin);
