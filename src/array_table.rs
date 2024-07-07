@@ -724,7 +724,11 @@ impl ArrayTable {
 
                                 if value.len() > 100 {
                                     response = response.on_hover_ui(|ui| {
-                                        ui.label(value);
+                                        ui.style_mut().interaction.selectable_labels = true;
+                                        let scroll_area = egui::ScrollArea::vertical();
+                                        scroll_area.show(ui, |ui| {
+                                            ui.label(value).request_focus();
+                                        });
                                     });
                                 };
                                 return Some(response);
