@@ -51,7 +51,7 @@ impl ButtonWithIcon {
             text: Some(text.into()),
             icon,
             shortcut_text: Default::default(),
-            wrap: None,
+            wrap: Some(TextWrapMode::Extend),
             fill: None,
             stroke: None,
             sense: Sense::click(),

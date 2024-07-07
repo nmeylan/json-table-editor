@@ -21,7 +21,7 @@ use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
 use crate::components::fps::FrameHistory;
 
-use eframe::{CreationContext};
+use eframe::{CreationContext, Renderer};
 use eframe::egui::Context;
 use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
@@ -85,6 +85,7 @@ fn main() {
         let options = eframe::NativeOptions {
             default_theme: Light,
             persist_window: false,
+            renderer: Renderer::Glow,
             viewport: eframe::egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap())),
             // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
             ..eframe::NativeOptions::default()

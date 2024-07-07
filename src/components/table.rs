@@ -145,9 +145,10 @@ impl From<Vec<Size>> for Sizing {
 // | fixed size | all available space/minimum | 30% of available width | fixed size |
 // Takes all available height, so if you want something below the table, put it in a strip.
 
-
+use std::mem;
 use eframe::egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
 use eframe::egui::scroll_area::ScrollAreaOutput;
+use crate::ArrayResponse;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -1127,6 +1128,26 @@ pub struct HoverData {
     pub hovered_cell: Option<CellLocation>,
 }
 
+impl HoverData {
+    pub fn from_cell(hovered_cell: Option<CellLocation>) -> Self {
+        Self {
+            hovered_row: None,
+            hovered_cell,
+        }
+    }
+    pub fn union(&mut self, other: HoverData) -> Self {
+        let mut new_data = mem::take(self);
+        if new_data.hovered_row.is_none() && other.hovered_row.is_some() {
+            new_data.hovered_row = other.hovered_row;
+        }
+        if new_data.hovered_cell.is_none() && other.hovered_cell.is_some() {
+            new_data.hovered_cell = other.hovered_cell;
+        }
+        new_data
+    }
+}
+
+
 /// The body of a table.
 ///
 /// Is created by calling `body` on a [`Table`] (after adding a header row) or [`TableBuilder`] (without a header row).
@@ -1243,7 +1264,7 @@ impl<'a> TableBody<'a> {
 
         HoverData {
             hovered_row: self.hovered_row_index,
-            hovered_cell:  self.hovered_cell_index
+            hovered_cell: self.hovered_cell_index,
         }
     }
 
