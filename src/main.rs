@@ -9,9 +9,10 @@ pub mod fonts;
 mod web;
 mod compatibility;
 mod panels;
+mod replace_panel;
 
 use std::{env, mem};
-
+use std::any::Any;
 use std::collections::{BTreeSet};
 use std::fs::File;
 use std::io::Read;
@@ -25,13 +26,13 @@ use eframe::{CreationContext, Renderer};
 use eframe::egui::Context;
 use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-
+use eframe::epaint::text::TextWrapMode;
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
-use crate::panels::AboutPanel;
+use crate::panels::{AboutPanel, PANEL_ABOUT};
 use crate::parser::save_to_file;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
@@ -41,6 +42,7 @@ pub const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::
 pub const SHORTCUT_COPY: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
 pub const SHORTCUT_PASTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
 pub const SHORTCUT_DELETE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
+pub const SHORTCUT_REPLACE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::R);
 
 /// Something to view in the demo windows
 pub trait View<R> {
@@ -48,7 +50,7 @@ pub trait View<R> {
 }
 
 /// Something to view
-pub trait Window {
+pub trait Window<R> {
     /// Is the demo enabled for this integration?
     fn is_enabled(&self, _ctx: &eframe::egui::Context) -> bool {
         true
@@ -58,7 +60,9 @@ pub trait Window {
     fn name(&self) -> &'static str;
 
     /// Show windows, etc
-    fn show(&mut self, ctx: &eframe::egui::Context, open: &mut bool);
+    fn show(&mut self, ctx: &eframe::egui::Context, open: &mut bool) -> R;
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 #[derive(Default, Clone)]
@@ -117,8 +121,8 @@ fn main() {
 struct MyApp {
     frame_history: FrameHistory,
     table: Option<ArrayTable>,
-    windows: Vec<Box<dyn Window>>,
     open: BTreeSet<String>,
+    about_panel: AboutPanel,
     max_depth: u8,
     depth: u8,
     selected_file: Option<PathBuf>,
@@ -143,16 +147,16 @@ impl MyApp {
         );
         fonts.families.insert(
             eframe::egui::FontFamily::Name("fa".into()),
-            vec!["Ubuntu-Light".into(), "fa".into()],
+            vec!["fa".into()],
         );
         cc.egui_ctx.set_fonts(fonts);
         // let path = Path::new(args[1].as_str());
         Self {
             frame_history: FrameHistory::default(),
             table: None,
-            windows: vec![Box::<AboutPanel>::default()],
-            max_depth: 0,
             open: Default::default(),
+            about_panel: Default::default(),
+            max_depth: 0,
             depth: 0,
             selected_file: None,
             parsing_invalid: false,
@@ -166,12 +170,10 @@ impl MyApp {
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
-        let Self { windows, open, .. } = self;
-        for window in windows {
-            let mut is_open = open.contains(window.name());
-            window.show(ctx, &mut is_open);
-            set_open(open, window.name(), is_open);
-        }
+        let Self { open, .. } = self;
+        let mut is_open = open.contains(self.about_panel.name());
+        self.about_panel.show(ctx, &mut is_open);
+        set_open(open, self.about_panel.name(), is_open);
     }
 
     pub fn open_json(&mut self) {
@@ -321,6 +323,7 @@ impl MyApp {
             self.unsaved_changes = false;
         }
     }
+
 }
 
 fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
@@ -356,7 +359,7 @@ impl eframe::App for MyApp {
                     #[cfg(not(target_arch = "wasm32"))] {
                         ui.menu_button("File", |ui| {
                             ui.set_min_width(220.0);
-                            ui.style_mut().wrap = Some(false);
+                            ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
                             if ui.button("Open json file").clicked() {
                                 ui.close_menu();
                                 self.file_picker();
@@ -375,6 +378,16 @@ impl eframe::App for MyApp {
                             }
                         });
                     }
+
+                    ui.separator();
+                    ui.menu_button("Edit", |ui| {
+                        ui.set_min_width(220.0);
+                        let replace_button = Button::new("Replace").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_REPLACE));
+                        if ui.add(replace_button).clicked() {
+                            ui.close_menu();
+                            self.table.as_mut().unwrap().open_replace_panel(None);
+                        }
+                    });
                 }
                 if let Some(ref mut table) = self.table {
                     ui.separator();
@@ -506,7 +519,7 @@ impl eframe::App for MyApp {
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     let about_button = ui.add(Button::new("About").frame(false));
                     if about_button.clicked() {
-                        set_open(&mut self.open, "About", true);
+                        set_open(&mut self.open, PANEL_ABOUT, true);
                     }
                     if about_button.hovered() {
                         ui.ctx().set_cursor_icon(CursorIcon::PointingHand);

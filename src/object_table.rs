@@ -173,6 +173,7 @@ impl ObjectTable {
                 value_type: ValueType::Array(array_entries.len()),
                 depth: 0,
                 position: 0,
+                column_id: 0,
             };
             array_entries.push(FlatJsonValue { pointer: parent_pointer, value: None });
             let updated_array = serialize_to_json_with_option::<String>(&mut array_entries, depth + 1).to_json();

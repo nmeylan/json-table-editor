@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::{fs, mem};
-
+use std::hash::{DefaultHasher, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -12,6 +12,8 @@ use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::{ParallelSliceMut};
 use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
+use crate::panels::{ReplaceMode, SearchReplaceResponse};
+
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
@@ -66,16 +68,22 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
                         continue;
                     }
                     let key = &entry.pointer.pointer[prefix_len..entry.pointer.pointer.len()];
-                    let column = Column {
+                    let mut column = Column {
                         name: key.to_string(),
                         depth: entry.pointer.depth,
                         value_type: entry.pointer.value_type,
                         seen_count: 0,
                         order: unique_keys.len(),
+                        id: unique_keys.len(),
                     };
                     if let Some(column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
+                        entry.pointer.column_id = column.id;
                         column.seen_count += 1;
                     } else if !column.name.contains('#') {
+                        let mut hasher = DefaultHasher::new();
+                        hasher.write(column.name.as_bytes());
+                        column.id = hasher.finish() as usize;
+                        entry.pointer.column_id = column.id;
                         unique_keys.push(column);
                     }
                 }
@@ -119,7 +127,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
         let _i = i.to_string();
         loop {
             if !previous_parse_result.json.is_empty() {
-                let entry = &previous_parse_result.json[j];
+                let entry = &mut previous_parse_result.json[j];
                 let (match_prefix, prefix_len) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
                     let prefix = concat_string!(started_parsing_at, "/", _i);
                     // println!("else if {}", prefix);
@@ -140,19 +148,25 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                             panic!("{} len is < {}", entry.pointer.pointer, prefix_len);
                         }
                         let key = &entry.pointer.pointer[prefix_len..entry.pointer.pointer.len()];
-                        let column = Column {
+                        let mut column = Column {
                             name: key.to_string(),
                             depth: entry.pointer.depth,
                             value_type: entry.pointer.value_type,
                             seen_count: 1,
                             order: unique_keys.len(),
+                            id: 0,
                         };
                         if let Some(existing_column) = unique_keys.iter_mut().find(|c| c.eq(&&column)) {
                             existing_column.seen_count += 1;
                             if existing_column.value_type.eq(&ValueType::Null) {
                                 existing_column.value_type = column.value_type;
                             }
+                            entry.pointer.column_id = existing_column.id;
                         } else {
+                            let mut hasher = DefaultHasher::new();
+                            hasher.write(column.name.as_bytes());
+                            column.id = hasher.finish() as usize;
+                            entry.pointer.column_id = column.id;
                             unique_keys.push(column);
                         }
                     }
@@ -288,4 +302,34 @@ pub fn search_occurrences(previous_parse_result: &[JsonArrayEntries<String>], te
         }
     }
     res
+}
+
+pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>, search_replace_response: SearchReplaceResponse) -> Vec<(FlatJsonValue<String>, usize)> {
+    let column_ids = if let Some(selected_columns) = search_replace_response.selected_column {
+        selected_columns.iter().map(|c| c.id).collect::<Vec<usize>>()
+    } else {
+        vec![]
+    };
+    let mut new_values: Vec<(FlatJsonValue<String>, usize)> = vec![];
+    for json_array_entry in previous_parse_result.iter() {
+        for entry in json_array_entry.entries.iter() {
+            if column_ids.contains(&entry.pointer.column_id) {
+                if let Some(ref value) = entry.value {
+                    match search_replace_response.replace_mode {
+                        ReplaceMode::Simple => {
+                            new_values.push((
+                                FlatJsonValue {
+                                    pointer: entry.pointer.clone(),
+                                    value: Some(value.replace(search_replace_response.search_criteria.as_str(), search_replace_response.replace_value.as_str())),
+                                },
+                                json_array_entry.index
+                            ));
+                        }
+                        ReplaceMode::Regex => {}
+                    }
+                }
+            }
+        }
+    }
+    new_values
 }

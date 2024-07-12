@@ -1,4 +1,5 @@
 use eframe::egui::{Context, Ui};
+use egui::Order;
 use json_flat_parser::{FlatJsonValue, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;
@@ -88,6 +89,7 @@ impl SubTable {
                 };
                 r.default_height(40.0 + nodes as f32 * ArrayTable::row_height(&ctx.style(), &ctx.style().spacing)).default_width( 480.0)
             })
+            .order(Order::Middle)
             .resizable([true, true])
             .show(ctx, |ui| {
                 let id = self.name().to_string();

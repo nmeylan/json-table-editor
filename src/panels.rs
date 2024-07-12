@@ -1,17 +1,53 @@
+use std::any::Any;
+use std::cell::RefCell;
 use eframe::egui::Context;
 use eframe::egui::{Ui};
+use eframe::emath::Align;
+use eframe::epaint::text::TextWrapMode;
+use egui::{Button, Grid, Layout, RichText, Sense, TextEdit};
+use json_flat_parser::ValueType;
+use crate::ACTIVE_COLOR;
+use crate::array_table::Column;
+use crate::components::popover::PopupMenu;
+use crate::panels::ReplaceMode::Simple;
+
+pub const PANEL_ABOUT: &'static str = "About";
+pub const PANEL_REPLACE: &'static str = "Replace";
 
 #[derive(Default)]
-pub struct AboutPanel {
-    enabled: bool,
-    visible: bool,
+pub struct AboutPanel {}
+
+#[derive(Default)]
+pub struct SearchReplacePanel {
+    search_criteria: String,
+    replace_value: String,
+    selected_columns: RefCell<Vec<Column>>,
+    columns: Vec<Column>,
+    replace_mode: ReplaceMode,
+    title: Option<String>
+}
+#[derive(Clone)]
+pub enum ReplaceMode {
+    Simple,
+    Regex,
+}
+impl Default for ReplaceMode {
+    fn default() -> Self {
+        Simple
+    }
+}
+
+pub struct SearchReplaceResponse {
+    pub search_criteria: String,
+    pub replace_value: String,
+    pub selected_column: Option<Vec<Column>>,
+    pub replace_mode: ReplaceMode,
 }
 
 
-
-impl super::Window for AboutPanel {
+impl super::Window<()> for AboutPanel {
     fn name(&self) -> &'static str {
-        "About"
+        PANEL_ABOUT
     }
 
     fn show(&mut self, ctx: &Context, open: &mut bool) {
@@ -25,6 +61,14 @@ impl super::Window for AboutPanel {
                 self.ui(ui);
             });
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
 }
 
 impl super::View<()> for AboutPanel {
@@ -36,5 +80,143 @@ impl super::View<()> for AboutPanel {
         ui.heading("Credits");
         ui.hyperlink_to("egui project and its community", "https://github.com/emilk/egui");
         ui.hyperlink_to("Maintainers of dependencies used by this project", "https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock");
+    }
+}
+
+impl SearchReplacePanel {
+    pub fn set_columns(&mut self, columns: Vec<Column>) {
+        self.columns = columns;
+    }
+
+    pub fn set_title(&mut self, title: String) {
+        self.title = Some(title);
+    }
+    pub fn set_select_column(&mut self, selected_column: Column) {
+        *self.selected_columns.borrow_mut() = vec![selected_column];
+    }
+}
+impl super::Window<Option<SearchReplaceResponse>> for SearchReplacePanel {
+    fn name(&self) -> &'static str {
+        PANEL_REPLACE
+    }
+
+    fn show(&mut self, ctx: &Context, open: &mut bool) -> Option<SearchReplaceResponse> {
+        let window_title = if let Some(ref title) = self.title {
+            title.as_str()
+        } else {
+            self.name()
+        };
+        let maybe_inner_response = egui::Window::new(window_title)
+            .collapsible(true)
+            .open(open)
+            .resizable([true, true])
+            .default_width(280.0)
+            .show(ctx, |ui| {
+                use super::View as _;
+                self.ui(ui)
+            });
+
+        if let Some(inner_response) = maybe_inner_response {
+            if let Some(inner_response2) = inner_response.inner {
+                return inner_response2;
+            }
+        }
+        None
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
+impl super::View<Option<SearchReplaceResponse>> for SearchReplacePanel {
+    fn ui(&mut self, ui: &mut Ui) -> Option<SearchReplaceResponse> {
+        let search = TextEdit::singleline(&mut self.search_criteria);
+        let replace = TextEdit::singleline(&mut self.replace_value);
+        let mut button = Button::new("Replace");
+        let grid_response = Grid::new("replace_panel:grid")
+            .num_columns(2)
+            .spacing([12.0, 8.0])
+            .striped(false)
+            .show(ui, |ui| {
+                ui.label("Column: ");
+                PopupMenu::new("select_column_to_replace")
+                    .show_ui(ui, |ui| {
+                        let response = ui.add(Button::new(format!("{} column(s) selected", self.selected_columns.borrow().len())));
+                        response.on_hover_ui(|ui| {
+                            // ui.set_min_width(140.0);
+                            ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
+                            self.selected_columns.borrow().iter().for_each(|c| {ui.label(c.name.as_str());})
+                        })
+                    }, |ui| {
+                        for col in self.columns.iter().filter(|c| !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(_)))) {
+                            if col.name.is_empty() {
+                                continue;
+                            }
+                            let mut chcked = false;
+
+                            for selected in self.selected_columns.borrow().iter() {
+                                if selected.eq(col) {
+                                    chcked = true;
+                                    break;
+                                }
+                            }
+                            if ui.checkbox(&mut chcked, col.name.as_str()).clicked() {
+                                if self.selected_columns.borrow().contains(col) {
+                                    self.selected_columns.borrow_mut().retain(|c| !c.eq(col));
+                                } else {
+                                    self.selected_columns.borrow_mut().push(col.clone());
+                                }
+                            }
+                        }
+                    });
+
+                ui.end_row();
+                ui.label("Search: ");
+                ui.add(search);
+                ui.end_row();
+                ui.label("Replace: ");
+                ui.add(replace);
+                ui.end_row();
+
+                ui.label("");
+                let mut text = RichText::new(".*");
+                if matches!(self.replace_mode, ReplaceMode::Regex) {
+                    text = text.color(ACTIVE_COLOR);
+                }
+                let enable_regex = Button::new(text);
+                let mut replace_response = ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    if self.selected_columns.borrow().len() == 0 {
+                        button = button.sense(Sense::hover());
+                    }
+                    let response_button_replace = ui.add(button);
+                    let mut response = ui.add(enable_regex);
+                    response = response.on_hover_ui(|ui| { ui.label("Regex"); });
+                    if response.clicked() {
+                        if matches!(self.replace_mode, ReplaceMode::Regex) {
+                            self.replace_mode = ReplaceMode::Simple;
+                        } else {
+                            self.replace_mode = ReplaceMode::Regex;
+                        }
+                    }
+                    response_button_replace
+                }).inner;
+                ui.end_row();
+
+                replace_response
+            });
+        if grid_response.inner.clicked() {
+            return Some(SearchReplaceResponse {
+                search_criteria: self.search_criteria.clone(),
+                replace_value: self.replace_value.clone(),
+                replace_mode: self.replace_mode.clone(),
+                selected_column: Some(self.selected_columns.borrow().clone()),
+            })
+        }
+        None
+        // return grid_response.inner
     }
 }

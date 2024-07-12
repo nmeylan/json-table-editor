@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{HashMap};
+use std::collections::{BTreeSet, HashMap};
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
@@ -15,13 +15,14 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY, SHORTCUT_DELETE, SHORTCUT_SAVE_AS};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, set_open, SHORTCUT_COPY, SHORTCUT_DELETE, SHORTCUT_REPLACE, SHORTCUT_SAVE_AS, Window};
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
 use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS, THUMBTACK};
-use crate::parser::{row_number_entry, search_occurrences};
+use crate::fonts::{COPY, FILTER, PENCIL, PLUS, SEARCH, TABLE, TABLE_CELLS, THUMBTACK};
+use crate::panels::{PANEL_REPLACE, SearchReplacePanel, SearchReplaceResponse};
+use crate::parser::{replace_occurrences, row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
 
 #[derive(Clone, Debug)]
@@ -31,6 +32,7 @@ pub struct Column {
     pub value_type: ValueType,
     pub seen_count: usize,
     pub order: usize,
+    pub id: usize,
 }
 
 impl Hash for Column {
@@ -47,6 +49,7 @@ impl Column {
             value_type,
             seen_count: 0,
             order: 0,
+            id: 0,
         }
     }
 }
@@ -135,6 +138,9 @@ pub struct ArrayTable {
 
     pub editing_index: RefCell<Option<(usize, usize, bool)>>,
     pub editing_value: RefCell<String>,
+
+    opened_windows: BTreeSet<String>,
+    search_replace_panel: SearchReplacePanel,
 }
 
 
@@ -308,6 +314,8 @@ impl ArrayTable {
             is_sub_table: false,
             focused_cell: None,
             cache: Default::default(),
+            opened_windows: Default::default(),
+            search_replace_panel: Default::default(),
         }
     }
     pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
@@ -333,6 +341,13 @@ impl ArrayTable {
             }
         }
         self.windows.retain(|w| !closed_windows.contains(w.name()));
+
+        let mut is_open = self.opened_windows.contains(self.search_replace_panel.name());
+        let response = self.search_replace_panel.show(ctx, &mut is_open);
+        set_open(&mut self.opened_windows, self.search_replace_panel.name(), is_open);
+        if let Some(search_replace_response) = response {
+            self.replace_columns(search_replace_response);
+        }
     }
 
     pub fn update_selected_columns(&mut self, depth: u8) -> Option<usize> {
@@ -348,6 +363,7 @@ impl ArrayTable {
                     value_type: Default::default(),
                     seen_count: 0,
                     order: 0,
+                    id: 0,
                 })
             }
             None
@@ -362,6 +378,10 @@ impl ArrayTable {
             self.last_parsed_max_depth = depth;
             self.parse_result.as_mut().unwrap().parsing_max_depth = depth;
             self.parse_result.as_mut().unwrap().max_json_depth = new_max_depth;
+            if self.opened_windows.contains(PANEL_REPLACE) {
+                // Refresh list of columns
+                self.open_replace_panel(None);
+            }
             Some(new_max_depth)
         }
     }
@@ -503,6 +523,7 @@ impl ArrayTable {
         let mut clicked_filter_non_null_column: Option<String> = None;
         let mut clicked_filter_column_value: Option<(String, String)> = None;
         let mut pinned_column: Option<usize> = None;
+        let mut clicked_replace_column: Option<usize> = None;
         header.cols(true, |ui, index| {
             let columns = self.columns(pinned_column_table);
             let column = columns.get(index).unwrap();
@@ -556,6 +577,11 @@ impl ArrayTable {
                                              }
                                          }
                                      });
+
+                        let response = icon::button(ui, SEARCH, Some("\u{f010}"), None);
+                        if response.clicked() {
+                            clicked_replace_column = Some(index);
+                        }
                     });
                 }
 
@@ -573,6 +599,10 @@ impl ArrayTable {
                 self.column_pinned.push(column);
             }
             self.cache.borrow_mut().evict();
+        }
+        if let Some(replace_column) = clicked_replace_column {
+            let column = self.columns(pinned_column_table)[replace_column].clone();
+            self.open_replace_panel(Some(column));
         }
         if let Some(clicked_column) = clicked_filter_non_null_column {
             self.on_filter_column_value((clicked_column, NON_NULL_FILTER_VALUE.to_string()));
@@ -611,6 +641,7 @@ impl ArrayTable {
                                 value_type: columns[col_index].value_type,
                                 depth: columns[col_index].depth,
                                 position: 0,
+                                column_id: columns[col_index].id,
                             };
                             updated_value = Some((pointer, mem::take(ref_mut)))
                         } else {
@@ -824,6 +855,7 @@ impl ArrayTable {
                         value_type: ValueType::Array(self.nodes.len()),
                         depth: 0,
                         position: 0,
+                        column_id: 0,
                     };
                     entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });
                     let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
@@ -873,6 +905,7 @@ impl ArrayTable {
                     value_type: ValueType::Object(true),
                     depth,
                     position: 0,
+                    column_id: 0,
                 }, value: Some("{}".to_string()) }
             ],
             index: new_index
@@ -1010,6 +1043,10 @@ impl ArrayTable {
         } else {
             self.columns_filter.insert(column, vec![value]);
         }
+        self.do_filter_column();
+    }
+
+    fn do_filter_column(&mut self) {
         if self.columns_filter.is_empty() {
             self.filtered_nodes = (0..self.nodes.len()).collect::<Vec<usize>>();
         } else {
@@ -1042,6 +1079,9 @@ impl ArrayTable {
                     modifiers: Default::default(),
                 })
             }
+            if i.consume_shortcut(&SHORTCUT_REPLACE) {
+                self.open_replace_panel(None);
+            }
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => array_response.hover_data.hovered_cell.is_some(),
                 egui::Event::Paste(_) => array_response.hover_data.hovered_cell.is_some(),
@@ -1057,7 +1097,7 @@ impl ArrayTable {
                         let columns = self.columns(cell_location.is_pinned_column_table);
                         let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
                         let flat_json_value = FlatJsonValue::<String> {
-                            pointer: PointerKey { pointer, value_type: columns[cell_location.column_index].value_type, depth: columns[cell_location.column_index].depth, position: 0, },
+                            pointer: PointerKey { pointer, value_type: columns[cell_location.column_index].value_type, depth: columns[cell_location.column_index].depth, position: 0, column_id: columns[cell_location.column_index].id },
                             value: None,
                         };
                         self.update_value(flat_json_value, row_index, !self.is_sub_table);
@@ -1071,6 +1111,7 @@ impl ArrayTable {
                                 value_type: columns[cell_location.column_index].value_type,
                                 depth: columns[cell_location.column_index].depth,
                                 position: 0,
+                                column_id: columns[cell_location.column_index].id,
                             },
                             value: Some(v.clone()),
                         };
@@ -1095,5 +1136,28 @@ impl ArrayTable {
         if let Some(value) = copied_value {
             ui.ctx().copy_text(value.clone());
         }
+    }
+
+    pub fn replace_columns(&mut self, search_replace_response: SearchReplaceResponse) {
+        if let Some(ref columns) = search_replace_response.selected_column {
+            for column in columns {
+                self.columns_filter.remove(&column.name);
+            }
+        }
+        for (flat_json_value, row_index) in  replace_occurrences(&mut self.nodes, search_replace_response) {
+            self.update_value(flat_json_value, row_index, !self.is_sub_table);
+        }
+        self.do_filter_column();
+    }
+
+    pub fn open_replace_panel(&mut self, selected_column: Option<Column>) {
+        set_open(&mut self.opened_windows, PANEL_REPLACE, true);
+        if let Some(selected_column) = selected_column {
+            self.search_replace_panel.set_select_column(selected_column);
+        }
+        if self.is_sub_table {
+            self.search_replace_panel.set_title(format!("Replace in {}", self.parent_pointer));
+        }
+        self.search_replace_panel.set_columns(self.all_columns().clone());
     }
 }
