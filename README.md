@@ -20,6 +20,13 @@ I wanted to edit a [small json file](https://github.com/nmeylan/rust-ro/blob/mas
 - Filter columns by values
 - Go to row number
 - Search for matching terms
+- Copy/Paste cell
+- Insert row above/below another row
+
+# Usage
+- You can launch the tool without arguments by executing the executable
+- You can launch the tool with arguments `./json-editor [PATH_TO_JSON] [JSON_POINTER]`
+- Right click on cells to display a contextual menu
 
 ![](.github/json-editor.png)
 
@@ -42,6 +49,16 @@ content is not deserialize we only keep raw content as String which then can be 
 This mechanism allow fast parsing of big json files, but consume more memory as for each depth level we store the full string and the parsed content.
 Additionally, this mechanism allow to serialize only row that have been changed, unchanged rows are already serialized, speeding up edition of big files.
 
-## Todo
-- Add new column
-- Add new row
+# Disclaimers
+This tool has not yet reached a stable version, thus it has the following limitations:
+
+- If you open a non-valid json file, tool will crash, there is currently no graceful handling for json parser error
+- If you open a json file starting by an object, you will be able to edit an array of your choice at the given `json pointer`, When you do `save`, it will only save this array
+Original json file
+```json
+{"skills": [], "count":  1000}
+```
+If you select pointer `/skills`, then save, it will produce this file
+```json
+{"skills": []}
+```
