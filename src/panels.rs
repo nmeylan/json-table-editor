@@ -94,6 +94,10 @@ impl SearchReplacePanel {
     pub fn set_select_column(&mut self, selected_column: Column) {
         *self.selected_columns.borrow_mut() = vec![selected_column];
     }
+
+    pub fn can_be_replaced(c: &Column) -> bool {
+        !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(_)))
+    }
 }
 impl super::Window<Option<SearchReplaceResponse>> for SearchReplacePanel {
     fn name(&self) -> &'static str {
@@ -152,7 +156,7 @@ impl super::View<Option<SearchReplaceResponse>> for SearchReplacePanel {
                             self.selected_columns.borrow().iter().for_each(|c| {ui.label(c.name.as_str());})
                         })
                     }, |ui| {
-                        for col in self.columns.iter().filter(|c| !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(_)))) {
+                        for col in self.columns.iter().filter(|c| Self::can_be_replaced(c)) {
                             if col.name.is_empty() {
                                 continue;
                             }

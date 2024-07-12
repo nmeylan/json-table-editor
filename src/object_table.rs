@@ -177,9 +177,9 @@ impl ObjectTable {
             };
             array_entries.push(FlatJsonValue { pointer: parent_pointer, value: None });
             let updated_array = serialize_to_json_with_option::<String>(&mut array_entries, depth + 1).to_json();
-            array_response.edited_value = Some(FlatJsonValue { pointer: parent_array.pointer.clone(), value: Some(updated_array) });
+            array_response.edited_value.push(FlatJsonValue { pointer: parent_array.pointer.clone(), value: Some(updated_array) });
         } else {
-            array_response.edited_value = Some(FlatJsonValue::<String> { pointer: updated_pointer, value });
+            array_response.edited_value.push(FlatJsonValue::<String> { pointer: updated_pointer, value });
         }
         false
     }

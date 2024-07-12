@@ -326,7 +326,7 @@ impl ArrayTable {
             let maybe_response = window.show(ctx, &mut opened);
             if let Some(maybe_inner_response) = maybe_response {
                 if let Some(response) = maybe_inner_response {
-                    if let Some(entry) = response.edited_value {
+                    for entry in response.edited_value {
                         updated_values.push((entry, window.id(), false));
                     }
                 }
@@ -337,7 +337,7 @@ impl ArrayTable {
         }
         for updated_value in updated_values {
             if self.update_value(updated_value.0.clone(), updated_value.1, updated_value.2) {
-                array_response.edited_value = Some(updated_value.0.clone())
+                array_response.edited_value.push(updated_value.0.clone())
             }
         }
         self.windows.retain(|w| !closed_windows.contains(w.name()));
@@ -346,7 +346,7 @@ impl ArrayTable {
         let response = self.search_replace_panel.show(ctx, &mut is_open);
         set_open(&mut self.opened_windows, self.search_replace_panel.name(), is_open);
         if let Some(search_replace_response) = response {
-            self.replace_columns(search_replace_response);
+            self.replace_columns(search_replace_response, array_response);
         }
     }
 
@@ -578,9 +578,11 @@ impl ArrayTable {
                                          }
                                      });
 
-                        let response = icon::button(ui, SEARCH, Some("\u{f010}"), None);
-                        if response.clicked() {
-                            clicked_replace_column = Some(index);
+                        if SearchReplacePanel::can_be_replaced(column) {
+                            let response = icon::button(ui, SEARCH, Some("\u{f010}"), None);
+                            if response.clicked() {
+                                clicked_replace_column = Some(index);
+                            }
                         }
                     });
                 }
@@ -872,12 +874,12 @@ impl ArrayTable {
                 entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });
                 let updated_array = serialize_to_json_with_option::<String>(&mut entries, pointer.depth - 1).to_json();
                 parent_pointer.pointer = self.parent_pointer.clone();
-                array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+                array_response.edited_value.push(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
             }
         } else {
             let value_changed = self.update_value(new_entry.clone(), row_index, true);
             if value_changed {
-                array_response.edited_value = Some(new_entry);
+                array_response.edited_value.push(new_entry);
             }
         }
     }
@@ -1145,14 +1147,14 @@ impl ArrayTable {
         }
     }
 
-    pub fn replace_columns(&mut self, search_replace_response: SearchReplaceResponse) {
+    pub fn replace_columns(&mut self, search_replace_response: SearchReplaceResponse, array_response: &mut ArrayResponse) {
         if let Some(ref columns) = search_replace_response.selected_column {
             for column in columns {
                 self.columns_filter.remove(&column.name);
             }
         }
         for (flat_json_value, row_index) in  replace_occurrences(&mut self.nodes, search_replace_response) {
-            self.update_value(flat_json_value, row_index, !self.is_sub_table);
+            self.edit_cell(array_response, flat_json_value, row_index);
         }
         self.do_filter_column();
     }

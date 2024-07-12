@@ -67,16 +67,14 @@ pub trait Window<R> {
 
 #[derive(Default, Clone)]
 struct ArrayResponse {
-    pub(crate) edited_value: Option<FlatJsonValue<String>>,
+    pub(crate) edited_value: Vec<FlatJsonValue<String>>,
     pub(crate) hover_data: HoverData,
 }
 
 impl ArrayResponse {
     pub fn union(&mut self, other: ArrayResponse) -> Self {
         let mut new_response = mem::take(self);
-        if new_response.edited_value.is_none() && other.edited_value.is_some() {
-            new_response.edited_value = other.edited_value;
-        }
+        new_response.edited_value.extend(other.edited_value);
         if new_response.hover_data.hovered_cell.is_none() && other.hover_data.hovered_cell.is_some() {
             new_response.hover_data.hovered_cell = other.hover_data.hovered_cell;
         }
@@ -576,7 +574,7 @@ impl eframe::App for MyApp {
 
             if let Some(ref mut table) = self.table {
                 let response1 = table.ui(ui);
-                if response1.edited_value.is_some() {
+                if !response1.edited_value.is_empty() {
                     self.unsaved_changes = true;
                 }
             } else if self.selected_file.is_none() {
