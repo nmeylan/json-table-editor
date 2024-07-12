@@ -40,6 +40,7 @@ pub const SHORTCUT_SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 pub const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
 pub const SHORTCUT_COPY: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
 pub const SHORTCUT_PASTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
+pub const SHORTCUT_DELETE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
 
 /// Something to view in the demo windows
 pub trait View<R> {

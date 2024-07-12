@@ -5,7 +5,7 @@ use eframe::egui::{Id, Key, Label, Sense, TextEdit};
 use egui::Ui;
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
-use crate::{ArrayResponse, SHORTCUT_COPY};
+use crate::{ArrayResponse, SHORTCUT_COPY, SHORTCUT_DELETE};
 use crate::components::icon::ButtonWithIcon;
 use crate::components::table::CellLocation;
 use crate::fonts::{COPY, PENCIL};
@@ -187,10 +187,20 @@ impl ObjectTable {
         let mut copied_value = None;
         let has_hovered_cell = array_response.hover_data.hovered_cell.is_some();
         ui.input_mut(|i| {
+            if i.consume_shortcut(&SHORTCUT_DELETE) {
+                i.events.push(egui::Event::Key {
+                    key: Key::Delete,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: Default::default(),
+                })
+            }
             for event in i.events.iter().filter(|e| {
                 match e {
                     egui::Event::Copy => has_hovered_cell,
                     egui::Event::Paste(_) => has_hovered_cell,
+                    egui::Event::Key{key: Key::Delete, ..} => has_hovered_cell,
                     _ => false,
                 }
             }) {
@@ -200,6 +210,9 @@ impl ObjectTable {
                 let is_value_column = cell_location.column_index == 1;
                 if is_value_column {
                     match event {
+                        egui::Event::Key{key: Key::Delete, ..} => {
+                            self.update_value(array_response, self.nodes[row_index].pointer.clone(), "".to_string(), row_index);
+                        },
                         egui::Event::Paste(v) => {
                             self.update_value(array_response, self.nodes[row_index].pointer.clone(), v.clone(), row_index);
                         },

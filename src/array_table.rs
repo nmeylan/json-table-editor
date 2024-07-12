@@ -15,7 +15,7 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use json_flat_parser::serializer::serialize_to_json_with_option;
 
 
-use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY};
+use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, SHORTCUT_COPY, SHORTCUT_DELETE, SHORTCUT_SAVE_AS};
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
@@ -1033,9 +1033,19 @@ impl ArrayTable {
     fn handle_shortcut(&mut self, ui: &mut Ui, array_response: &mut ArrayResponse) {
         let mut copied_value = None;
         ui.input_mut(|i| {
+            if i.consume_shortcut(&SHORTCUT_DELETE) {
+                i.events.push(egui::Event::Key {
+                    key: Key::Delete,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: Default::default(),
+                })
+            }
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => array_response.hover_data.hovered_cell.is_some(),
                 egui::Event::Paste(_) => array_response.hover_data.hovered_cell.is_some(),
+                egui::Event::Key{key: Key::Delete, ..} => array_response.hover_data.hovered_cell.is_some(),
                 _ => false,
             }) {
                 let cell_location = array_response.hover_data.hovered_cell.unwrap();
@@ -1043,6 +1053,15 @@ impl ArrayTable {
                 let index = self.get_pointer_index_from_cache(cell_location.is_pinned_column_table, &&self.nodes[row_index], cell_location.column_index);
 
                 match event {
+                    egui::Event::Key{key: Key::Delete, ..} => {
+                        let columns = self.columns(cell_location.is_pinned_column_table);
+                        let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
+                        let flat_json_value = FlatJsonValue::<String> {
+                            pointer: PointerKey { pointer, value_type: columns[cell_location.column_index].value_type, depth: columns[cell_location.column_index].depth, position: 0, },
+                            value: None,
+                        };
+                        self.update_value(flat_json_value, row_index, !self.is_sub_table);
+                    }
                     egui::Event::Paste(v) => {
                         let columns = self.columns(cell_location.is_pinned_column_table);
                         let pointer = Self::pointer_key(&self.parent_pointer, row_index, &columns.get(cell_location.column_index).as_ref().unwrap().name);
