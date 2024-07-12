@@ -844,36 +844,42 @@ impl ArrayTable {
                 Some(value)
             };
             let (_, row_index, _) = editing_index.unwrap();
-            if self.is_sub_table {
-                let updated_pointer = pointer.clone();
-                let value_changed = self.update_value(FlatJsonValue { pointer: updated_pointer.clone(), value: value.clone() }, row_index, false);
+            let value_changed = FlatJsonValue { pointer: pointer.clone(), value: value.clone() };
 
-                if value_changed {
-                    let mut entries = self.nodes.iter().flat_map(|row| row.entries.clone()).collect::<Vec<FlatJsonValue<String>>>();
-                    let mut parent_pointer = PointerKey {
-                        pointer: String::new(),
-                        value_type: ValueType::Array(self.nodes.len()),
-                        depth: 0,
-                        position: 0,
-                        column_id: 0,
-                    };
-                    entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });
-                    let updated_array = serialize_to_json_with_option::<String>(&mut entries, updated_pointer.depth - 1).to_json();
-                    parent_pointer.pointer = self.parent_pointer.clone();
-                    array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
-                }
-            } else {
-                let value_changed = self.update_value(FlatJsonValue { pointer: pointer.clone(), value: value.clone() }, row_index, true);
-                if value_changed {
-                    array_response.edited_value = Some(FlatJsonValue { pointer, value });
-                }
-            }
+            self.edit_cell(array_response, value_changed, row_index);
         }
         if self.hovered_row_index != hover_data.hovered_row {
             self.hovered_row_index = hover_data.hovered_row;
             request_repaint = true;
         }
         array_response.hover_data = hover_data;
+    }
+
+    fn edit_cell(&mut self, array_response: &mut ArrayResponse, new_entry: FlatJsonValue<String>, row_index: usize) {
+        if self.is_sub_table {
+            let pointer = new_entry.pointer.clone();
+            let value_changed = self.update_value(new_entry, row_index, false);
+
+            if value_changed {
+                let mut entries = self.nodes.iter().flat_map(|row| row.entries.clone()).collect::<Vec<FlatJsonValue<String>>>();
+                let mut parent_pointer = PointerKey {
+                    pointer: String::new(),
+                    value_type: ValueType::Array(self.nodes.len()),
+                    depth: 0,
+                    position: 0,
+                    column_id: 0,
+                };
+                entries.push(FlatJsonValue { pointer: parent_pointer.clone(), value: None });
+                let updated_array = serialize_to_json_with_option::<String>(&mut entries, pointer.depth - 1).to_json();
+                parent_pointer.pointer = self.parent_pointer.clone();
+                array_response.edited_value = Some(FlatJsonValue { pointer: parent_pointer, value: Some(updated_array) });
+            }
+        } else {
+            let value_changed = self.update_value(new_entry.clone(), row_index, true);
+            if value_changed {
+                array_response.edited_value = Some(new_entry);
+            }
+        }
     }
 
     fn insert_new_row(&mut self, table_row_index: usize, above_or_below: u8) {
@@ -1082,13 +1088,14 @@ impl ArrayTable {
             if i.consume_shortcut(&SHORTCUT_REPLACE) {
                 self.open_replace_panel(None);
             }
+            let hovered_cell = array_response.hover_data.hovered_cell;
             for event in i.events.iter().filter(|e| match e {
-                egui::Event::Copy => array_response.hover_data.hovered_cell.is_some(),
-                egui::Event::Paste(_) => array_response.hover_data.hovered_cell.is_some(),
-                egui::Event::Key{key: Key::Delete, ..} => array_response.hover_data.hovered_cell.is_some(),
+                egui::Event::Copy => hovered_cell.is_some(),
+                egui::Event::Paste(_) => hovered_cell.is_some(),
+                egui::Event::Key{key: Key::Delete, ..} => hovered_cell.is_some(),
                 _ => false,
             }) {
-                let cell_location = array_response.hover_data.hovered_cell.unwrap();
+                let cell_location = hovered_cell.unwrap();
                 let row_index = self.filtered_nodes[cell_location.row_index];
                 let index = self.get_pointer_index_from_cache(cell_location.is_pinned_column_table, &&self.nodes[row_index], cell_location.column_index);
 
@@ -1120,7 +1127,7 @@ impl ArrayTable {
                             ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false) }
                             _ => {}
                         }
-                        self.update_value(flat_json_value, row_index, !self.is_sub_table);
+                        self.edit_cell(array_response, flat_json_value, row_index);
                     }
                     egui::Event::Copy => {
                         if let Some(index) = index {
