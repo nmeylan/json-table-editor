@@ -1,10 +1,11 @@
 use std::any::Any;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use eframe::egui::Context;
 use eframe::egui::{Ui};
 use eframe::emath::Align;
 use eframe::epaint::text::TextWrapMode;
-use egui::{Button, Grid, Layout, RichText, Sense, TextEdit};
+use egui::{Button, Grid, Layout, RichText, Sense, TextBuffer, TextEdit};
 use json_flat_parser::ValueType;
 use crate::ACTIVE_COLOR;
 use crate::array_table::Column;
@@ -18,11 +19,11 @@ pub const PANEL_REPLACE: &'static str = "Replace";
 pub struct AboutPanel {}
 
 #[derive(Default)]
-pub struct SearchReplacePanel {
+pub struct SearchReplacePanel<'array> {
     search_criteria: String,
     replace_value: String,
-    selected_columns: RefCell<Vec<Column>>,
-    columns: Vec<Column>,
+    selected_columns: RefCell<Vec<Column<'array>>>,
+    columns: Vec<Column<'array>>,
     replace_mode: ReplaceMode,
     title: Option<String>
 }
@@ -37,10 +38,10 @@ impl Default for ReplaceMode {
     }
 }
 
-pub struct SearchReplaceResponse {
+pub struct SearchReplaceResponse<'array> {
     pub search_criteria: String,
     pub replace_value: String,
-    pub selected_column: Option<Vec<Column>>,
+    pub selected_column: Option<Vec<Column<'array>>>,
     pub replace_mode: ReplaceMode,
 }
 
@@ -62,13 +63,6 @@ impl super::Window<()> for AboutPanel {
             });
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
 }
 
 impl super::View<()> for AboutPanel {
@@ -83,28 +77,28 @@ impl super::View<()> for AboutPanel {
     }
 }
 
-impl SearchReplacePanel {
-    pub fn set_columns(&mut self, columns: Vec<Column>) {
+impl <'array>SearchReplacePanel<'array> {
+    pub fn set_columns(&mut self, columns: Vec<Column<'array>>) {
         self.columns = columns;
     }
 
     pub fn set_title(&mut self, title: String) {
         self.title = Some(title);
     }
-    pub fn set_select_column(&mut self, selected_column: Column) {
+    pub fn set_select_column(&mut self, selected_column: Column<'array>) {
         *self.selected_columns.borrow_mut() = vec![selected_column];
     }
 
-    pub fn can_be_replaced(c: &Column) -> bool {
+    pub fn can_be_replaced(c: &Column<'array>) -> bool {
         !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(_)))
     }
 }
-impl super::Window<Option<SearchReplaceResponse>> for SearchReplacePanel {
+impl <'array>super::Window<Option<SearchReplaceResponse<'array>>> for SearchReplacePanel<'array> {
     fn name(&self) -> &'static str {
         PANEL_REPLACE
     }
 
-    fn show(&mut self, ctx: &Context, open: &mut bool) -> Option<SearchReplaceResponse> {
+    fn show(&mut self, ctx: &Context, open: &mut bool) -> Option<SearchReplaceResponse<'array>> {
         let window_title = if let Some(ref title) = self.title {
             title.as_str()
         } else {
@@ -127,17 +121,10 @@ impl super::Window<Option<SearchReplaceResponse>> for SearchReplacePanel {
         }
         None
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
 }
 
-impl super::View<Option<SearchReplaceResponse>> for SearchReplacePanel {
-    fn ui(&mut self, ui: &mut Ui) -> Option<SearchReplaceResponse> {
+impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplacePanel<'array> {
+    fn ui(&mut self, ui: &mut Ui) -> Option<SearchReplaceResponse<'array>> {
         let search = TextEdit::singleline(&mut self.search_criteria);
         let replace = TextEdit::singleline(&mut self.replace_value);
         let mut button = Button::new("Replace");
@@ -154,7 +141,7 @@ impl super::View<Option<SearchReplaceResponse>> for SearchReplacePanel {
                         } else if self.selected_columns.borrow().len() > 5 {
                             format!("{} columns selected", self.selected_columns.borrow().len())
                         } else {
-                            self.selected_columns.borrow().iter().map(|c| c.name.clone()).collect::<Vec<String>>().join(", ")
+                            self.selected_columns.borrow().iter().map(|c| c.name.clone()).collect::<Vec<Cow<'array, str>>>().join(", ")
                         };
                         let response = ui.add(Button::new(button_label));
                         response.on_hover_ui(|ui| {

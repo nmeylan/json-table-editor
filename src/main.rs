@@ -27,6 +27,7 @@ use eframe::egui::Context;
 use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use eframe::epaint::text::TextWrapMode;
+use egui::TextBuffer;
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -61,8 +62,6 @@ pub trait Window<R> {
 
     /// Show windows, etc
     fn show(&mut self, ctx: &eframe::egui::Context, open: &mut bool) -> R;
-    fn as_any(&self) -> &dyn Any;
-    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 #[derive(Default, Clone)]
@@ -116,9 +115,9 @@ fn main() {
     }
 }
 
-struct MyApp {
+struct MyApp<'array> {
     frame_history: FrameHistory,
-    table: Option<ArrayTable>,
+    table: Option<ArrayTable<'array>>,
     open: BTreeSet<String>,
     about_panel: AboutPanel,
     max_depth: u8,
@@ -134,7 +133,7 @@ struct MyApp {
     web_loaded_json: Arc<Mutex<Option<Vec<u8>>>>,
 }
 
-impl MyApp {
+impl <'array>MyApp<'array> {
     fn new(cc: &CreationContext) -> Self {
         let mut fonts = eframe::egui::FontDefinitions::default();
 
@@ -334,7 +333,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
     }
 }
 
-impl eframe::App for MyApp {
+impl <'array>eframe::App for MyApp<'array> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         #[cfg(not(target_arch = "wasm32"))] {
             let mut title = format!("json table editor - {}{}",
@@ -507,7 +506,7 @@ impl eframe::App for MyApp {
                         if ui.label(RichText::new(format!("{} active filters", table.columns_filter.len())).underline())
                             .on_hover_ui(|ui| {
                                 ui.vertical(|ui| {
-                                    table.columns_filter.iter().for_each(|(k, _)| { ui.label(k); })
+                                    table.columns_filter.iter().for_each(|(k, _)| { ui.label(k.as_str()); })
                                 });
                             }).hovered() {
                             ui.ctx().set_cursor_icon(CursorIcon::Help);

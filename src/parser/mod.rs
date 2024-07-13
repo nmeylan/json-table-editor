@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::{fs, mem};
+use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
@@ -28,7 +29,7 @@ macro_rules! concat_string {
 }
 
 
-pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_array: Vec<JsonArrayEntries<String>>, depth: usize) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>, usize), String> {
+pub fn change_depth_array<'array>(previous_parse_result: ParseResult<String>, mut json_array: Vec<JsonArrayEntries<String>>, depth: usize) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>, usize), String> {
     let mut len = json_array.len();
     let new_json_array = Arc::new(Mutex::new(Vec::with_capacity(json_array.len())));
 
@@ -69,7 +70,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
                     }
                     let key = &entry.pointer.pointer[prefix_len..entry.pointer.pointer.len()];
                     let mut column = Column {
-                        name: key.to_string(),
+                        name: Cow::from(key.to_string()),
                         depth: entry.pointer.depth,
                         value_type: entry.pointer.value_type,
                         seen_count: 0,
@@ -109,7 +110,7 @@ pub fn change_depth_array(previous_parse_result: ParseResult<String>, mut json_a
 
     Ok((mem::take(&mut new_json_array_guard), unique_keys, 4))
 }
-pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column>), String> {
+pub fn as_array<'array>(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>), String> {
     if !matches!(previous_parse_result.json[0].pointer.value_type, ValueType::Array(_)) {
         return Err("Parsed json root is not an array".to_string());
     }
@@ -149,7 +150,7 @@ pub fn as_array(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<J
                         }
                         let key = &entry.pointer.pointer[prefix_len..entry.pointer.pointer.len()];
                         let mut column = Column {
-                            name: key.to_string(),
+                            name: Cow::from(key.to_string()),
                             depth: entry.pointer.depth,
                             value_type: entry.pointer.value_type,
                             seen_count: 1,

@@ -7,14 +7,14 @@ use crate::array_table::{ArrayTable};
 use crate::{ArrayResponse, View};
 use crate::object_table::ObjectTable;
 
-pub struct SubTable {
+pub struct SubTable<'array> {
     name: String,
-    array_table: Option<ArrayTable>,
+    array_table: Option<ArrayTable<'array>>,
     object_table: Option<ObjectTable>,
     row_index: usize,
 }
 
-impl SubTable {
+impl <'array>SubTable<'array> {
     pub fn new(name: String, content: String, parent_value_type: ValueType,
                index_in_json_entries_array: usize, depth: u8) -> Self {
         if matches!(parent_value_type, ValueType::Array(_)) {
@@ -100,7 +100,7 @@ impl SubTable {
     }
 }
 
-impl super::View<ArrayResponse> for SubTable {
+impl <'array>super::View<ArrayResponse> for SubTable<'array> {
     fn ui(&mut self, ui: &mut Ui) -> ArrayResponse {
         ui.vertical(|ui| {
             if let Some(ref mut array_table) = self.array_table {
