@@ -149,7 +149,14 @@ impl super::View<Option<SearchReplaceResponse>> for SearchReplacePanel {
                 ui.label("Column: ");
                 PopupMenu::new("select_column_to_replace")
                     .show_ui(ui, |ui| {
-                        let response = ui.add(Button::new(format!("{} column(s) selected", self.selected_columns.borrow().len())));
+                        let button_label = if self.selected_columns.borrow().is_empty() {
+                            "No column selected".to_lowercase()
+                        } else if self.selected_columns.borrow().len() > 5 {
+                            format!("{} columns selected", self.selected_columns.borrow().len())
+                        } else {
+                            self.selected_columns.borrow().iter().map(|c| c.name.clone()).collect::<Vec<String>>().join(", ")
+                        };
+                        let response = ui.add(Button::new(button_label));
                         response.on_hover_ui(|ui| {
                             // ui.set_min_width(140.0);
                             ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
