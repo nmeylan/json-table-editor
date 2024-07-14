@@ -410,7 +410,7 @@ impl <'array>ArrayTable<'array> {
     }
 
     pub fn visible_columns<'a>(all_columns: &'a Vec<Column<'array>>, depth: u8) -> impl Iterator<Item=&'a Column<'array>> {
-        all_columns.iter().filter(move |column: &&Column<'array>| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object(_))))
+        all_columns.iter().filter(move |column: &&Column<'array>| column.depth == depth || (column.depth < depth && !matches!(column.value_type, ValueType::Object(_, _))))
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) -> ArrayResponse {
@@ -654,7 +654,7 @@ impl <'array>ArrayTable<'array> {
                     } else if let Some(index) = index {
                         let entry = &row_data.entries()[index];
                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
-                        let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
+                        let is_object = matches!(entry.pointer.value_type, ValueType::Object(..));
                         if pinned_column_table && col_index == 0 {
                             let label = Label::new(row_index.to_string()).sense(Sense::click());
                             return Some(label.ui(ui));
@@ -673,7 +673,7 @@ impl <'array>ArrayTable<'array> {
                                 let mut response = cell_zone.union(label.ui(ui));
 
                                 let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
-                                let is_object = matches!(entry.pointer.value_type, ValueType::Object(_));
+                                let is_object = matches!(entry.pointer.value_type, ValueType::Object(..));
 
                                 if response.double_clicked() {
                                     *self.editing_value.borrow_mut() = value.clone();
@@ -735,7 +735,7 @@ impl <'array>ArrayTable<'array> {
                                             let root_node = row_data.entries.last().unwrap();
                                             subtable = Some(SubTable::new(root_node.pointer.pointer.clone(),
                                                                           root_node.value.as_ref().unwrap().clone(),
-                                                                          ValueType::Object(true),
+                                                                          ValueType::Object(true, 0),
                                                                           row_index, root_node.pointer.depth,
                                             ));
                                         }
@@ -808,7 +808,7 @@ impl <'array>ArrayTable<'array> {
                                 ui.close_menu();
                                 let root_node = row_data.entries.last().unwrap();
                                 subtable = Some(SubTable::new(root_node.pointer.pointer.clone(), root_node.value.as_ref().unwrap().clone(),
-                                                              ValueType::Object(true),
+                                                              ValueType::Object(true, 0),
                                                               row_index, root_node.pointer.depth,
                                 ));
                             }
@@ -912,7 +912,7 @@ impl <'array>ArrayTable<'array> {
                 row_number_entry(new_index, 0, new_entry_pointer.as_str()),
                 FlatJsonValue { pointer: PointerKey {
                     pointer: new_entry_pointer,
-                    value_type: ValueType::Object(true),
+                    value_type: ValueType::Object(true, 0),
                     depth,
                     position: 0,
                     column_id: 0,
@@ -945,7 +945,7 @@ impl <'array>ArrayTable<'array> {
 
     #[inline]
     fn is_filterable(column: &Column) -> bool {
-        !(matches!(column.value_type, ValueType::Object(_)) || matches!(column.value_type, ValueType::Array(_)) || matches!(column.value_type, ValueType::Null))
+        !(matches!(column.value_type, ValueType::Object(_, _)) || matches!(column.value_type, ValueType::Array(_)) || matches!(column.value_type, ValueType::Null))
     }
 
     fn open_subtable(row_index: usize, entry: &FlatJsonValue<String>, content: String) -> Option<SubTable<'array>> {
@@ -987,14 +987,14 @@ impl <'array>ArrayTable<'array> {
             let value1 = serialize_to_json_with_option::<String>(
                 &mut self.nodes[row_index].entries.clone(),
                 root_node.pointer.depth + 1);
-            let new_root_node_serialized_json = value1.to_json();
+            let new_root_node_serialized_json = serde_json::to_string_pretty(&value1).unwrap();
             let result = JSONParser::parse(new_root_node_serialized_json.as_str(),
                                            ParseOptions::default()
                                                .prefix(root_node.pointer.pointer.clone())
                                                .start_depth(root_node.pointer.depth + 1).parse_array(false)
                                                .max_depth(self.last_parsed_max_depth)).unwrap().to_owned();
             for newly_updated_value in result.json {
-                if matches!(newly_updated_value.pointer.value_type, ValueType::Object(_)) {
+                if matches!(newly_updated_value.pointer.value_type, ValueType::Object(..)) {
                     self.nodes[row_index].entries.iter_mut().find(|e| e.pointer.pointer.eq(&newly_updated_value.pointer.pointer))
                         .map(|entry_to_update| entry_to_update.value = newly_updated_value.value);
                 }
@@ -1134,7 +1134,7 @@ impl <'array>ArrayTable<'array> {
                         };
                         match flat_json_value.pointer.value_type {
                             // When we paste an object it should not be considered as parsed
-                            ValueType::Object(_) => { flat_json_value.pointer.value_type = ValueType::Object(false) }
+                            ValueType::Object(..) => { flat_json_value.pointer.value_type = ValueType::Object(false,0) }
                             _ => {}
                         }
                         self.edit_cell(array_response, flat_json_value, row_index);
@@ -1156,6 +1156,7 @@ impl <'array>ArrayTable<'array> {
     }
 
     pub fn replace_columns(&mut self, search_replace_response: SearchReplaceResponse, array_response: &mut ArrayResponse) {
+        // let start = std::time::Instant::now();
         if let Some(ref columns) = search_replace_response.selected_column {
             for column in columns {
                 self.columns_filter.remove(column.name.as_str());
@@ -1164,6 +1165,7 @@ impl <'array>ArrayTable<'array> {
         for (flat_json_value, row_index) in  replace_occurrences(&mut self.nodes, search_replace_response) {
             self.edit_cell(array_response, flat_json_value, row_index);
         }
+        // println!("took {}ms to update columns", start.elapsed().as_millis());
         self.do_filter_column();
     }
 

@@ -90,7 +90,7 @@ impl <'array>SearchReplacePanel<'array> {
     }
 
     pub fn can_be_replaced(c: &Column<'array>) -> bool {
-        !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(_)))
+        !(matches!(c.value_type, ValueType::Array(_)) || matches!(c.value_type, ValueType::Object(..)))
     }
 }
 impl <'array>super::Window<Option<SearchReplaceResponse<'array>>> for SearchReplacePanel<'array> {

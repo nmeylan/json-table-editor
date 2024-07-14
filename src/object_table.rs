@@ -27,7 +27,7 @@ impl ObjectTable {
         let mut filtered_nodes = Vec::with_capacity(nodes.len());
         let mut arrays = vec![];
         for (index, entry) in nodes.iter().enumerate() {
-            if !matches!(entry.pointer.value_type, ValueType::Array(_)) && !matches!(entry.pointer.value_type, ValueType::Object(_)) {
+            if !matches!(entry.pointer.value_type, ValueType::Array(_)) && !matches!(entry.pointer.value_type, ValueType::Object(..)) {
                 filtered_nodes.push(index);
             } else if matches!(entry.pointer.value_type, ValueType::Array(_)) {
                 arrays.push(entry.clone());
