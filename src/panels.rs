@@ -31,6 +31,8 @@ pub struct SearchReplacePanel<'array> {
 pub enum ReplaceMode {
     Simple,
     Regex,
+    ExactWord,
+    MatchingCase,
 }
 impl Default for ReplaceMode {
     fn default() -> Self {
@@ -181,23 +183,51 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                 ui.end_row();
 
                 ui.label("");
-                let mut text = RichText::new(".*");
-                if matches!(self.replace_mode, ReplaceMode::Regex) {
-                    text = text.color(ACTIVE_COLOR);
+                let mut replace_match_case_text = RichText::new("Cc");
+                let mut replace_exact_word_text = RichText::new("W");
+                let mut replace_regex_text = RichText::new(".*");
+                if matches!(self.replace_mode, ReplaceMode::MatchingCase) {
+                    replace_match_case_text = replace_match_case_text.color(ACTIVE_COLOR);
                 }
-                let enable_regex = Button::new(text);
+                if matches!(self.replace_mode, ReplaceMode::ExactWord) {
+                    replace_exact_word_text = replace_exact_word_text.color(ACTIVE_COLOR);
+                }
+                if matches!(self.replace_mode, ReplaceMode::Regex) {
+                    replace_regex_text = replace_regex_text.color(ACTIVE_COLOR);
+                }
+                let replace_regex_mode = Button::new(replace_regex_text);
+                let replace_exact_word_mode = Button::new(replace_exact_word_text);
+                let replace_match_case_mode = Button::new(replace_match_case_text);
                 let mut replace_response = ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if self.selected_columns.borrow().len() == 0 {
                         button = button.sense(Sense::hover());
                     }
                     let response_button_replace = ui.add(button);
-                    let mut response = ui.add(enable_regex);
-                    response = response.on_hover_ui(|ui| { ui.label("Regex"); });
-                    if response.clicked() {
+                    let mut response_replace_regex_mode = ui.add(replace_regex_mode);
+                    response_replace_regex_mode = response_replace_regex_mode.on_hover_ui(|ui| { ui.label("Regex"); });
+                    if response_replace_regex_mode.clicked() {
                         if matches!(self.replace_mode, ReplaceMode::Regex) {
                             self.replace_mode = ReplaceMode::Simple;
                         } else {
                             self.replace_mode = ReplaceMode::Regex;
+                        }
+                    }
+                    let mut response_replace_exact_word_mode = ui.add(replace_exact_word_mode);
+                    response_replace_exact_word_mode = response_replace_exact_word_mode.on_hover_ui(|ui| { ui.label("Exact word"); });
+                    if response_replace_exact_word_mode.clicked() {
+                        if matches!(self.replace_mode, ReplaceMode::ExactWord) {
+                            self.replace_mode = ReplaceMode::Simple;
+                        } else {
+                            self.replace_mode = ReplaceMode::ExactWord;
+                        }
+                    }
+                    let mut response_replace_match_case_mode = ui.add(replace_match_case_mode);
+                    response_replace_match_case_mode = response_replace_match_case_mode.on_hover_ui(|ui| { ui.label("Matching case"); });
+                    if response_replace_match_case_mode.clicked() {
+                        if matches!(self.replace_mode, ReplaceMode::MatchingCase) {
+                            self.replace_mode = ReplaceMode::Simple;
+                        } else {
+                            self.replace_mode = ReplaceMode::MatchingCase;
                         }
                     }
                     response_button_replace

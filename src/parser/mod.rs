@@ -12,6 +12,7 @@ use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions
 use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelIterator;
 use rayon::prelude::{ParallelSliceMut};
+use regex_lite::Regex;
 use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
 use crate::panels::{ReplaceMode, SearchReplaceResponse};
 
@@ -317,7 +318,7 @@ pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>
             if column_ids.contains(&entry.pointer.column_id) {
                 if let Some(ref value) = entry.value {
                     match search_replace_response.replace_mode {
-                        ReplaceMode::Simple => {
+                        ReplaceMode::MatchingCase => {
                             new_values.push((
                                 FlatJsonValue {
                                     pointer: entry.pointer.clone(),
@@ -326,7 +327,21 @@ pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>
                                 json_array_entry.index
                             ));
                         }
-                        ReplaceMode::Regex => {}
+                        ReplaceMode::Regex => {
+                            let re = Regex::new(search_replace_response.search_criteria.as_str()).unwrap();
+                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                        }
+                        ReplaceMode::ExactWord => {
+                            let re = Regex::new(&format!(r"\b{}\b", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
+                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                        }
+                        ReplaceMode::Simple => {
+                            let re = Regex::new(&format!("(?i){}", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
+                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                        }
                     }
                 }
             }

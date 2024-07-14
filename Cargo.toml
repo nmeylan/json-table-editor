@@ -18,6 +18,7 @@ rfd = {version = "0.14.1"}
 indexmap = "2.2.6"
 nohash-hasher = "0.2.0"
 serde_json = "1.0.120"
+regex-lite = "0.1.6"
 
 #[patch."https://github.com/nmeylan/json-parser-flat-format.git"]
 #json-flat-parser = {path = "/home/nmeylan/dev/ragnarok/json-flat-parser"}
