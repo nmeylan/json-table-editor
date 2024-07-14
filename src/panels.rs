@@ -178,7 +178,7 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                 ui.label("Search: ");
                 ui.add(search);
                 ui.end_row();
-                ui.label("Replace: ");
+                ui.label("Replace all: ");
                 ui.add(replace);
                 ui.end_row();
 
