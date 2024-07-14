@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
 use std::string::ToString;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration};
 use eframe::egui::{Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget, WidgetText};
 use eframe::egui::scroll_area::ScrollBarVisibility;
@@ -15,8 +15,9 @@ use egui::TextBuffer;
 use indexmap::IndexSet;
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
-
-
+use rayon::iter::IntoParallelIterator;
+use rayon::iter::ParallelIterator;
+use rayon::prelude::{ParallelSlice, ParallelSliceMut};
 use crate::{ACTIVE_COLOR, ArrayResponse, concat_string, set_open, SHORTCUT_COPY, SHORTCUT_DELETE, SHORTCUT_REPLACE, SHORTCUT_SAVE_AS, Window};
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
@@ -955,18 +956,33 @@ impl <'array>ArrayTable<'array> {
         ))
     }
 
+    #[inline]
     fn update_value(&mut self, mut updated_entry: FlatJsonValue<String>, row_index: usize, should_update_subtable: bool) -> bool {
-        let mut value_changed = false;
         if should_update_subtable {
-            for subtable in self.windows.iter_mut() {
-                if subtable.id() == row_index {
-                    subtable.update_nodes(updated_entry.pointer.clone(), updated_entry.value.clone());
-                    break;
-                }
-            }
+            self.update_sub_tables_value(&mut updated_entry, row_index);
         }
 
-        if let Some(entry) = self.nodes[row_index].entries.iter_mut()
+        let value_changed = Self::update_row(&mut self.nodes[row_index].entries, updated_entry, self.is_sub_table, self.last_parsed_max_depth);
+        if value_changed {
+           self.cache.borrow_mut().evict();
+        }
+        value_changed
+    }
+
+    #[inline]
+    fn update_sub_tables_value(&mut self, updated_entry: &FlatJsonValue<String>, row_index: usize) {
+        for subtable in self.windows.iter_mut() {
+            if subtable.id() == row_index {
+                subtable.update_nodes(updated_entry.pointer.clone(), updated_entry.value.clone());
+                break;
+            }
+        }
+    }
+
+    #[inline]
+    fn update_row(row_entries: &mut Vec<FlatJsonValue<String>>, mut updated_entry: FlatJsonValue<String>, is_sub_table: bool, last_parsed_max_depth: u8) -> bool {
+        let mut value_changed = false;
+        if let Some(entry) = row_entries.iter_mut()
             .find(|entry| entry.pointer.pointer.eq(&updated_entry.pointer.pointer)) {
             if !entry.value.eq(&updated_entry.value) {
                 value_changed = true;
@@ -977,25 +993,24 @@ impl <'array>ArrayTable<'array> {
             }
         } else if updated_entry.value.is_some() {
             value_changed = true;
-            let entries = &mut self.nodes[row_index].entries;
             updated_entry.pointer.position = usize::MAX;
-            entries.insert(entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
+            row_entries.insert(row_entries.len() - 1, FlatJsonValue::<String> { pointer: updated_entry.pointer, value: updated_entry.value });
         }
         // After update we serialize root element then parse it again so nested serialized object are updated as well
-        if value_changed && !self.is_sub_table {
-            let root_node = self.nodes[row_index].entries.pop().unwrap();
+        if value_changed && !is_sub_table {
+            let root_node = row_entries.pop().unwrap();
             let value1 = serialize_to_json_with_option::<String>(
-                &mut self.nodes[row_index].entries.clone(),
+                &mut row_entries.clone(),
                 root_node.pointer.depth + 1);
             let new_root_node_serialized_json = serde_json::to_string_pretty(&value1).unwrap();
             let result = JSONParser::parse(new_root_node_serialized_json.as_str(),
                                            ParseOptions::default()
                                                .prefix(root_node.pointer.pointer.clone())
                                                .start_depth(root_node.pointer.depth + 1).parse_array(false)
-                                               .max_depth(self.last_parsed_max_depth)).unwrap().to_owned();
+                                               .max_depth(last_parsed_max_depth)).unwrap().to_owned();
             for newly_updated_value in result.json {
                 if matches!(newly_updated_value.pointer.value_type, ValueType::Object(..)) {
-                    self.nodes[row_index].entries.iter_mut().find(|e| e.pointer.pointer.eq(&newly_updated_value.pointer.pointer))
+                    row_entries.iter_mut().find(|e| e.pointer.pointer.eq(&newly_updated_value.pointer.pointer))
                         .map(|entry_to_update| entry_to_update.value = newly_updated_value.value);
                 }
             }
@@ -1003,10 +1018,7 @@ impl <'array>ArrayTable<'array> {
             // self.nodes[row_index].entries.clear();
             // self.nodes[row_index].entries.push(line_number_entry);
             // self.nodes[row_index].entries.extend(result.json);
-            self.nodes[row_index].entries.push(FlatJsonValue { pointer: root_node.pointer, value: Some(new_root_node_serialized_json) });
-        }
-        if value_changed {
-            self.cache.borrow_mut().evict();
+            row_entries.push(FlatJsonValue { pointer: root_node.pointer, value: Some(new_root_node_serialized_json) });
         }
         value_changed
     }
@@ -1162,8 +1174,37 @@ impl <'array>ArrayTable<'array> {
                 self.columns_filter.remove(column.name.as_str());
             }
         }
-        for (flat_json_value, row_index) in  replace_occurrences(&mut self.nodes, search_replace_response) {
-            self.edit_cell(array_response, flat_json_value, row_index);
+        let mut occurrences = replace_occurrences(&mut self.nodes, search_replace_response);
+        if self.is_sub_table || occurrences.len() < 100 {
+            for (flat_json_value, row_index) in occurrences {
+                self.edit_cell(array_response, flat_json_value, row_index);
+            }
+        } else {
+            for (flat_json_value, row_index) in occurrences.iter() {
+                self.update_sub_tables_value(flat_json_value, *row_index);
+            }
+            let mut json_array = mem::take(&mut self.nodes);
+            let mut len = json_array.len();
+            let new_json_array = Arc::new(Mutex::new(json_array));
+
+            if len < 8 {
+                len = 8;
+            }
+            let chunks = occurrences.par_chunks_mut(len / 8);
+            chunks.into_par_iter().for_each(|chunk| {
+                for (updated_entry, row_index) in chunk {
+                    let mut json_array_entry = {
+                        let mut new_json_array_guard = new_json_array.lock().unwrap();
+                        mem::take(&mut new_json_array_guard[*row_index].entries)
+                    };
+                    Self::update_row(&mut json_array_entry, mem::take(updated_entry), self.is_sub_table, self.last_parsed_max_depth);
+                    let mut new_json_array_guard = new_json_array.lock().unwrap();
+                    new_json_array_guard[*row_index].entries = json_array_entry;
+                }
+            });
+            let mut new_json_array_guard = new_json_array.lock().unwrap();
+            self.nodes = mem::take(&mut new_json_array_guard);
+            self.cache.borrow_mut().evict();
         }
         // println!("took {}ms to update columns", start.elapsed().as_millis());
         self.do_filter_column();
