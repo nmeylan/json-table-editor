@@ -129,7 +129,7 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
     fn ui(&mut self, ui: &mut Ui) -> Option<SearchReplaceResponse<'array>> {
         let search = TextEdit::singleline(&mut self.search_criteria);
         let replace = TextEdit::singleline(&mut self.replace_value);
-        let mut button = Button::new("Replace");
+        let mut button = Button::new("Replace all");
         let grid_response = Grid::new("replace_panel:grid")
             .num_columns(2)
             .spacing([12.0, 8.0])
@@ -178,7 +178,7 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                 ui.label("Search: ");
                 ui.add(search);
                 ui.end_row();
-                ui.label("Replace all: ");
+                ui.label("Replace: ");
                 ui.add(replace);
                 ui.end_row();
 

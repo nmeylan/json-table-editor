@@ -582,7 +582,7 @@ impl <'array>ArrayTable<'array> {
                                      });
 
                         if SearchReplacePanel::can_be_replaced(column) {
-                            let response = icon::button(ui, SEARCH, Some("\u{f010}"), None);
+                            let response = icon::button(ui, SEARCH, Some("Replace in column"), None);
                             if response.clicked() {
                                 clicked_replace_column = Some(index);
                             }
