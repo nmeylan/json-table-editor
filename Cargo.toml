@@ -12,7 +12,7 @@ eframe = { version = "0.28.1", default-features = false, features = [
     "x11"] }
 egui = { version = "0.28.1", default-features = false, features = [] }
 egui_extras = { version = "0.28.1", default-features = false, features = ["svg"] }
-json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "c652033", features = ["indexmap", "simdutf8", "serde"]}
+json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "1ba7441", features = ["indexmap", "simdutf8", "serde"]}
 rayon = {version = "1.10.0"}
 rfd = {version = "0.14.1"}
 indexmap = "2.2.6"

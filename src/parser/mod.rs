@@ -112,16 +112,26 @@ pub fn change_depth_array<'array>(previous_parse_result: ParseResult<String>, mu
     Ok((mem::take(&mut new_json_array_guard), unique_keys, 4))
 }
 pub fn as_array<'array>(mut previous_parse_result: ParseResult<String>) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>), String> {
-    if !matches!(previous_parse_result.json[0].pointer.value_type, ValueType::Array(_)) {
+    let (root_value, start_index, mut end_index) = if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+        let mut root_value = previous_parse_result.json[previous_parse_result.started_parsing_at_index_start].clone();
+        (root_value, previous_parse_result.started_parsing_at_index_start, previous_parse_result.started_parsing_at_index_end)
+    } else {
+         (previous_parse_result.json[0].clone(), 0, 0)
+    };
+
+    if !matches!(root_value.pointer.value_type, ValueType::Array(_)) {
         return Err("Parsed json root is not an array".to_string());
     }
-    let root_array_len = match previous_parse_result.json[0].pointer.value_type {
+    let root_array_len = match root_value.pointer.value_type {
         ValueType::Array(root_array_len) => root_array_len,
         _ => panic!("")
     };
+    if end_index == 0 {
+        end_index = previous_parse_result.json.len() - 1;
+    }
     let mut unique_keys: Vec<Column> = Vec::with_capacity(16);
     let mut res: Vec<JsonArrayEntries<String>> = Vec::with_capacity(root_array_len);
-    let mut j = previous_parse_result.json.len() - 1;
+    let mut j = end_index;
     let estimated_capacity = 16;
     for i in (0..root_array_len).rev() {
         let mut flat_json_values: Vec<FlatJsonValue<String>> = Vec::with_capacity(estimated_capacity);
@@ -190,7 +200,9 @@ pub fn as_array<'array>(mut previous_parse_result: ParseResult<String>) -> Resul
                 break;
             }
         }
-        res.push(JsonArrayEntries::<String> { entries: flat_json_values, index: i });
+        if !flat_json_values.is_empty() {
+            res.push(JsonArrayEntries::<String> { entries: flat_json_values, index: i });
+        }
     }
     res.reverse();
     unique_keys.sort();
