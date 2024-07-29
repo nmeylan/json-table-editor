@@ -30,7 +30,7 @@ I wanted to edit a [small json file](https://github.com/nmeylan/rust-ro/blob/mas
 
 ![](.github/json-editor.png)
 
-Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps
+Json in video below is 372mb with an array of 309_759 entries, containing nested objects, it runs at ~60fps on an intel graphics chipset (Mesa UHD 630) as only visible cell are rendered
 
 
 https://github.com/nmeylan/json-table-editor/assets/1909074/6a4f932d-031c-4611-9627-2e2787da5401
