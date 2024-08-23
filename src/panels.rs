@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use eframe::egui::Context;
@@ -42,7 +41,7 @@ impl Default for ReplaceMode {
 
 pub struct SearchReplaceResponse<'array> {
     pub search_criteria: String,
-    pub replace_value: String,
+    pub replace_value: Option<String>,
     pub selected_column: Option<Vec<Column<'array>>>,
     pub replace_mode: ReplaceMode,
 }
@@ -127,8 +126,10 @@ impl <'array>super::Window<Option<SearchReplaceResponse<'array>>> for SearchRepl
 
 impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplacePanel<'array> {
     fn ui(&mut self, ui: &mut Ui) -> Option<SearchReplaceResponse<'array>> {
+        let is_replace_value_empty = self.replace_value.is_empty();
         let search = TextEdit::singleline(&mut self.search_criteria);
         let replace = TextEdit::singleline(&mut self.replace_value);
+        let mut button_set_to_null = Button::new("Set to null").sense(Sense::hover());
         let mut button = Button::new("Replace all");
         let grid_response = Grid::new("replace_panel:grid")
             .num_columns(2)
@@ -202,6 +203,10 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                     if self.selected_columns.borrow().len() == 0 {
                         button = button.sense(Sense::hover());
                     }
+                    if is_replace_value_empty {
+                        button_set_to_null = button_set_to_null.sense(Sense::click());
+                    }
+                    let response_button_replace_with_null = ui.add(button_set_to_null);
                     let response_button_replace = ui.add(button);
                     let mut response_replace_regex_mode = ui.add(replace_regex_mode);
                     response_replace_regex_mode = response_replace_regex_mode.on_hover_ui(|ui| { ui.label("Regex"); });
@@ -230,16 +235,23 @@ impl <'array>super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                             self.replace_mode = ReplaceMode::MatchingCase;
                         }
                     }
-                    response_button_replace
+                    (response_button_replace, response_button_replace_with_null)
                 }).inner;
                 ui.end_row();
 
                 replace_response
             });
-        if grid_response.inner.clicked() {
+        if grid_response.inner.0.clicked() {
             return Some(SearchReplaceResponse {
                 search_criteria: self.search_criteria.clone(),
-                replace_value: self.replace_value.clone(),
+                replace_value: Some(self.replace_value.clone()),
+                replace_mode: self.replace_mode.clone(),
+                selected_column: Some(self.selected_columns.borrow().clone()),
+            })
+        } else if grid_response.inner.1.clicked() {
+            return Some(SearchReplaceResponse {
+                search_criteria: self.search_criteria.clone(),
+                replace_value: None,
                 replace_mode: self.replace_mode.clone(),
                 selected_column: Some(self.selected_columns.borrow().clone()),
             })

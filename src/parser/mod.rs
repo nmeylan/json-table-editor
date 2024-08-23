@@ -319,7 +319,7 @@ pub fn search_occurrences(previous_parse_result: &[JsonArrayEntries<String>], te
 }
 
 pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>, search_replace_response: SearchReplaceResponse) -> Vec<(FlatJsonValue<String>, usize)> {
-    let column_ids = if let Some(selected_columns) = search_replace_response.selected_column {
+    let column_ids = if let Some(ref selected_columns) = search_replace_response.selected_column {
         selected_columns.iter().map(|c| c.id).collect::<Vec<usize>>()
     } else {
         vec![]
@@ -331,28 +331,37 @@ pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>
                 if let Some(ref value) = entry.value {
                     match search_replace_response.replace_mode {
                         ReplaceMode::MatchingCase => {
+                            let new_value = if let Some(ref replace_value) = search_replace_response.replace_value {
+                                Some(value.replace(search_replace_response.search_criteria.as_str(), replace_value))
+                            } else {
+                                if (search_replace_response.search_criteria.as_str().is_empty() && value.is_empty()) || (!search_replace_response.search_criteria.as_str().is_empty() && value.contains(search_replace_response.search_criteria.as_str())) {
+                                    None
+                                } else {
+                                    Some(value.clone())
+                                }
+                            };
                             new_values.push((
                                 FlatJsonValue {
                                     pointer: entry.pointer.clone(),
-                                    value: Some(value.replace(search_replace_response.search_criteria.as_str(), search_replace_response.replace_value.as_str())),
+                                    value: new_value,
                                 },
                                 json_array_entry.index
                             ));
                         }
                         ReplaceMode::Regex => {
                             let re = Regex::new(search_replace_response.search_criteria.as_str()).unwrap();
-                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                            let new_value = replace_with_regex(&search_replace_response, value, re);
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
                         }
                         ReplaceMode::ExactWord => {
                             let re = Regex::new(&format!(r"\b{}\b", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
-                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                            let new_value = replace_with_regex(&search_replace_response, value, re);
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
                         }
                         ReplaceMode::Simple => {
                             let re = Regex::new(&format!("(?i){}", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
-                            let new_value = re.replace_all(value, search_replace_response.replace_value.as_str()).to_string();
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: Some(new_value), }, json_array_entry.index));
+                            let new_value = replace_with_regex(&search_replace_response, value, re);
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
                         }
                     }
                 }
@@ -360,4 +369,17 @@ pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>
         }
     }
     new_values
+}
+
+fn replace_with_regex(search_replace_response: &SearchReplaceResponse, value: &String, re: Regex) -> Option<String> {
+    let new_value = if let Some(ref replace_value) = search_replace_response.replace_value {
+        Some(re.replace_all(value, replace_value.as_str()).to_string())
+    } else {
+        if (search_replace_response.search_criteria.as_str().is_empty() && value.is_empty()) || (!search_replace_response.search_criteria.as_str().is_empty() && re.is_match(value)) {
+            None
+        } else {
+            Some(value.clone())
+        }
+    };
+    new_value
 }
