@@ -7,7 +7,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 
-
 use json_flat_parser::{FlatJsonValue, JsonArrayEntries, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 use rayon::iter::ParallelIterator;
 use rayon::iter::IntoParallelIterator;
@@ -116,7 +115,7 @@ pub fn as_array<'array>(mut previous_parse_result: ParseResult<String>) -> Resul
         let mut root_value = previous_parse_result.json[previous_parse_result.started_parsing_at_index_start].clone();
         (root_value, previous_parse_result.started_parsing_at_index_start, previous_parse_result.started_parsing_at_index_end)
     } else {
-         (previous_parse_result.json[0].clone(), 0, 0)
+        (previous_parse_result.json[0].clone(), 0, 0)
     };
 
     if !matches!(root_value.pointer.value_type, ValueType::Array(_)) {
@@ -187,7 +186,7 @@ pub fn as_array<'array>(mut previous_parse_result: ParseResult<String>) -> Resul
                         let prefix = &entry.pointer.pointer[0..prefix_len];
                         flat_json_values.push(row_number_entry(i, entry.pointer.position, prefix));
                     }
-                    let entry= previous_parse_result.json.pop().unwrap();
+                    let entry = previous_parse_result.json.pop().unwrap();
                     flat_json_values.push(entry);
                 } else {
                     break;
@@ -351,17 +350,17 @@ pub fn replace_occurrences(previous_parse_result: &Vec<JsonArrayEntries<String>>
                         ReplaceMode::Regex => {
                             let re = Regex::new(search_replace_response.search_criteria.as_str()).unwrap();
                             let new_value = replace_with_regex(&search_replace_response, value, re);
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value }, json_array_entry.index));
                         }
                         ReplaceMode::ExactWord => {
                             let re = Regex::new(&format!(r"\b{}\b", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
                             let new_value = replace_with_regex(&search_replace_response, value, re);
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value }, json_array_entry.index));
                         }
                         ReplaceMode::Simple => {
                             let re = Regex::new(&format!("(?i){}", regex_lite::escape(search_replace_response.search_criteria.as_str()))).unwrap();
                             let new_value = replace_with_regex(&search_replace_response, value, re);
-                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value, }, json_array_entry.index));
+                            new_values.push((FlatJsonValue { pointer: entry.pointer.clone(), value: new_value }, json_array_entry.index));
                         }
                     }
                 }
@@ -382,4 +381,51 @@ fn replace_with_regex(search_replace_response: &SearchReplaceResponse, value: &S
         }
     };
     new_value
+}
+
+
+#[cfg(test)]
+mod tests {
+    use json_flat_parser::{JSONParser, ParseOptions};
+    use crate::array_table::Column;
+    use crate::panels::{ReplaceMode, SearchReplaceResponse};
+    use crate::parser::{as_array, replace_occurrences};
+
+    #[test]
+    fn test_replace() {
+        let json = r#"
+        {"skills": [
+        {
+          "description": "Cart Termination",
+          "duration2": 5000,
+          "element": "Weapon",
+          "damageType": "Single",
+          "hitCount": 1,
+          "id": 485,
+          "maxLevel": 10,
+          "name": "WS_CARTTERMINATION",
+          "range": -2,
+          "targetType": "Target",
+          "type": "Offensive",
+          "damageflags": {
+            "ignoreAtkCard": true
+          },
+          "flags": {
+            "ignoreAutoGuard": true,
+            "ignoreCicada": true
+          }
+        }
+    ]}"#;
+
+        let res = JSONParser::parse(json, ParseOptions::default().start_parse_at("/skills".to_string()).parse_array(false)).unwrap().to_owned();
+        let (array, columns) = as_array(res).unwrap();
+        let filter_column = columns.iter().filter(|c| c.name.eq("/description")).cloned().collect::<Vec<Column>>();
+        let replaced_values = replace_occurrences(&array, SearchReplaceResponse {
+            search_criteria: "(.*)".to_string(),
+            replace_value: Some("A$1".to_string()),
+            selected_column: Some(filter_column),
+            replace_mode: ReplaceMode::Regex,
+        });
+        assert_eq!(replaced_values[0].0.value.as_ref().unwrap().as_str(), "ACart Termination");
+    }
 }
