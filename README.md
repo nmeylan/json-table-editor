@@ -62,3 +62,8 @@ If you select pointer `/skills`, then save, it will produce this file
 ```json
 {"skills": []}
 ```
+
+# About
+Licence: Apache 2
+
+Credits: this project would not have been possible without [egui](https://github.com/emilk/egui) and its community, and maintainers of [dependencies](https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock) used by this project
