@@ -248,7 +248,12 @@ impl<'array> MyApp<'array> {
             log!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
 
             let max_depth = parse_result.max_json_depth;
-            let depth = (parse_result.depth_after_start_at + 1).min(parsing_max_depth);
+            let depth = (parse_result.depth_after_start_at + 1).max(parsing_max_depth.min(max_depth as u8));
+            let min_depth = if parse_result.depth_after_start_at + 1 > 1 {
+                parse_result.depth_after_start_at + 1
+            } else {
+                1
+            };
             let mut prefix = "".to_owned();
             if let Some(ref start_at) = self.selected_pointer {
                 prefix = start_at.clone();
@@ -257,7 +262,7 @@ impl<'array> MyApp<'array> {
             self.table = Some(table);
             self.depth = depth;
             self.max_depth = max_depth as u8;
-            self.min_depth = depth;
+            self.min_depth = min_depth;
             self.parsing_invalid_pointers.clear();
             self.should_parse_again = false;
             self.parsing_invalid = false;
