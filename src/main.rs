@@ -16,7 +16,7 @@ use std::any::Any;
 use std::collections::{BTreeSet};
 use std::fs::File;
 use std::io::Read;
-use std::fmt::{Write};
+use std::fmt::{format, Write};
 
 use std::path::{PathBuf};
 use std::sync::{Arc, Mutex};
@@ -133,10 +133,13 @@ struct MyApp<'array> {
     show_fps: bool,
     web_loaded_json: Option<Vec<u8>>,
     async_events_channel: (SyncSender<AsyncEvent>, Receiver<AsyncEvent>),
+    failed_to_load_sample_json: Option<String>,
+    force_repaint: bool,
 }
 
 enum AsyncEvent {
-    LoadJson(Vec<u8>)
+    LoadJson(Vec<u8>),
+    LoadSampleErr(String)
 }
 
 impl<'array> MyApp<'array> {
@@ -172,6 +175,8 @@ impl<'array> MyApp<'array> {
             show_fps: true,
             web_loaded_json: None,
             async_events_channel: (sender, receiver),
+            failed_to_load_sample_json: None,
+            force_repaint: false
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -287,6 +292,7 @@ impl<'array> MyApp<'array> {
         #[cfg(target_arch = "wasm32")]
         {
             let sender = self.async_events_channel.0.clone();
+            self.force_repaint = true;
             let future = async move {
                 if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
                     sender.send(AsyncEvent::LoadJson(file_handle.read().await));
@@ -351,12 +357,17 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 impl<'array> eframe::App for MyApp<'array> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
+            self.force_repaint = false;
             match event {
                 AsyncEvent::LoadJson(json_bytes) => {
                     #[cfg(target_arch = "wasm32")] {
                         self.web_loaded_json = Some(json_bytes);
                         self.open_json();
                     }
+                }
+                AsyncEvent::LoadSampleErr(err) => {
+                    self.failed_to_load_sample_json = Some(err);
+                    ctx.request_repaint();
                 }
             }
         }
@@ -602,46 +613,87 @@ impl<'array> eframe::App for MyApp<'array> {
                     self.unsaved_changes = true;
                 }
             } else if self.selected_file.is_none() {
-                ui.allocate_ui_at_rect(ui.max_rect(),
-                                       |ui| {
-                                           let response = ui.centered_and_justified(|ui| {
-                                               ui.heading("Select or drop a json file")
-                                           });
+                let max_rect = ui.max_rect();
+                let mut rect = ui.max_rect();
+                rect.min.y = rect.max.y / 2.0 - 20.0;
+                let mut already_interact = false;
 
-                                           if response.inner.clicked() {
-                                               self.file_picker();
-                                           }
+                if !already_interact {
+                    let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
+                    if response.clicked() {
+                        self.file_picker();
+                    }
+                }
+                ui.allocate_ui_at_rect(rect,
+                                       |ui| {
+                                           ui.vertical_centered(|ui| {
+                                               ui.heading("Select or drop a json file");
+
+                                               #[cfg(target_arch = "wasm32")] {
+                                                   if ui.button("Or load sample json file of 1mb").clicked() {
+                                                       self.failed_to_load_sample_json = None;
+                                                       already_interact = true;
+                                                       let request = ehttp::Request::get("https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json");
+                                                       self.force_repaint = true;
+                                                       let sender = self.async_events_channel.0.clone();
+                                                       ehttp::fetch(request, move |result: ehttp::Result<ehttp::Response>| {
+                                                           if let Ok(result) = result {
+                                                               if result.status == 200 {
+                                                                   sender.send(AsyncEvent::LoadJson(result.bytes));
+                                                               } else {
+                                                                   sender.send(AsyncEvent::LoadSampleErr(format!("Failed to load sample file: [{}]", result.status)));
+                                                               }
+                                                               return;
+                                                           } else {
+                                                               sender.send(AsyncEvent::LoadSampleErr(format!("Failed to load sample file")));
+                                                           }
+
+                                                       });
+                                                   }
+                                                   if let Some(ref failed_to_load_sample_json) = self.failed_to_load_sample_json {
+                                                       ui.colored_label(Color32::RED, failed_to_load_sample_json);
+                                                   }
+                                                   if ui.hyperlink_to("Sample source available here", "https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json").clicked() {
+                                                       already_interact = true;
+                                                   }
+                                               }
+                                           });
                                        },
                 );
             }
             if self.selected_file.is_some() {
                 if self.parsing_invalid {
-                    ui.vertical_centered(|ui| {
-                        ui.heading("Provided json is not an array but an object");
-                        ui.heading("Select which array you want to parse");
-                        self.parsing_invalid_pointers.iter().for_each(|pointer| {
-                            if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
-                                let _ = ui.radio(true, pointer.as_str());
-                            } else if ui.radio(false, pointer.as_str()).clicked() {
-                                self.selected_pointer = Some(pointer.clone());
-                            }
-                        });
-                        let sense = if self.selected_pointer.is_none() {
-                            Sense::hover()
-                        } else {
-                            Sense::click()
-                        };
-                        if Button::new("Parse again").sense(sense).ui(ui).clicked() {
-                            self.open_json();
-                        }
-                        if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
-                            self.selected_file = None;
-                            self.selected_pointer = None;
-                            self.should_parse_again = true;
-                            self.parsing_invalid = false;
-                            self.parsing_invalid_pointers.clear();
-                        }
-                    });
+                    let mut rect = ui.max_rect();
+                    rect.min.y = rect.max.y / 2.0 - 20.0;
+                    ui.allocate_ui_at_rect(rect,
+                                           |ui| {
+                                               ui.vertical_centered(|ui| {
+                                                   ui.heading("Provided json is not an array but an object");
+                                                   ui.heading("Select which array you want to parse");
+                                                   self.parsing_invalid_pointers.iter().for_each(|pointer| {
+                                                       if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
+                                                           let _ = ui.radio(true, pointer.as_str());
+                                                       } else if ui.radio(false, pointer.as_str()).clicked() {
+                                                           self.selected_pointer = Some(pointer.clone());
+                                                       }
+                                                   });
+                                                   let sense = if self.selected_pointer.is_none() {
+                                                       Sense::hover()
+                                                   } else {
+                                                       Sense::click()
+                                                   };
+                                                   if Button::new("Parse again").sense(sense).ui(ui).clicked() {
+                                                       self.open_json();
+                                                   }
+                                                   if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
+                                                       self.selected_file = None;
+                                                       self.selected_pointer = None;
+                                                       self.should_parse_again = true;
+                                                       self.parsing_invalid = false;
+                                                       self.parsing_invalid_pointers.clear();
+                                                   }
+                                               });
+                                           });
                 } else if self.should_parse_again {
                     self.open_json();
                 }
@@ -658,6 +710,10 @@ impl<'array> eframe::App for MyApp<'array> {
                     }
                 })
             }
+        }
+
+        if self.force_repaint {
+            ctx.request_repaint();
         }
     }
 }
