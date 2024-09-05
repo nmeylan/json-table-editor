@@ -15,14 +15,15 @@ pub struct SubTable<'array> {
 }
 
 impl <'array>SubTable<'array> {
-    pub fn new(name: String, content: String, parent_value_type: ValueType,
+    pub fn new(parent_pointer: PointerKey, content: String, parent_value_type: ValueType,
                index_in_json_entries_array: usize, depth: u8) -> Self {
+        let name = parent_pointer.pointer.clone();
         if matches!(parent_value_type, ValueType::Array(_)) {
 
             let options = ParseOptions::default().parse_array(false).start_parse_at(name.clone()).prefix(name.clone()).start_depth(depth + 1).max_depth(10);
             let result = Self::parse(&content, &options, false);
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
-            let mut array_table = ArrayTable::new(None, nodes, columns, 10, name.clone());
+            let mut array_table = ArrayTable::new(None, nodes, columns, 10, parent_pointer);
             array_table.is_sub_table = true;
             Self {
                 name,

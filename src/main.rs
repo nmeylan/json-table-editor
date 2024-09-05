@@ -29,7 +29,7 @@ use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use eframe::epaint::text::TextWrapMode;
 use egui::TextBuffer;
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ValueType};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
@@ -258,7 +258,8 @@ impl<'array> MyApp<'array> {
             if let Some(ref start_at) = self.selected_pointer {
                 prefix = start_at.clone();
             }
-            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, prefix);
+            let len = result1.len();
+            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, PointerKey::from_pointer(prefix, ValueType::Array(len), 1, 0));
             self.table = Some(table);
             self.depth = depth;
             self.max_depth = max_depth as u8;
@@ -335,7 +336,7 @@ impl<'array> MyApp<'array> {
 
     fn save(&mut self) {
         let table = self.table.as_ref().unwrap();
-        save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+        save_to_file(table.parent_pointer.pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
         self.unsaved_changes = false;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -343,7 +344,7 @@ impl<'array> MyApp<'array> {
         if let Some(path) = rfd::FileDialog::new().save_file() {
             self.selected_file = Some(path);
             let table = self.table.as_ref().unwrap();
-            save_to_file(table.parent_pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+            save_to_file(table.parent_pointer.pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
             self.unsaved_changes = false;
         }
     }
@@ -538,9 +539,9 @@ impl<'array> eframe::App for MyApp<'array> {
                     ui.label(format!("{} columns ", table.all_columns().len()));
                     ui.separator();
                     ui.label(format!("{} depth level", self.max_depth));
-                    if !table.parent_pointer.is_empty() {
+                    if !table.parent_pointer.pointer.is_empty() {
                         ui.separator();
-                        ui.label(format!("Start pointer: {}", table.parent_pointer));
+                        ui.label(format!("Start pointer: {}", table.parent_pointer.pointer));
                     }
                     if !table.columns_filter.is_empty() {
                         ui.separator();
