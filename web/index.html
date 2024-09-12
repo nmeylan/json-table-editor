@@ -12,7 +12,7 @@
 
 <header>
   <h1>JSON table Viewer and Editing Tool</h1>
-  <p>A tool to view JSON array as table, to ease visualisation and edition of large (few gb) json array with performance as main objective.
+  <p>An open source tool to view JSON array as table, to ease visualisation and edition of large (few gb) json array with performance as main objective.
     <br/>This is not a javascript library but a standalone application which can also be embedded in a web application via wasm package</p>
 </header>
 
@@ -44,12 +44,25 @@
 </section>
 <section>
   <h2>About</h2>
-  <p><a href="https://github.com/nmeylan/json-table-editor" target="_blank" rel="noreferrer">Source and packages are available here</a> </p>
+  <p><a href="https://github.com/nmeylan/json-table-editor" target="_blank" rel="noreferrer">Source and packages are available on github</a> </p>
   <p><b>Licence</b>: Apache 2</p>
   <p><b>Credits</b>: this project would not have been possible without <a href="https://github.com/emilk/egui" target="_blank" rel="noreferrer">egui</a> and its community, and maintainers of <a href="https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock" target="_blank" rel="noreferrer">dependencies</a> used by this project</p>
 </section>
 
 <img src="json-editor.png" alt="A screenshot of json table editor application" style="max-width: 100%"  loading="lazy" />
+<section>
+  <h1>Comparison with existing tool</h1>
+  <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>
+  <h3>Json crack</h3>
+  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. On firefox the tab crash</p>
+  <h3>json2table/jsontableviewer</h3>
+  <p>It takes time to render the table, then it is almost impossible to read anything when there are lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows</p>
+  <h3>jsongrid</h3>
+  <p>It takes time to render the table, then it is almost impossible to read anything when there are lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows</p>
+  <p>It tries to not render all rows at once but it generate lag when scrolling. In addition only 100 rows can be displayed at once, making the experience not smooth </p>
+  <h3>Jsonmatrix</h3>
+  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. On firefox tab is frozen</p>
+</section>
 </body>
 </html></title>
 </head>
