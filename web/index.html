@@ -3,14 +3,13 @@
 <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="description" content="A performance-oriented tool to view and edit large JSON table. It supports visualisation big json array, providing a smooth user experience">
-      <meta name="keywords" content="JSON array viewer, JSON editor, large JSON performance, edit JSON, nested JSON table, JSON filtering, JSON table tool">
-      <title>JSON table Viewer and Editing Tool</title>
+      <meta name="description" content="json viewer and editor to view data as table, supporting big json and available as desktop and web-based application.">
+      <title>JSON table Viewer and Editor Tool</title>
 </head>
-<body  style="padding: 10px 20px">
+<body style="padding: 10px 20px">
 
 <header>
-  <h1>JSON table Viewer and Editing Tool</h1>
+  <h1>JSON table Viewer and Editor Tool</h1>
   <p>An open source tool to view JSON array as table, to ease visualisation and edition of large (few gb) json array with performance as main objective.
     <br/>This is not a javascript library but a standalone application which can also be embedded in a web application via wasm package</p>
 </header>
@@ -18,7 +17,7 @@
 <section>
 
   <h1><a href="app.html">Web demo</a></h1>
-  <p>The web demo can be used as an online json table visualizer</p>
+  <p>The web demo can be used as an online json table visualizer and editor</p>
   <h2>Key Features</h2>
   <ul>
     <li><strong>Lag-Free Visualization:</strong> Only visible rows and columns are rendered for smooth performance.</li>
@@ -53,14 +52,17 @@
   <h1>Comparison with existing tool</h1>
   <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>
   <h3>Json crack</h3>
-  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. On firefox the tab crash</p>
-  <h3>json2table/jsontableviewer</h3>
-  <p>It takes time to render the table, then it is almost impossible to read anything when there are lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows</p>
+  <p>Json crack is a tool to visualize json as graph. In their landing page they assert to be the "best JSON viewer tool to visualize, format and modify"</p>
+  <p><b>It fails to render anything</b> with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On firefox the tab crash</b></p>
+  <h3>json2table/jsontableviewer/jsontotable</h3>
+  <p>json2table, jsontableviewer, jsontotable, are all a "2 columns" based web app with 1 column for the raw json and 1 column for the table</p>
+  <p><b>It takes time to render the table</b>, then it is almost impossible to read anything when there are a lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows. Experience is not smooth but it does not crash the tab</p>
   <h3>jsongrid</h3>
-  <p>It takes time to render the table, then it is almost impossible to read anything when there are lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows</p>
-  <p>It tries to not render all rows at once but it generate lag when scrolling. In addition only 100 rows can be displayed at once, making the experience not smooth </p>
+  <p>jsongrid is an all in one json solution, it provides also features like validator, formatter</p>
+  <p>It tries to not render all rows at once but it generates lag when scrolling. In additions, <b>only 100 rows can be displayed at once</b>, making the experience not smooth </p>
   <h3>Jsonmatrix</h3>
-  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. On firefox tab is frozen</p>
+  <p>jsonmatrix provides a table and tree viewer. In addition, it stores your data remotely on firebase.</p>
+  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On firefox tab is frozen</b></p>
 </section>
 </body>
 </html></title>
