@@ -1,75 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-      <meta charset="UTF-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <meta name="description" content="json viewer and editor to view data as table, supporting big json and available as desktop and web-based application.">
-  <meta name="keywords" content="JSON viewer, JSON editor, large JSON performance, edit JSON, nested JSON table, JSON filtering, JSON table">
-  <link rel="canonical" href="https://www.jsontable.app" />
-  <title>JSON table Viewer and Editor Tool</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+          content="json viewer and editor to view data as table, supporting big json and available as desktop and web-based application.">
+    <meta name="keywords"
+          content="JSON viewer, JSON editor, large JSON performance, edit JSON, nested JSON table, JSON filtering, JSON table">
+    <link rel="canonical" href="https://www.jsontable.app"/>
+    <title>JSON table Viewer and Editor Tool</title>
 </head>
 <body style="padding: 10px 20px">
 
 <header>
-  <h1>JSON table Viewer and Editor Tool</h1>
-  <p>An open source tool to view JSON array as table, to ease visualisation and edition of large (few gb) json array with performance as main objective.
-    <br/>This is not a javascript library but a standalone application which can also be embedded in a web application via wasm package</p>
+    <h1>JSON table</h1>
+    <p>
+        JSON table is a tool to <b>view and edit</b> json file with a table representation of your data. It is like
+        excel but for json.<br>
+        JSON table has been designed to edit json files of few gb, containing millions of rows and hundreds of columns
+        with a lag free experience, it runs at 60fps on an intel graphic chipset.
+    </p>
+    <p>
+        JSON table is a <b>portable desktop application</b> and a <b>WASM</b> library which can be integrated on any
+        website to provide an online json table editor or json table viewer capability.
+    </p>
 </header>
 
 <section>
 
-  <h1><a href="app.html">Web demo</a></h1>
-  <p>The web demo can be used as an online json table visualizer and editor</p>
-  <h2>Key Features</h2>
-  <ul>
-    <li><strong>Lag-Free Visualization:</strong> Only visible rows and columns are rendered for smooth performance.</li>
-    <li><strong>Column Selection:</strong> Choose specific columns to render.</li>
-    <li><strong>Row Filtering:</strong> Filter out rows with null values in selected columns.</li>
-    <li><strong>Column Scrolling:</strong> Quickly scroll to specific columns.</li>
-    <li><strong>Column Pinning:</strong> Pin columns to the left for easy reference.</li>
-    <li><strong>Nested Arrays and Objects:</strong> Open and edit nested arrays and objects in sub-tables.</li>
-    <li><strong>Depth Selection:</strong> Choose the depth for nested object visualization.</li>
-    <li><strong>Cell Editing:</strong> Edit individual cells directly in the table.</li>
-    <li><strong>Value Filtering:</strong> Filter columns based on specific values.</li>
-    <li><strong>Row Navigation:</strong> Jump directly to a specific row number.</li>
-    <li><strong>Search Functionality:</strong> Search for matching terms across the table.</li>
-    <li><strong>Copy/Paste Functionality:</strong> Easily copy and paste cell values, by just hovering cell and using ctrl-C/ctrl-v.</li>
-    <li><strong>Row Insertion:</strong> Insert new rows above or below an existing row.</li>
-    <li><strong>Column replacement:</strong> Replace matching terms (supports regex) for a dedicated column (json field).</li>
-  </ul>
+    <h1>Try <a href="app.html">online json viewer</a></h1>
+    <h1>Or <a href="https://github.com/nmeylan/json-table-editor/releases">Download portable application</a></h1>
+    <h1>Key Features</h1>
+    <ul>
+        <li><strong>Lag-Free Visualization:</strong> Only visible rows and columns are rendered for smooth performance.
+        </li>
+        <li><strong>Column Selection:</strong> Choose specific columns to render.</li>
+        <li><strong>Row Filtering:</strong> Filter out rows with null values in selected columns.</li>
+        <li><strong>Column Scrolling:</strong> Quickly scroll to specific columns.</li>
+        <li><strong>Column Pinning:</strong> Pin columns to the left for easy reference.</li>
+        <li><strong>Nested Arrays and Objects:</strong> Open and edit nested arrays and objects in sub-tables.</li>
+        <li><strong>Depth Selection:</strong> Choose the depth for nested object visualization.</li>
+        <li><strong>Cell Editing:</strong> Edit individual cells directly in the table.</li>
+        <li><strong>Value Filtering:</strong> Filter columns based on specific values.</li>
+        <li><strong>Row Navigation:</strong> Jump directly to a specific row number.</li>
+        <li><strong>Search Functionality:</strong> Search for matching terms across the table.</li>
+        <li><strong>Copy/Paste Functionality:</strong> Easily copy and paste cell values, by just hovering cell and
+            using ctrl-C/ctrl-v.
+        </li>
+        <li><strong>Row Insertion:</strong> Insert new rows above or below an existing row.</li>
+        <li><strong>Column replacement:</strong> Replace matching terms (supports regex) for a dedicated column (json
+            field).
+        </li>
+    </ul>
 </section>
 
 <section>
-  <p>This tool is specifically designed for developers and data analysts who work with large JSON arrays. It offers good performance, ensuring that you can visualize and edit JSON data without any lag, regardless of the size of the array. The user interface is intuitive and provides powerful features like nested object handling, search capabilities, columns replacement, fast copy/paste, side-by-side row visualization, making it an essential tool for anyone dealing with complex JSON structures.</p>
-</section>
-<section>
-  <h2>About</h2>
-  <p><a href="https://github.com/nmeylan/json-table-editor" target="_blank" rel="noreferrer">Source and packages are available on github</a> </p>
-  <p><b>Licence</b>: Apache 2</p>
-  <p><b>Credits</b>: this project would not have been possible without <a href="https://github.com/emilk/egui" target="_blank" rel="noreferrer">egui</a> and its community, and maintainers of <a href="https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock" target="_blank" rel="noreferrer">dependencies</a> used by this project</p>
+    <h1>About</h1>
+    <p>JSON table is open source: <a href="https://github.com/nmeylan/json-table-editor" target="_blank"
+                                     rel="noreferrer">Source and packages are available on github</a></p>
+    <p><b>Licence</b>: Apache 2</p>
+    <p><b>Credits</b>: this project would not have been possible without <a href="https://github.com/emilk/egui"
+                                                                            target="_blank" rel="noreferrer">egui</a>
+        and its community, and maintainers of <a
+                href="https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock" target="_blank"
+                rel="noreferrer">dependencies</a> used by this project</p>
+
+    <img src="json-editor.png" alt="A screenshot of json table application" style="max-width: 100%; max-height: 1200px"
+         loading="lazy"/>
 </section>
 
-<img src="json-editor.png" alt="A screenshot of json table editor application" style="max-width: 100%"  loading="lazy" />
 <section>
-  <h1>Comparison with existing tool</h1>
-  <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>
-  <h3>Json crack</h3>
-  <p><a href="https://jsoncrack.com">Json crack</a> is a tool to visualize json as graph. In their landing page they assert to be the "best JSON viewer tool to visualize, format and modify"</p>
-  <p><b>It fails to render anything</b> with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On firefox the tab crash</b></p>
-  <h3>json2table/jsontableviewer/jsontotable</h3>
-  <p><a href="http://json2table.com">json2table</a>, <a href="https://jsontableviewer.com">jsontableviewer</a>, <a href="https://jsontotable.org">jsontotable</a>, are all a "2 columns" based web app with 1 column for the raw json and 1 column for the table</p>
-  <p><b>It takes time to render the table</b>, then it is almost impossible to read anything when there are a lot of data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows. Experience is not smooth but it does not crash the tab</p>
-  <h3>jsongrid</h3>
-  <p><a href="https://jsongrid.com">jsongrid</a> is an all in one json solution, it provides also features like validator, formatter</p>
-  <p>It tries to not render all rows at once but it generates lag when scrolling. In additions, <b>only 100 rows can be displayed at once</b>, making the experience not smooth </p>
-  <h3>Jsonmatrix</h3>
-  <p><a href="https://jsonmatrix.com">jsonmatrix</a> provides a table and tree viewer. In addition, it stores your data remotely on firebase.</p>
-  <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On firefox tab is frozen</b></p>
+    <h1>Comparison with existing tool</h1>
+    <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>
+    <h2>Json crack</h2>
+    <p><a href="https://jsoncrack.com">Json crack</a> is a tool to visualize json as graph. In their landing page they
+        assert to be the "best JSON viewer tool to visualize, format and modify"</p>
+    <p><b>It fails to render anything</b> with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On
+        firefox the tab crash</b></p>
+    <h2>json2table/jsontableviewer/jsontotable</h2>
+    <p><a href="http://json2table.com">json2table</a>, <a href="https://jsontableviewer.com">jsontableviewer</a>, <a
+            href="https://jsontotable.org">jsontotable</a>, are all a "2 columns" based web app with 1 column for the
+        raw json and 1 column for the table</p>
+    <p><b>It takes time to render the table</b>, then it is almost impossible to read anything when there are a lot of
+        data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows.
+        Experience is not smooth but it does not crash the tab</p>
+    <h2>jsongrid</h2>
+    <p><a href="https://jsongrid.com">jsongrid</a> is an all in one json solution, it provides also features like
+        validator, formatter</p>
+    <p>It tries to not render all rows at once but it generates lag when scrolling. In additions, <b>only 100 rows can
+        be displayed at once</b>, making the experience not smooth </p>
+    <h2>Jsonmatrix</h2>
+    <p><a href="https://jsonmatrix.com">jsonmatrix</a> provides a table and tree viewer. In addition, it stores your
+        data remotely on firebase.</p>
+    <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On
+        firefox tab is frozen</b></p>
 </section>
-</body>
-</html></title>
-</head>
-<body>
 
 </body>
 </html>
