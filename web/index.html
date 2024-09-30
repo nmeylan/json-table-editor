@@ -12,6 +12,10 @@
 </head>
 <body style="padding: 10px 20px">
 
+<div class="navbar" style="display: flex;  max-width: 960px;  margin: 0 auto; justify-content: center">
+    <div style="padding: 1rem"><a href="https://www.jsontable.app">JSON table</a></div>
+    <div style="padding: 1rem"><a href="alternative.html">JSON Viewer/Editor Tools comparison</a></div>
+</div>
 <header>
     <h1>JSON table</h1>
     <p>
@@ -32,10 +36,9 @@
     <h1>Or <a href="https://github.com/nmeylan/json-table-editor/releases">Download portable application</a></h1>
     <h1>Key Features</h1>
     <ul>
-        <li><strong>Lag-Free Visualization:</strong> Only visible rows and columns are rendered for smooth performance.
+        <li><strong>Lag-Free json table viewer:</strong> Only visible rows and columns are rendered for smooth performance.
         </li>
-        <li><strong>Column Selection:</strong> Choose specific columns to render.</li>
-        <li><strong>Row Filtering:</strong> Filter out rows with null values in selected columns.</li>
+        <li><strong>Json table row Filtering:</strong> Filter out rows with null values in selected columns.</li>
         <li><strong>Column Scrolling:</strong> Quickly scroll to specific columns.</li>
         <li><strong>Column Pinning:</strong> Pin columns to the left for easy reference.</li>
         <li><strong>Nested Arrays and Objects:</strong> Open and edit nested arrays and objects in sub-tables.</li>
@@ -69,6 +72,19 @@
          loading="lazy"/>
 </section>
 
+<section>
+    <h1>News</h1>
+    <h3>30/09/2024</h3>
+    <p>
+        Drawing roadmap, short-term planned features:
+        <ul>
+            <li><b>JSON online viewer</b>: Allow to save json file</li>
+            <li><b>JSON online viewer</b>: Make <b>WASM</b> library easier to integrate in any application: input/output JSON from/to javascript</li>
+            <li>Add new column feature</li>
+        </ul>
+        You can request new feature in <a href="https://github.com/nmeylan/json-table-editor/issues">github issues</a>
+    </p>
+</section>
 <section>
     <h1>Comparison with existing tool</h1>
     <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>

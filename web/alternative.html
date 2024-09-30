@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+          content="json viewer and editor to view data as table, supporting big json and available as desktop and web-based application.">
+    <meta name="keywords"
+          content="JSON viewer, JSON editor, large JSON performance, edit JSON, nested JSON table, JSON filtering, JSON table">
+    <link rel="canonical" href="https://www.jsontable.app/alternative.html"/>
+    <title>JSON table Viewer and Editor Tools comparison</title>
+</head>
+<body style="padding: 10px 20px">
+
+<div class="navbar" style="display: flex;  max-width: 960px;  margin: 0 auto; justify-content: center">
+    <div style="padding: 1rem"><a href="https://www.jsontable.app">JSON table</a></div>
+    <div style="padding: 1rem"><a href="alternative.html">JSON Viewer/Editor Tools comparison</a></div>
+</div>
+<header>
+    <h1>JSON table Viewer and Editor Tools comparison</h1>
+    <p>
+        Edit big json files using a GUI can be challenging, especially big array. For example features like <b>replacing a given field</b> in any nested object included in this array is not easily achievable, even when using regex depending on the structure, with field name repetition at different level.
+
+    </p>
+</header>
+
+<section>
+    <h1>Comparison with existing tool</h1>
+    <p>Testing with a 1mb json file, containing only 1000 rows and 220 different fields </p>
+    <h2>Alternatives to Json crack</h2>
+    <p><a href="https://jsoncrack.com">Json crack</a> is a tool to visualize json as graph. In their landing page they
+        assert to be the "best JSON viewer tool to visualize, format and modify"</p>
+    <p><b>It fails to render anything</b> with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On
+        firefox the tab crash</b></p>
+    <h2>Alternatives to json2table/jsontableviewer/jsontotable</h2>
+    <p><a href="http://json2table.com">json2table</a>, <a href="https://jsontableviewer.com">jsontableviewer</a>, <a
+            href="https://jsontotable.org">jsontotable</a>, are all a "2 columns" based web app with 1 column for the
+        raw json and 1 column for the table</p>
+    <p><b>It takes time to render the table</b>, then it is almost impossible to read anything when there are a lot of
+        data due to the layout used: nested fields are rendered as sub-table generating extra space in each rows.
+        Experience is not smooth but it does not crash the tab</p>
+    <h2>Alternatives to jsongrid</h2>
+    <p><a href="https://jsongrid.com">jsongrid</a> is an all in one json solution, it provides also features like
+        validator, formatter</p>
+    <p>It tries to not render all rows at once but it generates lag when scrolling. In additions, <b>only 100 rows can
+        be displayed at once</b>, making the experience not smooth </p>
+    <h2>Alternatives to Jsonmatrix</h2>
+    <p><a href="https://jsonmatrix.com">jsonmatrix</a> provides a table and tree viewer. In addition, it stores your
+        data remotely on firebase.</p>
+    <p>It fails to render anything with a 1mb json file, containing only 1000 rows and 220 different fields. <b>On
+        firefox tab is frozen</b></p>
+    <h2>Alternatives to jsonbuddy</h2>
+    <p><a href="https://www.json-buddy.com/">jsonbuddy</a> looks promising but it is not open source.</p>
+</section>
+
+</body>
+</html>
