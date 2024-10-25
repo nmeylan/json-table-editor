@@ -670,7 +670,7 @@ impl<'array> eframe::App for MyApp<'array> {
             if self.selected_file.is_some() {
                 if self.parsing_invalid {
                     let mut rect = ui.max_rect();
-                    rect.min.y = 20.0_f32.max(rect.max.y / 2.0 - (20.0 * self.parsing_invalid_pointers.len() as f32));
+                    rect.min.y = 40.0_f32.max(rect.max.y / 2.0 - (20.0 * self.parsing_invalid_pointers.len() as f32));
                     ui.allocate_ui_at_rect(rect,
                                            |ui| {
                                                ui.vertical_centered(|ui| {
