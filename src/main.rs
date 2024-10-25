@@ -28,7 +28,7 @@ use eframe::egui::Context;
 use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use eframe::epaint::text::TextWrapMode;
-use egui::TextBuffer;
+use egui::{ScrollArea, TextBuffer};
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -670,34 +670,38 @@ impl<'array> eframe::App for MyApp<'array> {
             if self.selected_file.is_some() {
                 if self.parsing_invalid {
                     let mut rect = ui.max_rect();
-                    rect.min.y = rect.max.y / 2.0 - 20.0;
+                    rect.min.y = 20.0_f32.max(rect.max.y / 2.0 - (20.0 * self.parsing_invalid_pointers.len() as f32));
                     ui.allocate_ui_at_rect(rect,
                                            |ui| {
                                                ui.vertical_centered(|ui| {
-                                                   ui.heading("Provided json is not an array but an object");
-                                                   ui.heading("Select which array you want to parse");
-                                                   self.parsing_invalid_pointers.iter().for_each(|pointer| {
-                                                       if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
-                                                           let _ = ui.radio(true, pointer.as_str());
-                                                       } else if ui.radio(false, pointer.as_str()).clicked() {
-                                                           self.selected_pointer = Some(pointer.clone());
+                                                   let scroll_area = ScrollArea::vertical();
+                                                   scroll_area.show(ui, |ui| {
+                                                       ui.heading("Provided json is not an array but an object");
+                                                       ui.heading("Select which array you want to parse");
+                                                       self.parsing_invalid_pointers.iter().for_each(|pointer| {
+                                                           if self.selected_pointer.is_some() && self.selected_pointer.as_ref().unwrap().eq(pointer) {
+                                                               let _ = ui.radio(true, pointer.as_str());
+                                                           } else if ui.radio(false, pointer.as_str()).clicked() {
+                                                               self.selected_pointer = Some(pointer.clone());
+                                                           }
+                                                       });
+                                                       let sense = if self.selected_pointer.is_none() {
+                                                           Sense::hover()
+                                                       } else {
+                                                           Sense::click()
+                                                       };
+                                                       if Button::new("Parse again").sense(sense).ui(ui).clicked() {
+                                                           self.open_json();
                                                        }
-                                                   });
-                                                   let sense = if self.selected_pointer.is_none() {
-                                                       Sense::hover()
-                                                   } else {
-                                                       Sense::click()
-                                                   };
-                                                   if Button::new("Parse again").sense(sense).ui(ui).clicked() {
-                                                       self.open_json();
-                                                   }
-                                                   if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
-                                                       self.selected_file = None;
-                                                       self.selected_pointer = None;
-                                                       self.should_parse_again = true;
-                                                       self.parsing_invalid = false;
-                                                       self.parsing_invalid_pointers.clear();
-                                                   }
+                                                       if Button::new("Select another file").sense(Sense::click()).ui(ui).clicked() {
+                                                           self.selected_file = None;
+                                                           self.selected_pointer = None;
+                                                           self.should_parse_again = true;
+                                                           self.parsing_invalid = false;
+                                                           self.parsing_invalid_pointers.clear();
+                                                       }
+                                                   })
+
                                                });
                                            });
                 } else if self.should_parse_again {
