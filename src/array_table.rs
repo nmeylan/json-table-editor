@@ -1462,7 +1462,7 @@ impl<'array> ArrayTable<'array> {
                 //         self.scroll_to_column_number = focused_cell.column_index;
                 //         self.changed_arrow_horizontal_scroll = true;
                 //     } else if !focused_cell.is_pinned_column_table
-                //         && focused_cell.row_index < self.nodes.len() - 1
+                //         && focused_cell.row_index < self.filtered_nodes.len() - 1
                 //     {
                 //         focused_cell.column_index = 0;
                 //         focused_cell.row_index = focused_cell.row_index + 1;
@@ -1509,7 +1509,7 @@ impl<'array> ArrayTable<'array> {
                     }
                 }
                 if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
-                    if focused_cell.row_index < self.nodes.len() - 1 {
+                    if focused_cell.row_index < self.filtered_nodes.len() - 1 {
                         focused_cell.row_index = focused_cell.row_index + 1;
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;

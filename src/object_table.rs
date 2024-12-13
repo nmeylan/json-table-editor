@@ -2,7 +2,8 @@ use std::cell::{RefCell};
 use std::mem;
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::{Id, Key, Label, Sense, TextEdit};
-use egui::Ui;
+use eframe::emath::Align;
+use egui::{Modifiers, Ui};
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use crate::{ArrayResponse, SHORTCUT_COPY, SHORTCUT_DELETE};
@@ -20,6 +21,9 @@ pub struct ObjectTable {
     pub editing_index: RefCell<Option<usize>>,
     pub editing_value: RefCell<String>,
     pub focused_cell: Option<CellLocation>,
+
+    pub scroll_to_row_number: usize,
+    pub changed_arrow_vertical_scroll: bool,
 }
 
 impl ObjectTable {
@@ -40,6 +44,8 @@ impl ObjectTable {
             editing_index: RefCell::new(None),
             editing_value: RefCell::new("".to_string()),
             focused_cell: None,
+            scroll_to_row_number: 0,
+            changed_arrow_vertical_scroll: false,
         }
     }
 
@@ -61,6 +67,10 @@ impl ObjectTable {
             .max_scroll_height(parent_height)
             .scroll_bar_visibility(ScrollBarVisibility::AlwaysVisible)
             ;
+        if self.changed_arrow_vertical_scroll {
+            self.changed_arrow_vertical_scroll = false;
+            table = table.scroll_to_row(self.scroll_to_row_number, Some(Align::Center));
+        }
         table = table.column(Column::auto().clip(true).resizable(true));
         table = table.column(Column::remainder().clip(true).resizable(true));
         table
@@ -95,6 +105,9 @@ impl ObjectTable {
                             *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
                             *editing_index = Some(row_index);
                         }
+                        if response.clicked() {
+                            self.focused_cell = Some(CellLocation { column_index: 1, row_index: table_row_index, is_pinned_column_table: false });
+                        }
                         response.context_menu(|ui| {
                             self.focused_cell = Some(CellLocation { column_index: 1, row_index: table_row_index, is_pinned_column_table: false });
                             let button = ButtonWithIcon::new("Edit", PENCIL);
@@ -115,11 +128,6 @@ impl ObjectTable {
                             }
                         });
 
-                        if let Some(cell_location) = self.focused_cell {
-                            if cell_location.row_index == table_row_index && !response.context_menu_opened() {
-                                self.focused_cell = None;
-                            }
-                        }
                         Some(response)
                     }
                 });
@@ -188,6 +196,57 @@ impl ObjectTable {
         let mut copied_value = None;
         let has_hovered_cell = array_response.hover_data.hovered_cell.is_some();
         ui.input_mut(|i| {
+            if i.key_pressed(Key::Escape) {
+                self.focused_cell = None;
+            }
+            if let Some(focused_cell) = self.focused_cell.as_mut() {
+                // Tab is not consumed, so it also navigate to next component... will try after upgrading egui
+                // if i.consume_key(Modifiers::NONE, Key::Tab) {
+                //     if !focused_cell.is_pinned_column_table
+                //         && focused_cell.column_index < self.column_selected.len() - 1
+                //     {
+                //         focused_cell.column_index = focused_cell.column_index + 1;
+                //         self.scroll_to_column_number = focused_cell.column_index;
+                //         self.changed_arrow_horizontal_scroll = true;
+                //     } else if !focused_cell.is_pinned_column_table
+                //         && focused_cell.row_index < self.nodes.len() - 1
+                //     {
+                //         focused_cell.column_index = 0;
+                //         focused_cell.row_index = focused_cell.row_index + 1;
+                //         self.scroll_to_row_number = focused_cell.row_index;
+                //         self.changed_arrow_vertical_scroll = true;
+                //     } else if focused_cell.is_pinned_column_table
+                //         && focused_cell.column_index < self.column_pinned.len() - 1
+                //     {
+                //         focused_cell.column_index = focused_cell.column_index + 1;
+                //     } else if focused_cell.is_pinned_column_table {
+                //         focused_cell.column_index = 1;
+                //         focused_cell.row_index = focused_cell.row_index + 1;
+                //         self.scroll_to_row_number = focused_cell.row_index;
+                //         self.changed_arrow_vertical_scroll = true;
+                //     }
+                // }
+                if i.consume_key(Modifiers::NONE, Key::ArrowLeft) {
+                    // do nothing but consume the event
+                }
+                if i.consume_key(Modifiers::NONE, Key::ArrowRight) {
+                    // do nothing but consume the event
+                }
+                if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                    if focused_cell.row_index > 0 {
+                        focused_cell.row_index = focused_cell.row_index - 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
+                    }
+                }
+                if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                    if focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                        focused_cell.row_index = focused_cell.row_index + 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
+                    }
+                }
+            }
             if i.consume_shortcut(&SHORTCUT_DELETE) {
                 i.events.push(egui::Event::Key {
                     key: Key::Delete,
