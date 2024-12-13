@@ -8,7 +8,7 @@ use crate::parser::{replace_occurrences, row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
 use crate::{
     concat_string, set_open, ArrayResponse, Window, ACTIVE_COLOR, SHORTCUT_COPY, SHORTCUT_DELETE,
-    SHORTCUT_REPLACE, SHORTCUT_SAVE_AS,
+    SHORTCUT_REPLACE,
 };
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::style::Spacing;
@@ -16,8 +16,7 @@ use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
     WidgetText,
 };
-use egui::Key::Tab;
-use egui::{EventFilter, Modifiers, TextBuffer};
+use egui::{Modifiers, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
@@ -151,6 +150,7 @@ pub struct ArrayTable<'array> {
     pub changed_matching_row_selected: bool,
     pub changed_arrow_horizontal_scroll: bool,
     pub changed_arrow_vertical_scroll: bool,
+    pub was_editing: bool,
 
     #[cfg(not(target_arch = "wasm32"))]
     pub changed_scroll_to_row_value: Option<std::time::Instant>,
@@ -278,7 +278,7 @@ impl<'array> super::View<ArrayResponse> for ArrayTable<'array> {
         if self.editing_index.borrow().is_none() {
             self.handle_shortcut(ui, &mut array_response);
         }
-
+        self.was_editing = false;
         array_response
     }
 }
@@ -432,6 +432,7 @@ impl<'array> ArrayTable<'array> {
             cache: Default::default(),
             opened_windows: Default::default(),
             search_replace_panel: Default::default(),
+            was_editing: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
@@ -659,6 +660,7 @@ impl<'array> ArrayTable<'array> {
         } else {
             None
         };
+        let focused_cell = self.focused_cell.or(self.editing_index.borrow().map(|(column_index, row_index, is_pinned_column_table)| CellLocation { column_index, row_index, is_pinned_column_table }));
         let table_response = table
             .header(text_height * 2.0, |header| {
                 self.header(pinned_column_table, header);
@@ -666,7 +668,7 @@ impl<'array> ArrayTable<'array> {
             .body(
                 self.hovered_row_index,
                 search_highlight_row,
-                self.focused_cell,
+                focused_cell,
                 |body| {
                     self.body(
                         text_height,
@@ -859,10 +861,12 @@ impl<'array> ArrayTable<'array> {
                     if editing_index.is_some()
                         && editing_index.unwrap() == (col_index, row_index, pinned_column_table)
                     {
+                        focused_changed = true;
+                        focused_cell = None;
                         let ref_mut = &mut *self.editing_value.borrow_mut();
                         let textedit_response = ui.add(TextEdit::singleline(ref_mut));
                         if textedit_response.lost_focus()
-                            || ui.ctx().input(|input| input.key_pressed(Key::Enter))
+                            || ui.ctx().input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
                         {
                             let pointer = PointerKey {
                                 pointer: Self::pointer_key(
@@ -875,7 +879,13 @@ impl<'array> ArrayTable<'array> {
                                 position: 0,
                                 column_id: columns[col_index].id,
                             };
-                            updated_value = Some((pointer, mem::take(ref_mut)))
+                            updated_value = Some((pointer, mem::take(ref_mut)));
+                            focused_changed = true;
+                            focused_cell = Some(CellLocation {
+                                column_index: col_index,
+                                row_index: table_row_index,
+                                is_pinned_column_table: pinned_column_table,
+                            });
                         } else {
                             textedit_response.request_focus();
                         }
@@ -1098,6 +1108,7 @@ impl<'array> ArrayTable<'array> {
             };
 
             self.edit_cell(array_response, value_changed, row_index);
+            self.was_editing = true;
         }
         if self.hovered_row_index != hover_data.hovered_row {
             self.hovered_row_index = hover_data.hovered_row;
@@ -1514,6 +1525,28 @@ impl<'array> ArrayTable<'array> {
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;
                     }
+                }
+                if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing  {
+                    *self.editing_index.borrow_mut() = Some((
+                        focused_cell.column_index,
+                        focused_cell.row_index,
+                        focused_cell.is_pinned_column_table,
+                    ));
+                    let row_index = self.filtered_nodes[focused_cell.row_index];
+                    let mut editing_value = String::new();
+                    let col_index = focused_cell.column_index;
+                    let is_pinned_column_table = focused_cell.is_pinned_column_table;
+                    {
+                        let node = self.nodes().get(row_index);
+                        if let Some(row_data) = node.as_ref() {
+                            let index = self.get_pointer_index_from_cache(is_pinned_column_table, row_data, col_index, );
+                            if let Some(index) = index {
+                                row_data.entries()[index].value.clone().map(|v| editing_value = v);
+                            }
+                        }
+                    }
+
+                    *self.editing_value.borrow_mut() = editing_value;
                 }
             }
             if i.consume_shortcut(&SHORTCUT_DELETE) {

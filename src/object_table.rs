@@ -15,15 +15,16 @@ pub struct ObjectTable {
     pub nodes: Vec<FlatJsonValue<String>>,
     filtered_nodes: Vec<usize>,
     arrays: Vec<FlatJsonValue<String>>,
+    pub scroll_to_row_number: usize,
 
-    // Handling interaction
 
     pub editing_index: RefCell<Option<usize>>,
     pub editing_value: RefCell<String>,
     pub focused_cell: Option<CellLocation>,
 
-    pub scroll_to_row_number: usize,
+    // Handling interaction
     pub changed_arrow_vertical_scroll: bool,
+    pub was_editing: bool,
 }
 
 impl ObjectTable {
@@ -46,6 +47,7 @@ impl ObjectTable {
             focused_cell: None,
             scroll_to_row_number: 0,
             changed_arrow_vertical_scroll: false,
+            was_editing: false,
         }
     }
 
@@ -136,6 +138,7 @@ impl ObjectTable {
                 let editing_index = mem::take(&mut *self.editing_index.borrow_mut());
                 let row_index = editing_index.unwrap();
                 self.update_value(&mut array_response, updated_pointer, value, row_index);
+                self.was_editing = true;
             }
         });
         array_response
@@ -246,6 +249,13 @@ impl ObjectTable {
                         self.changed_arrow_vertical_scroll = true;
                     }
                 }
+                if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing {
+                    *self.editing_index.borrow_mut() = Some(focused_cell.row_index);
+
+                    let row_index = self.filtered_nodes[focused_cell.row_index];
+                    let entry = &self.nodes[row_index];
+                    *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
+                }
             }
             if i.consume_shortcut(&SHORTCUT_DELETE) {
                 i.events.push(egui::Event::Key {
@@ -296,7 +306,7 @@ impl super::View<ArrayResponse> for ObjectTable {
     fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
         use egui_extras::{Size, StripBuilder};
         let mut array_response = ArrayResponse::default();
-        StripBuilder::new(ui)
+        let response = StripBuilder::new(ui)
             .size(Size::remainder())
             .vertical(|mut strip| {
                 strip.cell(|ui| {
@@ -308,9 +318,11 @@ impl super::View<ArrayResponse> for ObjectTable {
                     });
                 });
             });
+
         if self.editing_index.borrow().is_none() {
             self.handle_shortcut(ui, &mut array_response);
         }
+        self.was_editing = false;
         array_response
     }
 }
