@@ -18,12 +18,9 @@
     <div style="padding: 1rem"><a href="https://github.com/nmeylan/json-table-editor">Github</a></div>
 </div>
 <header>
-    <h1>JSON table</h1>
+    <h1>JSON Table: An open source JSON Viewer and Editor</h1>
     <p>
-        JSON table is a tool to <b>view and edit</b> json file with a table representation of your data. It is like
-        excel but for json.<br>
-        JSON table is a json editor designed to <b>edit big json files</b> of few gb, containing millions of rows and hundreds of columns
-        with a lag free experience, it runs at 60fps on an intel graphic chipset.
+        JSON Table is a powerful JSON <b>editor/viewer</b> tool that transforms large JSON array into an intuitive table, <b>spreadsheet-like</b> interface. Designed for handling big JSON files while keeping good performance, it offers a seamless editing experience for developers and data professionals.
     </p>
     <p>
         JSON table is a <b>portable desktop application</b> and a <b>WASM</b> library which can be integrated on any
@@ -34,31 +31,52 @@
 <section>
 
     <h1>Try <a href="app.html">online json viewer</a></h1>
-    <h1>Or <a href="https://github.com/nmeylan/json-table-editor/releases">Download portable application</a></h1>
-    <h1>Key Features</h1>
+    <h1>Or <a href="https://github.com/nmeylan/json-table-editor/releases">Download portable application</a> to get all features and best experience</h1>
+    <h1>Key Features of JSON Table</h1>
     <ul>
-        <li><strong>Edit large json file/big json file without lag:</strong> Only visible rows and columns are rendered for smooth performance. In addition, our custom json parser support depth level selection to partially and progressively parse json, speeding up initial rendering.<br/>
+        <li><strong>High-Performance JSON Editing</strong>: Renders only visible rows and columns, ensuring smooth performance even with files containing millions of rows and hundreds of columns</li>
+        <li><strong> Flexible Parsing</strong>: Custom JSON parser supports depth-level selection for faster initial rendering</li>
+        <li><strong>Advanced Data Manipulation:</strong>
+            <ul>
+                <li><strong>Column replacement:</strong> Replace matching terms (supports regex) for a dedicated column (json field).</li>
+                <li><strong>Cell Editing:</strong> Edit individual cells directly in the table.</li>
+                <li><strong>Nested Arrays and Objects:</strong> Open and edit nested arrays and objects in sub-tables.</li>
+                <li>Powerful search and replace functionality</li>
+            </ul>
         </li>
-        <li><strong>Json table row filtering:</strong> Filter out rows with null values in selected columns.</li>
-        <li><strong>Column Scrolling:</strong> Quickly scroll to specific columns.</li>
-        <li><strong>Column Pinning:</strong> Pin columns to the left for easy reference.</li>
-        <li><strong>Nested Arrays and Objects:</strong> Open and edit nested arrays and objects in sub-tables.</li>
-        <li><strong>Depth Selection:</strong> Choose the depth for nested object visualization.</li>
-        <li><strong>Cell Editing:</strong> Edit individual cells directly in the table.</li>
-        <li><strong>Value Filtering:</strong> Filter columns based on specific values.</li>
-        <li><strong>Row Navigation:</strong> Jump directly to a specific row number.</li>
-        <li><strong>Search Functionality:</strong> Search for matching terms across the table.</li>
-        <li><strong>Copy/Paste Functionality:</strong> Easily copy and paste cell values, by just hovering cell and
-            using ctrl-C/ctrl-v.
-        </li>
-        <li><strong>Row Insertion:</strong> Insert new rows above or below an existing row.</li>
-        <li><strong>Column replacement:</strong> Replace matching terms (supports regex) for a dedicated column (json
-            field).
+        <li><strong>User-Friendly Interface:</strong>
+            <ul>
+                <li><strong>Column pinning:</strong> Pin columns to the left for easy reference.</li>
+                <li><strong>Row navigation:</strong> Jump directly to a specific row number</li>
+                <li><strong>Column navigation:</strong> Quickly scroll to specific columns.</li>
+                <li><strong>Easy copy/paste:</strong> Easily copy and paste cell values, by just hovering cell and using ctrl-C/ctrl-v.</li>
+                <li><strong>Row Insertion:</strong> Insert new rows above or below an existing row.</li>
+            </ul>
         </li>
     </ul>
+
+    <p>By prioritizing performance and user experience, JSON Table transforms the complexity of large JSON files edition into a smooth, responsive editing environment.</p>
+
+    <p><strong>Missing a feature?</strong> <a href="https://github.com/nmeylan/json-table-editor">Request it or contribute on Github</a></p>
 </section>
 
 <section>
+
+    <img src="json-editor.png" alt="A screenshot of json table application" style="max-width: 100%; max-height: 1200px"
+         loading="lazy"/>
+</section>
+
+<section>
+    <h1>Performant for Large JSON Files</h1>
+    <p>JSON Table specializes in handling massive JSON files with extraordinary efficiency:</p>
+    <ul>
+        <li>Processes JSON files up to several gigabytes in size</li>
+        <li>Handles millions of rows and hundreds of columns</li>
+        <li>Maintains 60 FPS performance, even on integrated graphics chipset</li>
+        <li>Innovative rendering technique loads only visible data</li>
+        <li>Progressive parsing allows partial, depth-controlled JSON loading</li>
+    </ul>
+
     <h1>About</h1>
     <p>JSON table is open source: <a href="https://github.com/nmeylan/json-table-editor" target="_blank"
                                      rel="noreferrer">Source and packages are available on github</a></p>
@@ -68,12 +86,6 @@
         and its community, and maintainers of <a
                 href="https://github.com/nmeylan/json-table-editor/blob/master/Cargo.lock" target="_blank"
                 rel="noreferrer">dependencies</a> used by this project</p>
-
-    <img src="json-editor.png" alt="A screenshot of json table application" style="max-width: 100%; max-height: 1200px"
-         loading="lazy"/>
-</section>
-
-<section>
     <h1>News</h1>
     <h3>30/09/2024</h3>
     <p>
@@ -83,7 +95,6 @@
             <li><b>JSON online viewer</b>: Make <b>WASM</b> library easier to integrate in any application: input/output JSON from/to javascript</li>
             <li>Add new column feature</li>
         </ul>
-        You can request new feature in <a href="https://github.com/nmeylan/json-table-editor/issues">github issues</a>
     </p>
 </section>
 
