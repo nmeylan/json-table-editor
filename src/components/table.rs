@@ -879,9 +879,18 @@ pub struct Table<'a> {
     is_pinned_column_table: bool,
 }
 
+pub struct TableResponse {
+    pub scroll_area_output: ScrollAreaOutput<()>,
+    pub columns_offset: Vec<f32>,
+    pub first_visible_index: usize,
+    pub last_visible_index: usize,
+    pub first_visible_offset: f32,
+    pub last_visible_offset: f32,
+}
+
 impl<'a> Table<'a> {
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<CellLocation>, add_body_contents: F) -> ScrollAreaOutput<Vec<f32>>
+    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<CellLocation>, add_body_contents: F) -> TableResponse
     where
         F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -935,8 +944,12 @@ impl<'a> Table<'a> {
         let number_of_columns = widths_ref.len();
 
         let mut hovered_cell_index = None;
-        let scroll_area_output = scroll_area.show(ui, move |ui| {
-            let mut columns_offset = Vec::with_capacity(number_of_columns);
+        let mut first_col_visible_index: usize = 0;
+        let mut last_col_visible_index: usize = 0;
+        let mut first_col_visible_offset = 0.0;
+        let mut last_col_visible_offset = 0.0;
+        let mut columns_offset = Vec::with_capacity(number_of_columns);
+        let scroll_area_output = scroll_area.show(ui, |ui| {
             let mut scroll_to_y_range = None;
 
             let clip_rect = ui.clip_rect();
@@ -960,16 +973,19 @@ impl<'a> Table<'a> {
                 let start_x = clip_rect.left();
                 let scroll_offset_x = start_x - layout.rect.left();
                 let mut visible_index = Vec::with_capacity(number_of_columns);
-                let mut first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
+                first_col_visible_offset = -layout.ui.spacing().item_spacing[0];
                 let mut first_visible_seen = false;
                 for (index, width) in widths_ref.iter().enumerate() {
                     columns_offset.push(x_offset);
                     if x_offset + width >= scroll_offset_x && x_offset <= end_x + scroll_offset_x {
                         first_visible_seen = true;
                         visible_index.push(index);
+                        last_col_visible_index = index;
+                        last_col_visible_offset = x_offset;
                     }
                     if !first_visible_seen {
                         first_col_visible_offset += width + layout.ui.spacing().item_spacing[0];
+                        first_col_visible_index = index;
                     }
                     x_offset += width + layout.ui.spacing().item_spacing[0];
                 }
@@ -1010,7 +1026,6 @@ impl<'a> Table<'a> {
                 let align = scroll_to_row.and_then(|(_, a)| a);
                 ui.scroll_to_rect(rect, align);
             }
-            columns_offset
         });
 
         let bottom = ui.min_rect().bottom();
@@ -1111,7 +1126,14 @@ impl<'a> Table<'a> {
             available_width -= *column_width + spacing_x;
         }
         state.store(ui, state_id);
-        scroll_area_output
+        TableResponse {
+            scroll_area_output,
+            columns_offset,
+            first_visible_index: first_col_visible_index,
+            last_visible_index: last_col_visible_index,
+            first_visible_offset: first_col_visible_offset,
+            last_visible_offset: last_col_visible_offset,
+        }
     }
 }
 

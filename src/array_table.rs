@@ -38,13 +38,13 @@ pub struct Column<'col> {
     pub id: usize,
 }
 
-impl <'col> Hash for Column<'col> {
+impl<'col> Hash for Column<'col> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state)
     }
 }
 
-impl <'col>Column<'col> {
+impl<'col> Column<'col> {
     pub fn new(name: String, value_type: ValueType) -> Self {
         Self {
             name: Cow::from(name),
@@ -57,22 +57,22 @@ impl <'col>Column<'col> {
     }
 }
 
-impl <'col>Eq for Column<'col> {}
+impl<'col> Eq for Column<'col> {}
 
-impl <'col>PartialEq<Self> for Column<'col> {
+impl<'col> PartialEq<Self> for Column<'col> {
     fn eq(&self, other: &Self) -> bool {
         self.name.eq(&other.name)
     }
 }
 
 
-impl <'col>PartialOrd<Self> for Column<'col> {
+impl<'col> PartialOrd<Self> for Column<'col> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl <'col>Ord for Column<'col> {
+impl<'col> Ord for Column<'col> {
     fn cmp(&self, other: &Self) -> Ordering {
         match other.seen_count.cmp(&self.seen_count) {
             Ordering::Equal => other.order.cmp(&self.order),
@@ -127,14 +127,24 @@ pub struct ArrayTable<'array> {
     pub matching_column_selected: usize,
     pub scroll_to_column: String,
     pub scroll_to_row: String,
+    pub scroll_to_row_number: usize,
+    pub scroll_to_column_number: usize,
     pub scroll_to_row_mode: ScrollToRowMode,
     pub focused_cell: Option<CellLocation>,
+
+    // Visibility information
+    pub first_visible_index: usize,
+    pub last_visible_index: usize,
+    pub first_visible_offset: f32,
+    pub last_visible_offset: f32,
 
     // Handle interaction
     pub next_frame_reset_scroll: bool,
     pub changed_scroll_to_column_value: bool,
     pub changed_matching_column_selected: bool,
     pub changed_matching_row_selected: bool,
+    pub changed_arrow_horizontal_scroll: bool,
+    pub changed_arrow_vertical_scroll: bool,
 
     #[cfg(not(target_arch = "wasm32"))]
     pub changed_scroll_to_row_value: Option<std::time::Instant>,
@@ -149,7 +159,7 @@ pub struct ArrayTable<'array> {
 }
 
 
-impl <'array>super::View<ArrayResponse> for ArrayTable<'array> {
+impl<'array> super::View<ArrayResponse> for ArrayTable<'array> {
     fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
         use egui_extras::{Size, StripBuilder};
         let mut array_response = ArrayResponse::default();
@@ -185,6 +195,15 @@ impl <'array>super::View<ArrayResponse> for ArrayTable<'array> {
                                             || column.name.to_lowercase().contains(&self.scroll_to_column.to_lowercase()) {
                                             self.matching_columns.push(index);
                                         }
+                                    }
+                                }
+                            }
+
+                            if self.changed_arrow_horizontal_scroll {
+                                self.changed_arrow_horizontal_scroll = false;
+                                if !(self.first_visible_index < self.scroll_to_column_number && self.scroll_to_column_number < self.last_visible_index) {
+                                    if let Some(offset) = self.columns_offset.get(self.scroll_to_column_number) {
+                                        scroll_to_x = Some(*offset);
                                     }
                                 }
                             }
@@ -239,7 +258,7 @@ impl Hash for CachePointerKey {
     }
 }
 
-impl <'array> crate::components::cache::ComputerMut<(&Column<'array>, &String), &Vec<JsonArrayEntries<String>>, IndexSet<String>> for CacheFilterOptions {
+impl<'array> crate::components::cache::ComputerMut<(&Column<'array>, &String), &Vec<JsonArrayEntries<String>>, IndexSet<String>> for CacheFilterOptions {
     fn compute(&mut self, (column, parent_pointer): (&Column<'array>, &String), nodes: &Vec<JsonArrayEntries<String>>) -> IndexSet<String> {
         let mut unique_values = IndexSet::new();
         if ArrayTable::is_filterable(column) {
@@ -272,7 +291,7 @@ impl <'array> crate::components::cache::ComputerMut<(&Column<'array>, &String), 
 }
 
 
-impl <'array>crate::components::cache::ComputerMut<CachePointerKey, &ArrayTable<'array>, Option<usize>> for CacheGetPointer {
+impl<'array> crate::components::cache::ComputerMut<CachePointerKey, &ArrayTable<'array>, Option<usize>> for CacheGetPointer {
     fn compute(&mut self, cache_pointer_key: CachePointerKey, table: &ArrayTable<'array>) -> Option<usize> {
         let columns = if cache_pointer_key.pinned_column_table { &table.column_pinned } else { &table.column_selected };
         ArrayTable::get_pointer_index(&table.parent_pointer, columns, &table.nodes()[cache_pointer_key.row_index].entries(), cache_pointer_key.index, cache_pointer_key.row_index)
@@ -281,7 +300,7 @@ impl <'array>crate::components::cache::ComputerMut<CachePointerKey, &ArrayTable<
 
 pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
 
-impl <'array>ArrayTable<'array> {
+impl<'array> ArrayTable<'array> {
     pub fn new(parse_result: Option<ParseResult<String>>, nodes: Vec<JsonArrayEntries<String>>, all_columns: Vec<Column<'array>>, depth: u8, parent_pointer: PointerKey) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
@@ -311,13 +330,21 @@ impl <'array>ArrayTable<'array> {
             columns_filter: HashMap::new(),
             scroll_to_row_mode: ScrollToRowMode::RowNumber,
             scroll_to_row: "".to_string(),
+            scroll_to_row_number: 0,
+            scroll_to_column_number: 0,
             changed_scroll_to_row_value: None,
             changed_matching_row_selected: false,
             changed_matching_column_selected: false,
+            changed_arrow_horizontal_scroll: false,
+            changed_arrow_vertical_scroll: false,
             editing_index: RefCell::new(None),
             editing_value: RefCell::new(String::new()),
             is_sub_table: false,
             focused_cell: None,
+            first_visible_index: 0,
+            last_visible_index: 0,
+            first_visible_offset: 0.0,
+            last_visible_offset: 0.0,
             cache: Default::default(),
             opened_windows: Default::default(),
             search_replace_panel: Default::default(),
@@ -470,6 +497,10 @@ impl <'array>ArrayTable<'array> {
                 }
             }
         }
+        if self.changed_arrow_vertical_scroll {
+            self.changed_arrow_vertical_scroll = false;
+            table = table.scroll_to_row(self.scroll_to_row_number, Some(Align::Center));
+        }
         if self.changed_matching_row_selected {
             self.changed_matching_row_selected = false;
             table = table.scroll_to_row(self.matching_rows[self.matching_row_selected], Some(Align::Center));
@@ -503,19 +534,23 @@ impl <'array>ArrayTable<'array> {
         } else {
             None
         };
-        let table_scroll_output = table
+        let table_response = table
             .header(text_height * 2.0, |header| {
                 self.header(pinned_column_table, header);
             })
             .body(self.hovered_row_index, search_highlight_row, self.focused_cell, |body| {
                 self.body(text_height, pinned_column_table, &mut array_response, request_repaint, body);
             });
-
+        let table_scroll_output = table_response.scroll_area_output;
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
         }
         if !pinned_column_table {
-            self.columns_offset = table_scroll_output.inner;
+            self.columns_offset = table_response.columns_offset;
+            self.first_visible_index = table_response.first_visible_index;
+            self.first_visible_offset = table_response.first_visible_offset;
+            self.last_visible_index = table_response.last_visible_index;
+            self.last_visible_offset = table_response.last_visible_offset;
         }
         if request_repaint {
             ui.ctx().request_repaint();
@@ -682,7 +717,7 @@ impl <'array>ArrayTable<'array> {
                                     *self.editing_value.borrow_mut() = value.clone();
                                     *editing_index = Some((col_index, row_index, pinned_column_table));
                                 }
-                                if response.secondary_clicked() {
+                                if response.secondary_clicked() || response.clicked() {
                                     focused_cell = Some(CellLocation { column_index: col_index, row_index: table_row_index, is_pinned_column_table: pinned_column_table });
                                     focused_changed = true;
                                 }
@@ -750,12 +785,6 @@ impl <'array>ArrayTable<'array> {
                                     }
                                 });
 
-                                if let Some(focused_cell_location) = self.focused_cell {
-                                    if focused_cell_location.is_pinned_column_table == pinned_column_table && focused_cell_location.row_index == table_row_index && focused_cell_location.column_index == col_index && !response.context_menu_opened() {
-                                        focused_cell = None;
-                                        focused_changed = true;
-                                    }
-                                }
                                 if response.hovered() {
                                     ui.ctx().set_cursor_icon(CursorIcon::Cell);
                                 }
@@ -780,7 +809,7 @@ impl <'array>ArrayTable<'array> {
                         *editing_index = Some((col_index, row_index, pinned_column_table));
                     }
 
-                    if response.secondary_clicked() {
+                    if response.secondary_clicked() || response.clicked() {
                         focused_cell = Some(CellLocation { column_index: col_index, row_index: table_row_index, is_pinned_column_table: pinned_column_table });
                         focused_changed = true;
                     }
@@ -818,12 +847,7 @@ impl <'array>ArrayTable<'array> {
                         }
                     });
 
-                    if let Some(focused_cell_location) = self.focused_cell {
-                        if focused_cell_location.is_pinned_column_table == pinned_column_table && focused_cell_location.row_index == table_row_index && focused_cell_location.column_index == col_index && !response.context_menu_opened() {
-                            focused_cell = None;
-                            focused_changed = true;
-                        }
-                    }
+
                     if response.hovered() {
                         ui.ctx().set_cursor_icon(CursorIcon::Cell);
                     }
@@ -906,22 +930,25 @@ impl <'array>ArrayTable<'array> {
             let substring_len = substring_len + (i.checked_ilog10().unwrap_or(0) + 1) as usize;
             let new_prefix = concat_string!(self.parent_pointer.pointer, "/", (i+1).to_string());
             self.nodes[i].entries.iter_mut().for_each(|e| {
-                e.pointer.pointer =  concat_string!(new_prefix, e.pointer.pointer[substring_len..]);
+                e.pointer.pointer = concat_string!(new_prefix, e.pointer.pointer[substring_len..]);
             })
         }
         let new_entry_pointer = concat_string!(self.parent_pointer.pointer, "/", new_index.to_string());
         self.nodes.insert(new_index, JsonArrayEntries {
             entries: vec![
                 row_number_entry(new_index, 0, new_entry_pointer.as_str()),
-                FlatJsonValue { pointer: PointerKey {
-                    pointer: new_entry_pointer,
-                    value_type: ValueType::Object(true, 0),
-                    depth,
-                    position: 0,
-                    column_id: 0,
-                }, value: Some("{}".to_string()) }
+                FlatJsonValue {
+                    pointer: PointerKey {
+                        pointer: new_entry_pointer,
+                        value_type: ValueType::Object(true, 0),
+                        depth,
+                        position: 0,
+                        column_id: 0,
+                    },
+                    value: Some("{}".to_string())
+                }
             ],
-            index: new_index
+            index: new_index,
         });
         self.filtered_nodes.insert(table_row_index + above_or_below as usize, new_index);
         self.cache.borrow_mut().evict();
@@ -966,7 +993,7 @@ impl <'array>ArrayTable<'array> {
 
         let value_changed = Self::update_row(&mut self.nodes[row_index].entries, updated_entry, self.is_sub_table, self.last_parsed_max_depth);
         if value_changed {
-           self.cache.borrow_mut().evict();
+            self.cache.borrow_mut().evict();
         }
         value_changed
     }
@@ -1100,6 +1127,40 @@ impl <'array>ArrayTable<'array> {
     fn handle_shortcut(&mut self, ui: &mut Ui, array_response: &mut ArrayResponse) {
         let mut copied_value = None;
         ui.input_mut(|i| {
+            if let Some(focused_cell) = self.focused_cell.as_mut() {
+                if i.key_pressed(Key::ArrowLeft) {
+                    if !focused_cell.is_pinned_column_table && focused_cell.column_index > 0 {
+                        focused_cell.column_index = focused_cell.column_index - 1;
+                        self.scroll_to_column_number = focused_cell.column_index;
+                        self.changed_arrow_horizontal_scroll = true;
+                    } else if focused_cell.is_pinned_column_table && focused_cell.column_index > 1 {
+                        focused_cell.column_index = focused_cell.column_index - 1;
+                    }
+                }
+                if i.key_pressed(Key::ArrowRight) {
+                    if !focused_cell.is_pinned_column_table && focused_cell.column_index < self.column_selected.len() - 1 {
+                        focused_cell.column_index = focused_cell.column_index + 1;
+                        self.scroll_to_column_number = focused_cell.column_index;
+                        self.changed_arrow_horizontal_scroll = true;
+                    } else if focused_cell.is_pinned_column_table && focused_cell.column_index < self.column_pinned.len() - 1 {
+                        focused_cell.column_index = focused_cell.column_index + 1;
+                    }
+                }
+                if i.key_pressed(Key::ArrowUp) {
+                    if focused_cell.row_index > 0 {
+                        focused_cell.row_index = focused_cell.row_index - 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
+                    }
+                }
+                if i.key_pressed(Key::ArrowDown) {
+                    if focused_cell.row_index < self.nodes.len() - 1 {
+                        focused_cell.row_index = focused_cell.row_index + 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
+                    }
+                }
+            }
             if i.consume_shortcut(&SHORTCUT_DELETE) {
                 i.events.push(egui::Event::Key {
                     key: Key::Delete,
@@ -1116,7 +1177,7 @@ impl <'array>ArrayTable<'array> {
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => hovered_cell.is_some(),
                 egui::Event::Paste(_) => hovered_cell.is_some(),
-                egui::Event::Key{key: Key::Delete, ..} => hovered_cell.is_some(),
+                egui::Event::Key { key: Key::Delete, .. } => hovered_cell.is_some(),
                 _ => false,
             }) {
                 let cell_location = hovered_cell.unwrap();
@@ -1124,7 +1185,7 @@ impl <'array>ArrayTable<'array> {
                 let index = self.get_pointer_index_from_cache(cell_location.is_pinned_column_table, &&self.nodes[row_index], cell_location.column_index);
 
                 match event {
-                    egui::Event::Key{key: Key::Delete, ..} => {
+                    egui::Event::Key { key: Key::Delete, .. } => {
                         let columns = self.columns(cell_location.is_pinned_column_table);
                         let pointer = Self::pointer_key(&self.parent_pointer.pointer, row_index, columns.get(cell_location.column_index).as_ref().unwrap().name.as_str());
                         let flat_json_value = FlatJsonValue::<String> {
@@ -1148,7 +1209,7 @@ impl <'array>ArrayTable<'array> {
                         };
                         match flat_json_value.pointer.value_type {
                             // When we paste an object it should not be considered as parsed
-                            ValueType::Object(..) => { flat_json_value.pointer.value_type = ValueType::Object(false,0) }
+                            ValueType::Object(..) => { flat_json_value.pointer.value_type = ValueType::Object(false, 0) }
                             _ => {}
                         }
                         self.edit_cell(array_response, flat_json_value, row_index);
