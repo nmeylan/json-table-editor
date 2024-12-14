@@ -247,11 +247,6 @@ impl<'array> super::View<ArrayResponse> for ArrayTable<'array> {
             });
         });
 
-        ui.ctx().memory(|m| {
-            if m.focused().is_some() {
-                println!("array {:?}", m.focused());
-            }
-        });
         if self.focused_cell.is_some() && self.editing_index.borrow().is_none() {
             ui.ctx().memory_mut(|m| {
                 m.set_focus_lock_filter(
