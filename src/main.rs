@@ -25,7 +25,6 @@ use parking_lot_mpsc::{Receiver, SyncSender};
 
 use eframe::{CreationContext, Renderer};
 use eframe::egui::Context;
-use eframe::Theme::Light;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use eframe::epaint::text::TextWrapMode;
 use egui::{ScrollArea, TextBuffer};
@@ -87,7 +86,6 @@ fn main() {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let options = eframe::NativeOptions {
-            default_theme: Light,
             persist_window: false,
             renderer: Renderer::Glow,
             viewport: eframe::egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap())),
@@ -363,6 +361,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 
 impl<'array> eframe::App for MyApp<'array> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
