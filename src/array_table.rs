@@ -16,7 +16,7 @@ use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
     WidgetText,
 };
-use egui::{Modifiers, TextBuffer};
+use egui::{EventFilter, Modifiers, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
@@ -29,6 +29,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
+use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
@@ -104,8 +105,8 @@ impl ScrollToRowMode {
     }
 }
 
-#[derive(Default)]
 pub struct ArrayTable<'array> {
+    table_id: Id,
     all_columns: Vec<Column<'array>>,
     column_selected: Vec<Column<'array>>,
     column_pinned: Vec<Column<'array>>,
@@ -166,112 +167,104 @@ pub struct ArrayTable<'array> {
 
 impl<'array> super::View<ArrayResponse> for ArrayTable<'array> {
     fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
-        use egui_extras::{Size, StripBuilder};
         let mut array_response = ArrayResponse::default();
         self.windows(ui.ctx(), &mut array_response);
-        let response = ui.push_id("table_container", |ui| {
-            StripBuilder::new(ui)
-                .size(Size::remainder())
-                .vertical(|mut strip| {
-                    strip.cell(|table_ui| {
-                        let parent_height_available =
-                            table_ui.available_rect_before_wrap().height();
-                        let parent_width_available = table_ui.available_rect_before_wrap().width();
-                        table_ui.horizontal(|ui| {
-                            ui.set_height(parent_height_available);
-                            ui.push_id("table-pinned-column", |ui| {
-                                ui.vertical(|ui| {
-                                    ui.set_max_width(parent_width_available / 2.0);
-                                    let scroll_area = egui::ScrollArea::horizontal();
-                                    scroll_area.show(ui, |ui| {
-                                        // Pinned table
-                                        array_response =
-                                            array_response.union(self.table_ui(ui, true));
-                                    });
-                                });
-                            });
-
-                            ui.vertical(|ui| {
-                                let mut scroll_to_x = None;
-                                if self.changed_scroll_to_column_value {
-                                    self.changed_scroll_to_column_value = false;
-                                    self.changed_matching_column_selected = true;
-                                    self.matching_columns.clear();
-                                    self.matching_column_selected = 0;
-                                    if !self.scroll_to_column.is_empty() {
-                                        for (index, column) in
-                                            self.column_selected.iter().enumerate()
-                                        {
-                                            if column.name.to_lowercase().eq(&concat_string!(
-                                                "/",
-                                                &self.scroll_to_column.to_lowercase()
-                                            )) || column
-                                                .name
-                                                .to_lowercase()
-                                                .contains(&self.scroll_to_column.to_lowercase())
-                                            {
-                                                self.matching_columns.push(index);
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if self.changed_arrow_horizontal_scroll {
-                                    self.changed_arrow_horizontal_scroll = false;
-                                    if !(self.first_visible_index < self.scroll_to_column_number
-                                        && self.scroll_to_column_number <= self.last_visible_index)
-                                    {
-                                        if let Some(offset) =
-                                            self.columns_offset.get(self.scroll_to_column_number)
-                                        {
-                                            scroll_to_x = Some(*offset);
-                                        }
-                                    }
-                                }
-
-                                if self.changed_matching_column_selected {
-                                    self.changed_matching_column_selected = false;
-                                    if !self.matching_columns.is_empty() {
-                                        if let Some(offset) = self.columns_offset.get(
-                                            self.matching_columns[self.matching_column_selected],
-                                        ) {
-                                            scroll_to_x = Some(*offset);
-                                        }
-                                    }
-                                }
-
-                                let mut scroll_area = egui::ScrollArea::horizontal();
-                                if let Some(offset) = scroll_to_x {
-                                    scroll_area =
-                                        scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
-                                }
-                                scroll_area.show(ui, |ui| {
-                                    array_response = array_response.union(self.table_ui(ui, false));
-                                });
-                            });
-                        });
+        let parent_height_available = ui.available_rect_before_wrap().height();
+        let parent_width_available = ui.available_rect_before_wrap().width();
+        ui.interact(
+            ui.available_rect_before_wrap(),
+            self.table_id,
+            Sense::focusable_noninteractive(),
+        );
+        ui.horizontal(|ui| {
+            ui.set_height(parent_height_available);
+            ui.push_id("table-pinned-column", |ui| {
+                ui.vertical(|ui| {
+                    ui.set_max_width(parent_width_available / 2.0);
+                    let scroll_area = egui::ScrollArea::horizontal();
+                    scroll_area.show(ui, |ui| {
+                        // Pinned table
+                        array_response = array_response.union(self.table_ui(ui, true));
                     });
-                })
+                });
+            });
+
+            ui.vertical(|ui| {
+                let mut scroll_to_x = None;
+                if self.changed_scroll_to_column_value {
+                    self.changed_scroll_to_column_value = false;
+                    self.changed_matching_column_selected = true;
+                    self.matching_columns.clear();
+                    self.matching_column_selected = 0;
+                    if !self.scroll_to_column.is_empty() {
+                        for (index, column) in self.column_selected.iter().enumerate() {
+                            if column
+                                .name
+                                .to_lowercase()
+                                .eq(&concat_string!("/", &self.scroll_to_column.to_lowercase()))
+                                || column
+                                    .name
+                                    .to_lowercase()
+                                    .contains(&self.scroll_to_column.to_lowercase())
+                            {
+                                self.matching_columns.push(index);
+                            }
+                        }
+                    }
+                }
+
+                if self.changed_arrow_horizontal_scroll {
+                    self.changed_arrow_horizontal_scroll = false;
+                    if !(self.first_visible_index < self.scroll_to_column_number
+                        && self.scroll_to_column_number <= self.last_visible_index)
+                    {
+                        if let Some(offset) = self.columns_offset.get(self.scroll_to_column_number)
+                        {
+                            scroll_to_x = Some(*offset);
+                        }
+                    }
+                }
+
+                if self.changed_matching_column_selected {
+                    self.changed_matching_column_selected = false;
+                    if !self.matching_columns.is_empty() {
+                        if let Some(offset) = self
+                            .columns_offset
+                            .get(self.matching_columns[self.matching_column_selected])
+                        {
+                            scroll_to_x = Some(*offset);
+                        }
+                    }
+                }
+
+                let mut scroll_area = egui::ScrollArea::horizontal();
+                if let Some(offset) = scroll_to_x {
+                    scroll_area = scroll_area.scroll_offset(Vec2 { x: offset, y: 0.0 });
+                }
+                scroll_area.show(ui, |ui| {
+                    array_response = array_response.union(self.table_ui(ui, false));
+                });
+            });
         });
-        // if self.focused_cell.is_some() && self.editing_index.borrow().is_none() {
-        //     ui.ctx().memory_mut(|m| {
-        //         m.request_focus(response.inner.id);
-        //         m.set_focus_lock_filter(
-        //             response.inner.id,
-        //             EventFilter {
-        //                 tab: true,
-        //                 horizontal_arrows: true,
-        //                 vertical_arrows: true,
-        //                 ..Default::default()
-        //             },
-        //         );
-        //     });
-        //     println!(
-        //         "{:?} has focus: {}",
-        //         response.inner.id,
-        //         response.inner.has_focus()
-        //     );
-        // }
+
+        ui.ctx().memory(|m| {
+            if m.focused().is_some() {
+                println!("array {:?}", m.focused());
+            }
+        });
+        if self.focused_cell.is_some() && self.editing_index.borrow().is_none() {
+            ui.ctx().memory_mut(|m| {
+                m.set_focus_lock_filter(
+                    self.table_id,
+                    EventFilter {
+                        tab: true,
+                        horizontal_arrows: true,
+                        vertical_arrows: true,
+                        ..Default::default()
+                    },
+                );
+            });
+        }
 
         self.cache.borrow_mut().update();
 
@@ -388,6 +381,7 @@ impl<'array> ArrayTable<'array> {
     ) -> Self {
         let last_parsed_max_depth = parse_result.as_ref().map_or(depth, |p| p.parsing_max_depth);
         Self {
+            table_id: Id::new(format!("table-container-{}", parent_pointer.pointer)),
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
             max_depth: depth,
@@ -660,7 +654,13 @@ impl<'array> ArrayTable<'array> {
         } else {
             None
         };
-        let focused_cell = self.focused_cell.or(self.editing_index.borrow().map(|(column_index, row_index, is_pinned_column_table)| CellLocation { column_index, row_index, is_pinned_column_table }));
+        let focused_cell = self.focused_cell.or(self.editing_index.borrow().map(
+            |(column_index, row_index, is_pinned_column_table)| CellLocation {
+                column_index,
+                row_index,
+                is_pinned_column_table,
+            },
+        ));
         let table_response = table
             .header(text_height * 2.0, |header| {
                 self.header(pinned_column_table, header);
@@ -679,6 +679,7 @@ impl<'array> ArrayTable<'array> {
                     );
                 },
             );
+
         let table_scroll_output = table_response.scroll_area_output;
         if self.scroll_y != table_scroll_output.state.offset.y {
             self.scroll_y = table_scroll_output.state.offset.y;
@@ -866,7 +867,9 @@ impl<'array> ArrayTable<'array> {
                         let ref_mut = &mut *self.editing_value.borrow_mut();
                         let textedit_response = ui.add(TextEdit::singleline(ref_mut));
                         if textedit_response.lost_focus()
-                            || ui.ctx().input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
+                            || ui
+                                .ctx()
+                                .input_mut(|input| input.consume_key(Modifiers::NONE, Key::Enter))
                         {
                             let pointer = PointerKey {
                                 pointer: Self::pointer_key(
@@ -886,6 +889,8 @@ impl<'array> ArrayTable<'array> {
                                 row_index: table_row_index,
                                 is_pinned_column_table: pinned_column_table,
                             });
+                            ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
+
                         } else {
                             textedit_response.request_focus();
                         }
@@ -926,6 +931,9 @@ impl<'array> ArrayTable<'array> {
                                         row_index: table_row_index,
                                         is_pinned_column_table: pinned_column_table,
                                     });
+
+                                    ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
+
                                     focused_changed = true;
                                 }
 
@@ -1039,6 +1047,7 @@ impl<'array> ArrayTable<'array> {
                             row_index: table_row_index,
                             is_pinned_column_table: pinned_column_table,
                         });
+                        ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
                         focused_changed = true;
                     }
 
@@ -1459,190 +1468,209 @@ impl<'array> ArrayTable<'array> {
 
     fn handle_shortcut(&mut self, ui: &mut Ui, array_response: &mut ArrayResponse) {
         let mut copied_value = None;
+        let maybe_focused_id = ui.ctx().memory(|m| m.focused());
         ui.input_mut(|i| {
             if i.key_pressed(Key::Escape) {
                 self.focused_cell = None;
             }
-            if let Some(focused_cell) = self.focused_cell.as_mut() {
-                // Tab is not consumed, so it also navigate to next component... will try after upgrading egui
-                // if i.consume_key(Modifiers::NONE, Key::Tab) {
-                //     if !focused_cell.is_pinned_column_table
-                //         && focused_cell.column_index < self.column_selected.len() - 1
-                //     {
-                //         focused_cell.column_index = focused_cell.column_index + 1;
-                //         self.scroll_to_column_number = focused_cell.column_index;
-                //         self.changed_arrow_horizontal_scroll = true;
-                //     } else if !focused_cell.is_pinned_column_table
-                //         && focused_cell.row_index < self.filtered_nodes.len() - 1
-                //     {
-                //         focused_cell.column_index = 0;
-                //         focused_cell.row_index = focused_cell.row_index + 1;
-                //         self.scroll_to_row_number = focused_cell.row_index;
-                //         self.changed_arrow_vertical_scroll = true;
-                //     } else if focused_cell.is_pinned_column_table
-                //         && focused_cell.column_index < self.column_pinned.len() - 1
-                //     {
-                //         focused_cell.column_index = focused_cell.column_index + 1;
-                //     } else if focused_cell.is_pinned_column_table {
-                //         focused_cell.column_index = 1;
-                //         focused_cell.row_index = focused_cell.row_index + 1;
-                //         self.scroll_to_row_number = focused_cell.row_index;
-                //         self.changed_arrow_vertical_scroll = true;
-                //     }
-                // }
-                if i.consume_key(Modifiers::NONE, Key::ArrowLeft) {
-                    if !focused_cell.is_pinned_column_table && focused_cell.column_index > 0 {
-                        focused_cell.column_index = focused_cell.column_index - 1;
-                        self.scroll_to_column_number = focused_cell.column_index;
-                        self.changed_arrow_horizontal_scroll = true;
-                    } else if focused_cell.is_pinned_column_table && focused_cell.column_index > 1 {
-                        focused_cell.column_index = focused_cell.column_index - 1;
-                    }
+
+            let mut is_table_focused = false;
+            if let Some(focused_id) = maybe_focused_id {
+                if focused_id == self.table_id {
+                    is_table_focused = true;
                 }
-                if i.consume_key(Modifiers::NONE, Key::ArrowRight) {
-                    if !focused_cell.is_pinned_column_table
-                        && focused_cell.column_index < self.column_selected.len() - 1
-                    {
-                        focused_cell.column_index = focused_cell.column_index + 1;
-                        self.scroll_to_column_number = focused_cell.column_index;
-                        self.changed_arrow_horizontal_scroll = true;
-                    } else if focused_cell.is_pinned_column_table
-                        && focused_cell.column_index < self.column_pinned.len() - 1
-                    {
-                        focused_cell.column_index = focused_cell.column_index + 1;
-                    }
-                }
-                if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
-                    if focused_cell.row_index > 0 {
-                        focused_cell.row_index = focused_cell.row_index - 1;
-                        self.scroll_to_row_number = focused_cell.row_index;
-                        self.changed_arrow_vertical_scroll = true;
-                    }
-                }
-                if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
-                    if focused_cell.row_index < self.filtered_nodes.len() - 1 {
-                        focused_cell.row_index = focused_cell.row_index + 1;
-                        self.scroll_to_row_number = focused_cell.row_index;
-                        self.changed_arrow_vertical_scroll = true;
-                    }
-                }
-                if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing  {
-                    *self.editing_index.borrow_mut() = Some((
-                        focused_cell.column_index,
-                        focused_cell.row_index,
-                        focused_cell.is_pinned_column_table,
-                    ));
-                    let row_index = self.filtered_nodes[focused_cell.row_index];
-                    let mut editing_value = String::new();
-                    let col_index = focused_cell.column_index;
-                    let is_pinned_column_table = focused_cell.is_pinned_column_table;
-                    {
-                        let node = self.nodes().get(row_index);
-                        if let Some(row_data) = node.as_ref() {
-                            let index = self.get_pointer_index_from_cache(is_pinned_column_table, row_data, col_index, );
-                            if let Some(index) = index {
-                                row_data.entries()[index].value.clone().map(|v| editing_value = v);
-                            }
+            }
+            if is_table_focused {
+                if let Some(focused_cell) = self.focused_cell.as_mut() {
+                    if i.consume_key(Modifiers::NONE, Key::Tab) {
+                        if !focused_cell.is_pinned_column_table
+                            && focused_cell.column_index < self.column_selected.len() - 1
+                        {
+                            focused_cell.column_index = focused_cell.column_index + 1;
+                            self.scroll_to_column_number = focused_cell.column_index;
+                            self.changed_arrow_horizontal_scroll = true;
+                        } else if !focused_cell.is_pinned_column_table
+                            && focused_cell.row_index < self.filtered_nodes.len() - 1
+                        {
+                            focused_cell.column_index = 0;
+                            focused_cell.row_index = focused_cell.row_index + 1;
+                            self.scroll_to_row_number = focused_cell.row_index;
+                            self.changed_arrow_vertical_scroll = true;
+                        } else if focused_cell.is_pinned_column_table
+                            && focused_cell.column_index < self.column_pinned.len() - 1
+                        {
+                            focused_cell.column_index = focused_cell.column_index + 1;
+                        } else if focused_cell.is_pinned_column_table {
+                            focused_cell.column_index = 1;
+                            focused_cell.row_index = focused_cell.row_index + 1;
+                            self.scroll_to_row_number = focused_cell.row_index;
+                            self.changed_arrow_vertical_scroll = true;
                         }
                     }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowLeft) {
+                        if !focused_cell.is_pinned_column_table && focused_cell.column_index > 0 {
+                            focused_cell.column_index = focused_cell.column_index - 1;
+                            self.scroll_to_column_number = focused_cell.column_index;
+                            self.changed_arrow_horizontal_scroll = true;
+                        } else if focused_cell.is_pinned_column_table
+                            && focused_cell.column_index > 1
+                        {
+                            focused_cell.column_index = focused_cell.column_index - 1;
+                        }
+                    }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowRight) {
+                        if !focused_cell.is_pinned_column_table
+                            && focused_cell.column_index < self.column_selected.len() - 1
+                        {
+                            focused_cell.column_index = focused_cell.column_index + 1;
+                            self.scroll_to_column_number = focused_cell.column_index;
+                            self.changed_arrow_horizontal_scroll = true;
+                        } else if focused_cell.is_pinned_column_table
+                            && focused_cell.column_index < self.column_pinned.len() - 1
+                        {
+                            focused_cell.column_index = focused_cell.column_index + 1;
+                        }
+                    }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                        if focused_cell.row_index > 0 {
+                            focused_cell.row_index = focused_cell.row_index - 1;
+                            self.scroll_to_row_number = focused_cell.row_index;
+                            self.changed_arrow_vertical_scroll = true;
+                        }
+                    }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                        if focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                            focused_cell.row_index = focused_cell.row_index + 1;
+                            self.scroll_to_row_number = focused_cell.row_index;
+                            self.changed_arrow_vertical_scroll = true;
+                        }
+                    }
+                    if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing {
+                        *self.editing_index.borrow_mut() = Some((
+                            focused_cell.column_index,
+                            focused_cell.row_index,
+                            focused_cell.is_pinned_column_table,
+                        ));
+                        let row_index = self.filtered_nodes[focused_cell.row_index];
+                        let mut editing_value = String::new();
+                        let col_index = focused_cell.column_index;
+                        let is_pinned_column_table = focused_cell.is_pinned_column_table;
+                        {
+                            let node = self.nodes().get(row_index);
+                            if let Some(row_data) = node.as_ref() {
+                                let index = self.get_pointer_index_from_cache(
+                                    is_pinned_column_table,
+                                    row_data,
+                                    col_index,
+                                );
+                                if let Some(index) = index {
+                                    row_data.entries()[index]
+                                        .value
+                                        .clone()
+                                        .map(|v| editing_value = v);
+                                }
+                            }
+                        }
 
-                    *self.editing_value.borrow_mut() = editing_value;
+                        *self.editing_value.borrow_mut() = editing_value;
+                    }
                 }
-            }
-            if i.consume_shortcut(&SHORTCUT_DELETE) {
-                i.events.push(egui::Event::Key {
-                    key: Key::Delete,
-                    physical_key: None,
-                    pressed: false,
-                    repeat: false,
-                    modifiers: Default::default(),
-                })
-            }
-            if i.consume_shortcut(&SHORTCUT_REPLACE) {
-                self.open_replace_panel(None);
-            }
-            let hovered_cell = array_response.hover_data.hovered_cell;
-            for event in i.events.iter().filter(|e| match e {
-                egui::Event::Copy => hovered_cell.is_some(),
-                egui::Event::Paste(_) => hovered_cell.is_some(),
-                egui::Event::Key {
-                    key: Key::Delete, ..
-                } => hovered_cell.is_some(),
-                _ => false,
-            }) {
-                let cell_location = hovered_cell.unwrap();
-                let row_index = self.filtered_nodes[cell_location.row_index];
-                let index = self.get_pointer_index_from_cache(
-                    cell_location.is_pinned_column_table,
-                    &&self.nodes[row_index],
-                    cell_location.column_index,
-                );
 
-                match event {
+                if i.consume_shortcut(&SHORTCUT_DELETE) {
+                    i.events.push(egui::Event::Key {
+                        key: Key::Delete,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: Default::default(),
+                    })
+                }
+                if i.consume_shortcut(&SHORTCUT_REPLACE) {
+                    self.open_replace_panel(None);
+                }
+                let hovered_cell = array_response.hover_data.hovered_cell;
+                for event in i.events.iter().filter(|e| match e {
+                    egui::Event::Copy => hovered_cell.is_some(),
+                    egui::Event::Paste(_) => hovered_cell.is_some(),
                     egui::Event::Key {
                         key: Key::Delete, ..
-                    } => {
-                        let columns = self.columns(cell_location.is_pinned_column_table);
-                        let pointer = Self::pointer_key(
-                            &self.parent_pointer.pointer,
-                            row_index,
-                            columns
-                                .get(cell_location.column_index)
-                                .as_ref()
-                                .unwrap()
-                                .name
-                                .as_str(),
-                        );
-                        let flat_json_value = FlatJsonValue::<String> {
-                            pointer: PointerKey {
-                                pointer,
-                                value_type: columns[cell_location.column_index].value_type,
-                                depth: columns[cell_location.column_index].depth,
-                                position: 0,
-                                column_id: columns[cell_location.column_index].id,
-                            },
-                            value: None,
-                        };
-                        self.update_value(flat_json_value, row_index, !self.is_sub_table);
-                    }
-                    egui::Event::Paste(v) => {
-                        let columns = self.columns(cell_location.is_pinned_column_table);
-                        let pointer = Self::pointer_key(
-                            &self.parent_pointer.pointer,
-                            row_index,
-                            &columns
-                                .get(cell_location.column_index)
-                                .as_ref()
-                                .unwrap()
-                                .name,
-                        );
-                        let mut flat_json_value = FlatJsonValue::<String> {
-                            pointer: PointerKey {
-                                pointer,
-                                value_type: columns[cell_location.column_index].value_type,
-                                depth: columns[cell_location.column_index].depth,
-                                position: 0,
-                                column_id: columns[cell_location.column_index].id,
-                            },
-                            value: Some(v.clone()),
-                        };
-                        match flat_json_value.pointer.value_type {
-                            // When we paste an object it should not be considered as parsed
-                            ValueType::Object(..) => {
-                                flat_json_value.pointer.value_type = ValueType::Object(false, 0)
-                            }
-                            _ => {}
+                    } => hovered_cell.is_some(),
+                    _ => false,
+                }) {
+                    let cell_location = hovered_cell.unwrap();
+                    let row_index = self.filtered_nodes[cell_location.row_index];
+                    let index = self.get_pointer_index_from_cache(
+                        cell_location.is_pinned_column_table,
+                        &&self.nodes[row_index],
+                        cell_location.column_index,
+                    );
+
+                    match event {
+                        egui::Event::Key {
+                            key: Key::Delete, ..
+                        } => {
+                            let columns = self.columns(cell_location.is_pinned_column_table);
+                            let pointer = Self::pointer_key(
+                                &self.parent_pointer.pointer,
+                                row_index,
+                                columns
+                                    .get(cell_location.column_index)
+                                    .as_ref()
+                                    .unwrap()
+                                    .name
+                                    .as_str(),
+                            );
+                            let flat_json_value = FlatJsonValue::<String> {
+                                pointer: PointerKey {
+                                    pointer,
+                                    value_type: columns[cell_location.column_index].value_type,
+                                    depth: columns[cell_location.column_index].depth,
+                                    position: 0,
+                                    column_id: columns[cell_location.column_index].id,
+                                },
+                                value: None,
+                            };
+                            self.update_value(flat_json_value, row_index, !self.is_sub_table);
                         }
-                        self.edit_cell(array_response, flat_json_value, row_index);
-                    }
-                    egui::Event::Copy => {
-                        if let Some(index) = index {
-                            if let Some(value) = &self.nodes[row_index].entries()[index].value {
-                                copied_value = Some(value.clone());
+                        egui::Event::Paste(v) => {
+                            let columns = self.columns(cell_location.is_pinned_column_table);
+                            let pointer = Self::pointer_key(
+                                &self.parent_pointer.pointer,
+                                row_index,
+                                &columns
+                                    .get(cell_location.column_index)
+                                    .as_ref()
+                                    .unwrap()
+                                    .name,
+                            );
+                            let mut flat_json_value = FlatJsonValue::<String> {
+                                pointer: PointerKey {
+                                    pointer,
+                                    value_type: columns[cell_location.column_index].value_type,
+                                    depth: columns[cell_location.column_index].depth,
+                                    position: 0,
+                                    column_id: columns[cell_location.column_index].id,
+                                },
+                                value: Some(v.clone()),
+                            };
+                            match flat_json_value.pointer.value_type {
+                                // When we paste an object it should not be considered as parsed
+                                ValueType::Object(..) => {
+                                    flat_json_value.pointer.value_type = ValueType::Object(false, 0)
+                                }
+                                _ => {}
+                            }
+                            self.edit_cell(array_response, flat_json_value, row_index);
+                        }
+                        egui::Event::Copy => {
+                            if let Some(index) = index {
+                                if let Some(value) = &self.nodes[row_index].entries()[index].value {
+                                    copied_value = Some(value.clone());
+                                }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             }
         });

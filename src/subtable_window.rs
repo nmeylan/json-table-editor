@@ -37,7 +37,7 @@ impl <'array>SubTable<'array> {
             Self {
                 name: name.clone(),
                 array_table: None,
-                object_table: Some(ObjectTable::new(result.json)),
+                object_table: Some(ObjectTable::new(result.json, name)),
                 row_index: index_in_json_entries_array,
             }
         }

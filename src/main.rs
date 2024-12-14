@@ -69,6 +69,7 @@ pub trait Window<R> {
 struct ArrayResponse {
     pub(crate) edited_value: Vec<FlatJsonValue<String>>,
     pub(crate) hover_data: HoverData,
+    pub(crate) focused_cell: bool
 }
 
 impl ArrayResponse {
