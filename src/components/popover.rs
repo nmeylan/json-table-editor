@@ -6,6 +6,7 @@
 use eframe::egui::{InnerResponse, Response, ScrollArea, Ui, WidgetInfo, WidgetType};
 
 use eframe::egui::{*};
+use egui::CursorIcon::Text;
 
 pub struct PopupMenu {
     id_source: Id,
@@ -114,7 +115,7 @@ fn popup<'c, R>(
             ScrollArea::vertical()
                 .max_height(height)
                 .show(ui, |ui| {
-                    ui.style_mut().wrap = Some(false);
+                    ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
                     menu_contents(ui)
                 })
                 .inner
