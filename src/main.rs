@@ -28,6 +28,7 @@ use eframe::egui::Context;
 use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
 use eframe::epaint::text::TextWrapMode;
 use egui::{ScrollArea, TextBuffer};
+use egui::style::ScrollStyle;
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -361,7 +362,13 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 
 impl<'array> eframe::App for MyApp<'array> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
-
+        // ctx.set_theme(Theme::Light);
+        ctx.style_mut(|style| {
+            style.spacing.scroll = ScrollStyle::thin();
+            style.spacing.scroll.bar_width = 4.0;
+            style.spacing.scroll.floating = false;
+            style.spacing.scroll.foreground_color = true;
+        });
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
