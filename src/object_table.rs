@@ -10,6 +10,7 @@ use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use std::cell::RefCell;
 use std::mem;
+use crate::array_table::ArrayTable;
 
 pub struct ObjectTable {
     pub table_id: Id,
@@ -294,12 +295,16 @@ impl ObjectTable {
                             self.changed_arrow_vertical_scroll = true;
                         }
                     }
-                    if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing {
-                        *self.editing_index.borrow_mut() = Some(focused_cell.row_index);
-
+                    let typed_alphanum = ArrayTable::get_typed_alphanum_from_events(i);
+                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter)) && !self.was_editing {
                         let row_index = self.filtered_nodes[focused_cell.row_index];
+                        *self.editing_index.borrow_mut() = Some(row_index);
                         let entry = &self.nodes[row_index];
-                        *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
+                        if let Some(typed_key) = typed_alphanum {
+                            *self.editing_value.borrow_mut() = typed_key;
+                        } else {
+                            *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
+                        }
                     }
                 }
                 if i.consume_shortcut(&SHORTCUT_DELETE) {

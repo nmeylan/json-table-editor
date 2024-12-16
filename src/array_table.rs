@@ -16,7 +16,7 @@ use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
     WidgetText,
 };
-use egui::{EventFilter, Modifiers, TextBuffer};
+use egui::{EventFilter, InputState, Modifiers, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
@@ -1540,35 +1540,40 @@ impl<'array> ArrayTable<'array> {
                             self.changed_arrow_vertical_scroll = true;
                         }
                     }
-                    if i.consume_key(Modifiers::NONE, Key::Enter) && !self.was_editing {
+                    let typed_alphanum = Self::get_typed_alphanum_from_events(i);
+                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter)) && !self.was_editing {
+                        let row_index = self.filtered_nodes[focused_cell.row_index];
                         *self.editing_index.borrow_mut() = Some((
                             focused_cell.column_index,
-                            focused_cell.row_index,
+                            row_index,
                             focused_cell.is_pinned_column_table,
                         ));
-                        let row_index = self.filtered_nodes[focused_cell.row_index];
-                        let mut editing_value = String::new();
                         let col_index = focused_cell.column_index;
                         let is_pinned_column_table = focused_cell.is_pinned_column_table;
-                        {
-                            let node = self.nodes().get(row_index);
-                            if let Some(row_data) = node.as_ref() {
-                                let index = self.get_pointer_index_from_cache(
-                                    is_pinned_column_table,
-                                    row_data,
-                                    col_index,
-                                );
-                                if let Some(index) = index {
-                                    row_data.entries()[index]
-                                        .value
-                                        .clone()
-                                        .map(|v| editing_value = v);
+                        let mut editing_value = String::new();
+                        if let Some(typed_key) = typed_alphanum {
+                            editing_value = typed_key;
+                        } else {
+                            {
+                                let node = self.nodes().get(row_index);
+                                if let Some(row_data) = node.as_ref() {
+                                    let index = self.get_pointer_index_from_cache(
+                                        is_pinned_column_table,
+                                        row_data,
+                                        col_index,
+                                    );
+                                    if let Some(index) = index {
+                                        row_data.entries()[index]
+                                            .value
+                                            .clone()
+                                            .map(|v| editing_value = v);
+                                    }
                                 }
                             }
                         }
-
                         *self.editing_value.borrow_mut() = editing_value;
                     }
+
                 }
 
                 if i.consume_shortcut(&SHORTCUT_DELETE) {
@@ -1672,6 +1677,28 @@ impl<'array> ArrayTable<'array> {
         if let Some(value) = copied_value {
             ui.ctx().copy_text(value.clone());
         }
+    }
+
+    pub fn get_typed_alphanum_from_events(i: &mut InputState) -> Option<String> {
+        let mut typed_alphanum: Option<String> = None;
+        i.events.iter().any(|e| match e {
+            egui::Event::Key { key, modifiers, .. } if matches!(
+                            key,
+                            Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G | Key::H
+                                | Key::I | Key::J | Key::K | Key::L | Key::M | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
+                                | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
+                                | Key::Num0 | Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 | Key::Num5 | Key::Num6 | Key::Num7 | Key::Num8 | Key::Num9
+                        ) => {
+                let mut typed_char = key.name().to_string();
+                if !matches!(modifiers, &Modifiers::SHIFT) {
+                    typed_char = typed_char.to_lowercase();
+                }
+                typed_alphanum = Some(typed_char);
+                true
+            },
+            _ => false
+        });
+        typed_alphanum
     }
 
     pub fn replace_columns(
