@@ -1588,89 +1588,90 @@ impl<'array> ArrayTable<'array> {
                 if i.consume_shortcut(&SHORTCUT_REPLACE) {
                     self.open_replace_panel(None);
                 }
-                let hovered_cell = array_response.hover_data.hovered_cell;
-                for event in i.events.iter().filter(|e| match e {
-                    egui::Event::Copy => hovered_cell.is_some(),
-                    egui::Event::Paste(_) => hovered_cell.is_some(),
+
+            }
+            let hovered_cell = array_response.hover_data.hovered_cell;
+            for event in i.events.iter().filter(|e| match e {
+                egui::Event::Copy => hovered_cell.is_some(),
+                egui::Event::Paste(_) => hovered_cell.is_some(),
+                egui::Event::Key {
+                    key: Key::Delete, ..
+                } => hovered_cell.is_some(),
+                _ => false,
+            }) {
+                let cell_location = hovered_cell.unwrap();
+                let row_index = self.filtered_nodes[cell_location.row_index];
+                let index = self.get_pointer_index_from_cache(
+                    cell_location.is_pinned_column_table,
+                    &&self.nodes[row_index],
+                    cell_location.column_index,
+                );
+
+                match event {
                     egui::Event::Key {
                         key: Key::Delete, ..
-                    } => hovered_cell.is_some(),
-                    _ => false,
-                }) {
-                    let cell_location = hovered_cell.unwrap();
-                    let row_index = self.filtered_nodes[cell_location.row_index];
-                    let index = self.get_pointer_index_from_cache(
-                        cell_location.is_pinned_column_table,
-                        &&self.nodes[row_index],
-                        cell_location.column_index,
-                    );
-
-                    match event {
-                        egui::Event::Key {
-                            key: Key::Delete, ..
-                        } => {
-                            let columns = self.columns(cell_location.is_pinned_column_table);
-                            let pointer = Self::pointer_key(
-                                &self.parent_pointer.pointer,
-                                row_index,
-                                columns
-                                    .get(cell_location.column_index)
-                                    .as_ref()
-                                    .unwrap()
-                                    .name
-                                    .as_str(),
-                            );
-                            let flat_json_value = FlatJsonValue::<String> {
-                                pointer: PointerKey {
-                                    pointer,
-                                    value_type: columns[cell_location.column_index].value_type,
-                                    depth: columns[cell_location.column_index].depth,
-                                    position: 0,
-                                    column_id: columns[cell_location.column_index].id,
-                                },
-                                value: None,
-                            };
-                            self.update_value(flat_json_value, row_index, !self.is_sub_table);
-                        }
-                        egui::Event::Paste(v) => {
-                            let columns = self.columns(cell_location.is_pinned_column_table);
-                            let pointer = Self::pointer_key(
-                                &self.parent_pointer.pointer,
-                                row_index,
-                                &columns
-                                    .get(cell_location.column_index)
-                                    .as_ref()
-                                    .unwrap()
-                                    .name,
-                            );
-                            let mut flat_json_value = FlatJsonValue::<String> {
-                                pointer: PointerKey {
-                                    pointer,
-                                    value_type: columns[cell_location.column_index].value_type,
-                                    depth: columns[cell_location.column_index].depth,
-                                    position: 0,
-                                    column_id: columns[cell_location.column_index].id,
-                                },
-                                value: Some(v.clone()),
-                            };
-                            match flat_json_value.pointer.value_type {
-                                // When we paste an object it should not be considered as parsed
-                                ValueType::Object(..) => {
-                                    flat_json_value.pointer.value_type = ValueType::Object(false, 0)
-                                }
-                                _ => {}
-                            }
-                            self.edit_cell(array_response, flat_json_value, row_index);
-                        }
-                        egui::Event::Copy => {
-                            if let Some(index) = index {
-                                if let Some(value) = &self.nodes[row_index].entries()[index].value {
-                                    copied_value = Some(value.clone());
-                                }
-                            }
-                        }
-                        _ => {}
+                    } => {
+                        let columns = self.columns(cell_location.is_pinned_column_table);
+                        let pointer = Self::pointer_key(
+                            &self.parent_pointer.pointer,
+                            row_index,
+                            columns
+                                .get(cell_location.column_index)
+                                .as_ref()
+                                .unwrap()
+                                .name
+                                .as_str(),
+                        );
+                        let flat_json_value = FlatJsonValue::<String> {
+                            pointer: PointerKey {
+                                pointer,
+                                value_type: columns[cell_location.column_index].value_type,
+                                depth: columns[cell_location.column_index].depth,
+                                position: 0,
+                                column_id: columns[cell_location.column_index].id,
+                            },
+                            value: None,
+                        };
+                        self.update_value(flat_json_value, row_index, !self.is_sub_table);
                     }
+                    egui::Event::Paste(v) => {
+                        let columns = self.columns(cell_location.is_pinned_column_table);
+                        let pointer = Self::pointer_key(
+                            &self.parent_pointer.pointer,
+                            row_index,
+                            &columns
+                                .get(cell_location.column_index)
+                                .as_ref()
+                                .unwrap()
+                                .name,
+                        );
+                        let mut flat_json_value = FlatJsonValue::<String> {
+                            pointer: PointerKey {
+                                pointer,
+                                value_type: columns[cell_location.column_index].value_type,
+                                depth: columns[cell_location.column_index].depth,
+                                position: 0,
+                                column_id: columns[cell_location.column_index].id,
+                            },
+                            value: Some(v.clone()),
+                        };
+                        match flat_json_value.pointer.value_type {
+                            // When we paste an object it should not be considered as parsed
+                            ValueType::Object(..) => {
+                                flat_json_value.pointer.value_type = ValueType::Object(false, 0)
+                            }
+                            _ => {}
+                        }
+                        self.edit_cell(array_response, flat_json_value, row_index);
+                    }
+                    egui::Event::Copy => {
+                        if let Some(index) = index {
+                            if let Some(value) = &self.nodes[row_index].entries()[index].value {
+                                copied_value = Some(value.clone());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         });
@@ -1681,22 +1682,30 @@ impl<'array> ArrayTable<'array> {
 
     pub fn get_typed_alphanum_from_events(i: &mut InputState) -> Option<String> {
         let mut typed_alphanum: Option<String> = None;
-        i.events.iter().any(|e| match e {
-            egui::Event::Key { key, modifiers, .. } if matches!(
+        i.events.retain(|e| {
+            match e {
+                egui::Event::Key { key, modifiers, .. } if matches!(
                             key,
                             Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G | Key::H
                                 | Key::I | Key::J | Key::K | Key::L | Key::M | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
                                 | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
                                 | Key::Num0 | Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 | Key::Num5 | Key::Num6 | Key::Num7 | Key::Num8 | Key::Num9
                         ) => {
-                let mut typed_char = key.name().to_string();
-                if !matches!(modifiers, &Modifiers::SHIFT) {
-                    typed_char = typed_char.to_lowercase();
-                }
-                typed_alphanum = Some(typed_char);
-                true
-            },
-            _ => false
+
+                    if modifiers.ctrl || modifiers.command || modifiers.alt || modifiers.mac_cmd {
+                        typed_alphanum = None;
+                        return true;
+                    } else {
+                        let mut typed_char = key.name().to_string();
+                        if !matches!(modifiers, &Modifiers::SHIFT) {
+                            typed_char = typed_char.to_lowercase();
+                        }
+                        typed_alphanum = Some(typed_char);
+                    }
+                    false
+                },
+                _ => true
+            }
         });
         typed_alphanum
     }
