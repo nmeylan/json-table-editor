@@ -105,11 +105,11 @@ impl ObjectTable {
                                         row_index: table_row_index,
                                         is_pinned_column_table: false,
                                     });
-                                    ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
 
                                 } else {
                                     textedit_response.request_focus();
                                 }
+
                                 None
                             } else {
                                 let rect = ui.available_rect_before_wrap();
@@ -175,6 +175,9 @@ impl ObjectTable {
                     self.was_editing = true;
                 }
             });
+        if self.was_editing {
+            ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
+        }
         array_response
     }
 

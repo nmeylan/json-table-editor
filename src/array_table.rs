@@ -884,7 +884,6 @@ impl<'array> ArrayTable<'array> {
                                 row_index: table_row_index,
                                 is_pinned_column_table: pinned_column_table,
                             });
-                            ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
 
                         } else {
                             textedit_response.request_focus();
@@ -1085,6 +1084,9 @@ impl<'array> ArrayTable<'array> {
 
                     if response.hovered() {
                         ui.ctx().set_cursor_icon(CursorIcon::Cell);
+                    }
+                    if updated_value.is_some() {
+                        ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
                     }
                     Some(response)
                 });
