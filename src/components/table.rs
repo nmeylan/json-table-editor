@@ -318,10 +318,12 @@ impl<'l> StripLayout<'l> {
 
         self.ui.advance_cursor_after_rect(allocation_rect);
 
-        let mut response = child_ui.response();
+        let mut response;
 
-        if let Some(child_response) = child_response {
-            response = response.union(child_response);
+        if child_response.is_none() {
+            response = child_ui.response();
+        } else {
+            response = child_response.unwrap();
         }
         (used_rect, response)
     }
