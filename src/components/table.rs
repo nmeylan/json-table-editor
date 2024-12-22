@@ -148,7 +148,7 @@ impl From<Vec<Size>> for Sizing {
 use std::mem;
 use eframe::egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
 use eframe::egui::scroll_area::ScrollAreaOutput;
-
+use egui::UiBuilder;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -309,14 +309,14 @@ impl<'l> StripLayout<'l> {
         let used_rect = child_ui.min_rect();
 
         self.set_pos(max_rect);
+        //
+        // let allocation_rect = if flags.clip {
+        //     max_rect
+        // } else {
+        //     max_rect.union(used_rect)
+        // };
 
-        let allocation_rect = if flags.clip {
-            max_rect
-        } else {
-            max_rect.union(used_rect)
-        };
-
-        self.ui.advance_cursor_after_rect(allocation_rect);
+        // self.ui.advance_cursor_after_rect(allocation_rect);
 
         let mut response;
 
@@ -390,9 +390,9 @@ impl<'l> StripLayout<'l> {
         cell_index: usize,
         add_cell_contents: Option<impl FnOnce(&mut Ui, usize) -> Option<Response>>,
     ) -> (Ui, Option<Response>) {
+
         let mut child_ui =
-            self.ui
-                .child_ui_with_id_source(rect, self.cell_layout, child_ui_id_source, None);
+            self.ui.new_child(UiBuilder::new().id_salt(child_ui_id_source).layout(self.cell_layout).max_rect(rect));
 
         if flags.clip {
             let margin = egui::Vec2::splat(self.ui.visuals().clip_rect_margin);
