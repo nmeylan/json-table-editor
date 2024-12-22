@@ -634,12 +634,12 @@ impl<'array> ArrayTable<'array> {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
                     continue;
                 }
-                // table = table.column(Column::initial(10.0).clip(true).resizable(true));
-                table = table.column(
-                    Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
-                        .clip(true)
-                        .resizable(true),
-                );
+                table = table.column(Column::initial(10.0).clip(true).resizable(true));
+                // table = table.column(
+                //     Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
+                //         .clip(true)
+                //         .resizable(true),
+                // );
             }
         }
 
@@ -893,7 +893,7 @@ impl<'array> ArrayTable<'array> {
                         let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
                         let is_object = matches!(entry.pointer.value_type, ValueType::Object(..));
                         if pinned_column_table && col_index == 0 {
-                            let label = Label::new(row_index.to_string()).sense(Sense::click());
+                            let label = Label::new(row_index.to_string());
                             return Some(label.ui(ui));
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
@@ -906,7 +906,7 @@ impl<'array> ArrayTable<'array> {
                                 let rect = ui.available_rect_before_wrap();
                                 let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
-                                label = label.sense(Sense::click());
+                                label = label;
                                 let mut response = cell_zone.union(label.ui(ui));
 
                                 let is_array =
@@ -1028,6 +1028,7 @@ impl<'array> ArrayTable<'array> {
                             }
                         }
                     }
+                    // No value cell
                     let rect = ui.available_rect_before_wrap();
                     let response = ui.interact(rect, Id::new(cell_id), Sense::click());
                     if response.double_clicked() {
