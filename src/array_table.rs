@@ -366,6 +366,7 @@ impl<'array>
     }
 }
 
+
 pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
 
 impl<'array> ArrayTable<'array> {
@@ -892,18 +893,13 @@ impl<'array> ArrayTable<'array> {
                         }
                     } else if let Some(index) = index {
                         let entry = &row_data.entries()[index];
-                        let is_array = matches!(entry.pointer.value_type, ValueType::Array(_));
-                        let is_object = matches!(entry.pointer.value_type, ValueType::Object(..));
+
                         if pinned_column_table && col_index == 0 {
                             let label = Label::new(row_index.to_string());
                             return Some(label.ui(ui));
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
-                                let mut label = if is_array || is_object {
-                                    CellText::new(value.replace('\n', "")) // maybe we want cache
-                                } else {
-                                    CellText::new(value.clone())
-                                };
+                                let mut label = CellText::new(value.clone());
 
                                 let mut response = label.ui(ui, cell_id);
 
