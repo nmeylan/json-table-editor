@@ -21,6 +21,7 @@ impl  CellText {
         let widget_text = WidgetText::RichText(rich_text);
         let mut layout_job = widget_text.into_layout_job(ui.style(), FontSelection::Default, valign);
 
+        layout_job.break_on_newline = false;
         layout_job.wrap.max_width = f32::INFINITY;
         layout_job.halign = Align::LEFT;
         layout_job.justify = false;
