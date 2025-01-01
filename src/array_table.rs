@@ -36,6 +36,8 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+use eframe::epaint::text::TextWrapMode;
+use crate::components::cell_text::CellText;
 
 #[derive(Clone, Debug)]
 pub struct Column<'col> {
@@ -898,16 +900,12 @@ impl<'array> ArrayTable<'array> {
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
                                 let mut label = if is_array || is_object {
-                                    Label::new(value.replace('\n', "")) // maybe we want cache
+                                    CellText::new(value.replace('\n', "")) // maybe we want cache
                                 } else {
-                                    Label::new(value)
+                                    CellText::new(value.clone())
                                 };
 
-                                let rect = ui.available_rect_before_wrap();
-                                let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
-
-                                label = label;
-                                let mut response = cell_zone.union(label.ui(ui));
+                                let mut response = label.ui(ui, cell_id);
 
                                 let is_array =
                                     matches!(entry.pointer.value_type, ValueType::Array(_));
