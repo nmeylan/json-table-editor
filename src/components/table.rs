@@ -772,7 +772,7 @@ impl<'a> TableBuilder<'a> {
                     remainder_with += width + layout.ui.spacing().item_spacing[0];
                 }
             }
-
+            let mut hover_data= Default::default();
             add_header_row(TableRow {
                 layout: &mut layout,
                 columns: &columns,
@@ -789,6 +789,7 @@ impl<'a> TableBuilder<'a> {
                 hovered: false,
                 selected: false,
                 response: &mut response,
+                hover_data: &mut hover_data,
                 highlighted: false,
                 highlighted_cell: None,
                 selected_cell: None,
@@ -1150,10 +1151,11 @@ pub struct CellLocation {
     pub is_pinned_column_table: bool,
 }
 
-#[derive(Copy, Clone, Default, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct HoverData {
     pub hovered_row: Option<usize>,
     pub hovered_cell: Option<CellLocation>,
+    pub response_rows: Option<Response>
 }
 
 impl HoverData {
@@ -1161,6 +1163,7 @@ impl HoverData {
         Self {
             hovered_row: None,
             hovered_cell,
+            response_rows: None,
         }
     }
     pub fn union(&mut self, other: HoverData) -> Self {
@@ -1258,6 +1261,8 @@ impl<'a> TableBody<'a> {
             ((scroll_offset_y + max_height) / row_height_with_spacing).ceil() as usize + 1;
         let max_row = max_row.min(total_rows);
 
+        let mut response_union : Option<Response> = None;
+        let mut hover_data = Default::default();
         for row_index in min_row..max_row {
             let mut response: Option<Response> = None;
             add_row_content(TableRow {
@@ -1278,11 +1283,17 @@ impl<'a> TableBody<'a> {
                 selected_cell: self.hovered_cell_index,
                 selected: false,
                 response: &mut response,
+                hover_data: &mut hover_data,
                 remainder_with: 0.0,
                 hovered_cell_index_id: Some(self.hovered_cell_index_id),
                 is_pinned_column_table: self.is_pinned_column_table,
             });
             self.capture_hover_state(&response, row_index);
+            if response_union.is_none() {
+                response_union = response;
+            } else {
+                response_union = response_union.map(|r| r.union(response.unwrap()));
+            }
         }
 
         if total_rows - max_row > 0 {
@@ -1293,7 +1304,8 @@ impl<'a> TableBody<'a> {
         HoverData {
             hovered_row: self.hovered_row_index,
             hovered_cell: self.hovered_cell_index,
-        }
+            response_rows: response_union,
+        }.union(hover_data)
     }
 
 
@@ -1342,6 +1354,7 @@ pub struct TableRow<'a, 'b> {
     selected: bool,
 
     response: &'b mut Option<Response>,
+    hover_data: &'b mut HoverData,
     pub remainder_with: f32,
     pub highlighted: bool,
     pub highlighted_cell: Option<usize>,
@@ -1350,6 +1363,7 @@ pub struct TableRow<'a, 'b> {
     is_pinned_column_table: bool,
 }
 
+#[derive(Debug)]
 pub struct ColumnResponse {
     pub clicked_col_index: Option<usize>,
     pub double_clicked_col_index: Option<usize>,
@@ -1496,7 +1510,9 @@ impl<'a, 'b> TableRow<'a, 'b> {
             last_index = *col_index;
         }
         if let Some(hovered_col_index) = column_response.hovered_col_index {
-            self.capture_hover_cell_state(CellLocation { column_index: hovered_col_index, row_index: self.row_index, is_pinned_column_table: self.is_pinned_column_table });
+            let cell_location = CellLocation { column_index: hovered_col_index, row_index: self.row_index, is_pinned_column_table: self.is_pinned_column_table };
+            self.capture_hover_cell_state(cell_location);
+            self.hover_data.hovered_cell = Some(cell_location);
         }
         if !self.columns.is_empty() && is_header && last_index < self.columns.len() - 1 {
             self.layout.add_empty(
