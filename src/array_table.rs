@@ -636,12 +636,12 @@ impl<'array> ArrayTable<'array> {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
                     continue;
                 }
-                table = table.column(Column::initial(10.0).clip(true).resizable(true));
-                // table = table.column(
-                //     Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
-                //         .clip(true)
-                //         .resizable(true),
-                // );
+                // table = table.column(Column::initial(10.0).clip(true).resizable(true));
+                table = table.column(
+                    Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
+                        .clip(true)
+                        .resizable(true),
+                );
             }
         }
 
