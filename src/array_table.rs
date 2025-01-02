@@ -1,3 +1,4 @@
+use crate::components::cell_text::CellText;
 use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::popover::PopupMenu;
@@ -16,6 +17,7 @@ use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
     WidgetText,
 };
+use eframe::epaint::text::TextWrapMode;
 use egui::{EventFilter, InputState, Modifiers, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
@@ -36,8 +38,6 @@ use std::ops::Sub;
 use std::string::ToString;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use eframe::epaint::text::TextWrapMode;
-use crate::components::cell_text::CellText;
 
 #[derive(Clone, Debug)]
 pub struct Column<'col> {
@@ -365,7 +365,6 @@ impl<'array>
         )
     }
 }
-
 
 pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
 
@@ -887,7 +886,6 @@ impl<'array> ArrayTable<'array> {
                                 row_index: table_row_index,
                                 is_pinned_column_table: pinned_column_table,
                             });
-
                         } else {
                             textedit_response.request_focus();
                         }
@@ -902,11 +900,6 @@ impl<'array> ArrayTable<'array> {
                                 let mut label = CellText::new(value.clone());
 
                                 let mut response = label.ui(ui, cell_id);
-
-                                let is_array =
-                                    matches!(entry.pointer.value_type, ValueType::Array(_));
-                                let is_object =
-                                    matches!(entry.pointer.value_type, ValueType::Object(..));
 
                                 if response.double_clicked() {
                                     *self.editing_value.borrow_mut() = value.clone();
@@ -924,86 +917,6 @@ impl<'array> ArrayTable<'array> {
 
                                     focused_changed = true;
                                 }
-
-                                response.context_menu(|ui| {
-                                    let button = ButtonWithIcon::new("Edit", PENCIL);
-                                    if ui.add(button).clicked() {
-                                        *self.editing_value.borrow_mut() = value.clone();
-                                        *editing_index =
-                                            Some((col_index, row_index, pinned_column_table));
-                                        ui.close_menu();
-                                    }
-                                    let button = ButtonWithIcon::new("Copy", COPY)
-                                        .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
-                                    if ui.add(button).clicked() {
-                                        ui.ctx().copy_text(value.clone());
-                                        ui.close_menu();
-                                    }
-                                    // let button = ButtonWithIcon::new("Paste", PASTE).shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_PASTE));
-                                    // if ui.add(button).clicked() {
-                                    //     ui.close_menu();
-                                    // }
-                                    if Self::is_filterable(&columns[col_index]) {
-                                        let button =
-                                            ButtonWithIcon::new("Filter by this value", FILTER);
-                                        if ui.add(button).clicked() {
-                                            filter_by_value = Some((
-                                                columns[col_index].name.to_string(),
-                                                value.clone(),
-                                            ));
-                                            ui.close_menu();
-                                        }
-                                    }
-                                    ui.separator();
-                                    let button = ButtonWithIcon::new("Insert row above", PLUS);
-                                    if ui.add(button).clicked() {
-                                        insert_row_at_index = Some((table_row_index, 0));
-                                        ui.close_menu();
-                                    }
-
-                                    let button = ButtonWithIcon::new("Insert row below", PLUS);
-                                    if ui.add(button).clicked() {
-                                        insert_row_at_index = Some((table_row_index, 1));
-                                        ui.close_menu();
-                                    }
-                                    if is_array || is_object {
-                                        ui.separator();
-                                        let button = ButtonWithIcon::new(
-                                            format!(
-                                                "Open {} in sub table",
-                                                if is_array { "array" } else { "object" }
-                                            ),
-                                            TABLE_CELLS,
-                                        );
-                                        if ui.add(button).clicked() {
-                                            ui.close_menu();
-                                            let content = value.clone();
-                                            subtable =
-                                                Self::open_subtable(row_index, entry, content);
-                                        }
-                                    }
-                                    if !self.is_sub_table {
-                                        ui.separator();
-                                        let button =
-                                            ButtonWithIcon::new("Open row in sub table", TABLE);
-                                        if ui.add(button).clicked() {
-                                            ui.close_menu();
-                                            let root_node = row_data.entries.last().unwrap();
-                                            subtable = Some(SubTable::new(
-                                                root_node.pointer.clone(),
-                                                root_node.value.as_ref().unwrap().clone(),
-                                                ValueType::Object(true, 0),
-                                                row_index,
-                                                root_node.pointer.depth,
-                                            ));
-                                        }
-                                    }
-                                    ui.separator();
-                                    if ui.button("Copy pointer").clicked() {
-                                        ui.ctx().copy_text(entry.pointer.pointer.clone());
-                                        ui.close_menu();
-                                    }
-                                });
 
                                 if response.hovered() {
                                     ui.ctx().set_cursor_icon(CursorIcon::Cell);
@@ -1040,43 +953,6 @@ impl<'array> ArrayTable<'array> {
                         focused_changed = true;
                     }
 
-                    response.context_menu(|ui| {
-                        let button = ButtonWithIcon::new("Edit", PENCIL);
-                        if ui.add(button).clicked() {
-                            *self.editing_value.borrow_mut() = String::new();
-                            *editing_index = Some((col_index, row_index, pinned_column_table));
-                            ui.close_menu();
-                        }
-
-                        ui.separator();
-                        let button = ButtonWithIcon::new("Insert row above", PLUS);
-                        if ui.add(button).clicked() {
-                            insert_row_at_index = Some((table_row_index, 0));
-                            ui.close_menu();
-                        }
-
-                        let button = ButtonWithIcon::new("Insert row below", PLUS);
-                        if ui.add(button).clicked() {
-                            insert_row_at_index = Some((table_row_index, 1));
-                            ui.close_menu();
-                        }
-                        if !self.is_sub_table {
-                            ui.separator();
-                            let button = ButtonWithIcon::new("Open row in sub table", TABLE);
-                            if ui.add(button).clicked() {
-                                ui.close_menu();
-                                let root_node = row_data.entries.last().unwrap();
-                                subtable = Some(SubTable::new(
-                                    root_node.pointer.clone(),
-                                    root_node.value.as_ref().unwrap().clone(),
-                                    ValueType::Object(true, 0),
-                                    row_index,
-                                    root_node.pointer.depth,
-                                ));
-                            }
-                        }
-                    });
-
                     if response.hovered() {
                         ui.ctx().set_cursor_icon(CursorIcon::Cell);
                     }
@@ -1087,6 +963,126 @@ impl<'array> ArrayTable<'array> {
                 });
             }
         });
+        if let Some(ref hover_cell) = hover_data.hovered_cell {
+            if let Some(ref response) = hover_data.response_rows {
+                response.context_menu(|ui| {
+                    let table_row_index = hover_cell.row_index;
+                    let col_index = hover_cell.column_index;
+                    let row_index = self.filtered_nodes.get(table_row_index);
+                    if let Some(row_index) = row_index {
+                        let row_index = *row_index;
+                        let node = self.nodes().get(row_index);
+                        if let Some(row_data) = node.as_ref() {
+                            let index = self.get_pointer_index_from_cache(
+                                pinned_column_table,
+                                row_data,
+                                col_index,
+                            );
+                            let mut edit_value = String::new();
+                            let mut edit_entry: Option<&FlatJsonValue<String>> = None;
+                            if let Some(index) = index {
+                                let entry = &row_data.entries()[index];
+                                if let Some(value) = entry.value.as_ref() {
+                                    edit_value = value.clone();
+                                }
+                                edit_entry = Some(entry);
+                            }
+                            // Context menu: edit
+                            let button = ButtonWithIcon::new("Edit", PENCIL);
+                            if ui.add(button).clicked() {
+                                *self.editing_index.borrow_mut() =
+                                    Some((col_index, row_index, pinned_column_table));
+                                *self.editing_value.borrow_mut() = mem::take(&mut edit_value);
+                                ui.close_menu();
+                            }
+                            if edit_value.len() > 0 {
+                                // Context menu: copy
+                                let button = ButtonWithIcon::new("Copy", COPY)
+                                    .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
+                                if ui.add(button).clicked() {
+                                    ui.ctx().copy_text(edit_value.clone());
+                                    ui.close_menu();
+                                }
+                                // Context menu: filter by value
+                                if Self::is_filterable(&columns[col_index]) {
+                                    let button =
+                                        ButtonWithIcon::new("Filter by this value", FILTER);
+                                    if ui.add(button).clicked() {
+                                        filter_by_value = Some((
+                                            columns[col_index].name.to_string(),
+                                            edit_value.clone(),
+                                        ));
+                                        ui.close_menu();
+                                    }
+                                }
+                            }
+                            ui.separator();
+                            // Context menu: insert row above
+                            let button = ButtonWithIcon::new("Insert row above", PLUS);
+                            if ui.add(button).clicked() {
+                                insert_row_at_index = Some((table_row_index, 0));
+                                ui.close_menu();
+                            }
+
+                            // Context menu: insert row below
+                            let button = ButtonWithIcon::new("Insert row below", PLUS);
+                            if ui.add(button).clicked() {
+                                insert_row_at_index = Some((table_row_index, 1));
+                                ui.close_menu();
+                            }
+                            // Context menu: Open array or object in subtable
+                            if let Some(entry) = edit_entry {
+                                let is_array =
+                                    matches!(entry.pointer.value_type, ValueType::Array(_));
+                                let is_object =
+                                    matches!(entry.pointer.value_type, ValueType::Object(..));
+                                if is_array || is_object {
+                                    ui.separator();
+                                    let button = ButtonWithIcon::new(
+                                        format!(
+                                            "Open {} in sub table",
+                                            if is_array { "array" } else { "object" }
+                                        ),
+                                        TABLE_CELLS,
+                                    );
+                                    if ui.add(button).clicked() {
+                                        ui.close_menu();
+                                        let content = edit_value.clone();
+                                        subtable = Self::open_subtable(row_index, entry, content);
+                                    }
+                                }
+                            }
+
+                            // Context menu: Open row in subtable
+                            if !self.is_sub_table {
+                                ui.separator();
+                                let button = ButtonWithIcon::new("Open row in sub table", TABLE);
+                                if ui.add(button).clicked() {
+                                    ui.close_menu();
+                                    let root_node = row_data.entries.last().unwrap();
+                                    subtable = Some(SubTable::new(
+                                        root_node.pointer.clone(),
+                                        root_node.value.as_ref().unwrap().clone(),
+                                        ValueType::Object(true, 0),
+                                        row_index,
+                                        root_node.pointer.depth,
+                                    ));
+                                }
+                            }
+                            // Context menu: Open copy pointer
+                            if let Some(entry) = edit_entry {
+                                ui.separator();
+                                if ui.button("Copy pointer").clicked() {
+                                    ui.ctx().copy_text(entry.pointer.pointer.clone());
+                                    ui.close_menu();
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
         if focused_changed {
             self.focused_cell = focused_cell;
         }
@@ -1538,7 +1534,9 @@ impl<'array> ArrayTable<'array> {
                         }
                     }
                     let typed_alphanum = Self::get_typed_alphanum_from_events(i);
-                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter)) && !self.was_editing {
+                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
+                        && !self.was_editing
+                    {
                         let row_index = self.filtered_nodes[focused_cell.row_index];
                         *self.editing_index.borrow_mut() = Some((
                             focused_cell.column_index,
@@ -1570,7 +1568,6 @@ impl<'array> ArrayTable<'array> {
                         }
                         *self.editing_value.borrow_mut() = editing_value;
                     }
-
                 }
 
                 if i.consume_shortcut(&SHORTCUT_DELETE) {
@@ -1585,7 +1582,6 @@ impl<'array> ArrayTable<'array> {
                 if i.consume_shortcut(&SHORTCUT_REPLACE) {
                     self.open_replace_panel(None);
                 }
-
             }
             let hovered_cell = array_response.hover_data.hovered_cell;
             for event in i.events.iter().filter(|e| match e {
@@ -1679,30 +1675,61 @@ impl<'array> ArrayTable<'array> {
 
     pub fn get_typed_alphanum_from_events(i: &mut InputState) -> Option<String> {
         let mut typed_alphanum: Option<String> = None;
-        i.events.retain(|e| {
-            match e {
-                egui::Event::Key { key, modifiers, .. } if matches!(
-                            key,
-                            Key::A | Key::B | Key::C | Key::D | Key::E | Key::F | Key::G | Key::H
-                                | Key::I | Key::J | Key::K | Key::L | Key::M | Key::N | Key::O | Key::P | Key::Q | Key::R | Key::S
-                                | Key::T | Key::U | Key::V | Key::W | Key::X | Key::Y | Key::Z
-                                | Key::Num0 | Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 | Key::Num5 | Key::Num6 | Key::Num7 | Key::Num8 | Key::Num9
-                        ) => {
-
-                    if modifiers.ctrl || modifiers.command || modifiers.alt || modifiers.mac_cmd {
-                        typed_alphanum = None;
-                        return true;
-                    } else {
-                        let mut typed_char = key.name().to_string();
-                        if !matches!(modifiers, &Modifiers::SHIFT) {
-                            typed_char = typed_char.to_lowercase();
-                        }
-                        typed_alphanum = Some(typed_char);
+        i.events.retain(|e| match e {
+            egui::Event::Key { key, modifiers, .. }
+                if matches!(
+                    key,
+                    Key::A
+                        | Key::B
+                        | Key::C
+                        | Key::D
+                        | Key::E
+                        | Key::F
+                        | Key::G
+                        | Key::H
+                        | Key::I
+                        | Key::J
+                        | Key::K
+                        | Key::L
+                        | Key::M
+                        | Key::N
+                        | Key::O
+                        | Key::P
+                        | Key::Q
+                        | Key::R
+                        | Key::S
+                        | Key::T
+                        | Key::U
+                        | Key::V
+                        | Key::W
+                        | Key::X
+                        | Key::Y
+                        | Key::Z
+                        | Key::Num0
+                        | Key::Num1
+                        | Key::Num2
+                        | Key::Num3
+                        | Key::Num4
+                        | Key::Num5
+                        | Key::Num6
+                        | Key::Num7
+                        | Key::Num8
+                        | Key::Num9
+                ) =>
+            {
+                if modifiers.ctrl || modifiers.command || modifiers.alt || modifiers.mac_cmd {
+                    typed_alphanum = None;
+                    return true;
+                } else {
+                    let mut typed_char = key.name().to_string();
+                    if !matches!(modifiers, &Modifiers::SHIFT) {
+                        typed_char = typed_char.to_lowercase();
                     }
-                    false
-                },
-                _ => true
+                    typed_alphanum = Some(typed_char);
+                }
+                false
             }
+            _ => true,
         });
         typed_alphanum
     }
