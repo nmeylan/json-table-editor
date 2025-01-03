@@ -69,6 +69,10 @@ impl super::Window<()> for AboutPanel {
 impl super::View<()> for AboutPanel {
     fn ui(&mut self, ui: &mut Ui) {
         ui.heading("About");
+        let revision = env!("GIT_HASH");
+        if !revision.is_empty() {
+            ui.label(format!("Revision: {}", revision));
+        }
         ui.label("Licence: Apache-2.0 license");
         ui.hyperlink_to("View project on Github", "https://github.com/nmeylan/json-table-editor");
         ui.separator();
