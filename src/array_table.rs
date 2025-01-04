@@ -627,7 +627,7 @@ impl<'array> ArrayTable<'array> {
                 if pinned_column_table && i == 0 {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
                 } else {
-                    table = table.column(Column::auto().clip(true).resizable(true));
+                    table = table.column(Column::remainder().clip(true).resizable(true));
                 }
             }
         } else {
@@ -963,6 +963,7 @@ impl<'array> ArrayTable<'array> {
                 });
             }
         });
+        // Context menu
         if let Some(ref hover_cell) = hover_data.hovered_cell {
             if let Some(ref response) = hover_data.response_rows {
                 response.context_menu(|ui| {
