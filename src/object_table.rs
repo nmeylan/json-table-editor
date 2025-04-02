@@ -1,3 +1,4 @@
+use crate::array_table::ArrayTable;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::table::CellLocation;
 use crate::fonts::{COPY, PENCIL};
@@ -10,7 +11,6 @@ use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
 use std::cell::RefCell;
 use std::mem;
-use crate::array_table::ArrayTable;
 
 pub struct ObjectTable {
     pub table_id: Id,
@@ -96,8 +96,7 @@ impl ObjectTable {
                             if editing_index.is_some() && editing_index.unwrap() == (row_index) {
                                 let ref_mut = &mut *self.editing_value.borrow_mut();
                                 let textedit_response = ui.add(TextEdit::singleline(ref_mut));
-                                if textedit_response.lost_focus()
-                                {
+                                if textedit_response.lost_focus() {
                                     let pointer = entry.pointer.clone();
                                     updated_value = Some((pointer, mem::take(ref_mut)));
                                     self.focused_cell = Some(CellLocation {
@@ -105,7 +104,6 @@ impl ObjectTable {
                                         row_index: table_row_index,
                                         is_pinned_column_table: false,
                                     });
-
                                 } else {
                                     textedit_response.request_focus();
                                 }
@@ -299,14 +297,17 @@ impl ObjectTable {
                         }
                     }
                     let typed_alphanum = ArrayTable::get_typed_alphanum_from_events(i);
-                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter)) && !self.was_editing {
+                    if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
+                        && !self.was_editing
+                    {
                         let row_index = self.filtered_nodes[focused_cell.row_index];
                         *self.editing_index.borrow_mut() = Some(row_index);
                         let entry = &self.nodes[row_index];
                         if let Some(typed_key) = typed_alphanum {
                             *self.editing_value.borrow_mut() = typed_key;
                         } else {
-                            *self.editing_value.borrow_mut() = entry.value.clone().unwrap_or_default();
+                            *self.editing_value.borrow_mut() =
+                                entry.value.clone().unwrap_or_default();
                         }
                     }
                 }
@@ -319,7 +320,6 @@ impl ObjectTable {
                         modifiers: Default::default(),
                     })
                 }
-
             }
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => has_hovered_cell,

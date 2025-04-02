@@ -1,4 +1,3 @@
-
 pub trait CacheTrait {
     fn update(&mut self);
 

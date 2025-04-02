@@ -5,7 +5,7 @@
 /// - Open popover when clicking on a button
 use eframe::egui::{InnerResponse, Response, ScrollArea, Ui, WidgetInfo, WidgetType};
 
-use eframe::egui::{*};
+use eframe::egui::*;
 use egui::CursorIcon::Text;
 
 pub struct PopupMenu {
@@ -35,14 +35,13 @@ impl PopupMenu {
         self
     }
 
-
     pub fn show_ui<R>(
         self,
         ui: &mut Ui,
         button: impl FnOnce(&mut Ui) -> Response,
         menu_contents: impl FnOnce(&mut Ui) -> R,
     ) -> InnerResponse<Option<R>> {
-        self.show_ui_dyn(ui,button, Box::new(menu_contents))
+        self.show_ui_dyn(ui, button, Box::new(menu_contents))
     }
 
     fn show_ui_dyn<'c, R>(
@@ -60,13 +59,7 @@ impl PopupMenu {
         let button_id = ui.make_persistent_id(id_source);
 
         ui.horizontal(|ui| {
-            let ir = popup(
-                ui,
-                button,
-                button_id,
-                menu_contents,
-                height,
-            );
+            let ir = popup(ui, button, button_id, menu_contents, height);
             ir.response
                 .widget_info(|| WidgetInfo::new(WidgetType::ComboBox));
             ir
@@ -98,7 +91,6 @@ fn popup<'c, R>(
             AboveOrBelow::Above
         };
 
-
     let button_response = button.ui(ui);
     if button_response.clicked() {
         ui.memory_mut(|mem| mem.toggle_popup(popup_id));
@@ -106,21 +98,15 @@ fn popup<'c, R>(
 
     let height = height.unwrap_or_else(|| ui.spacing().combo_height);
 
-    let inner = popup_above_or_below_widget(
-        ui,
-        popup_id,
-        &button_response,
-        above_or_below,
-        |ui| {
-            ScrollArea::vertical()
-                .max_height(height)
-                .show(ui, |ui| {
-                    ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
-                    menu_contents(ui)
-                })
-                .inner
-        },
-    );
+    let inner = popup_above_or_below_widget(ui, popup_id, &button_response, above_or_below, |ui| {
+        ScrollArea::vertical()
+            .max_height(height)
+            .show(ui, |ui| {
+                ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
+                menu_contents(ui)
+            })
+            .inner
+    });
 
     InnerResponse {
         inner,
@@ -155,12 +141,14 @@ pub fn popup_above_or_below_widget<R>(
                             ui.set_width(widget_response.rect.width() - frame_margin.sum().x);
                             add_contents(ui)
                         })
-                            .inner
+                        .inner
                     })
                     .inner
             });
 
-        if ui.input(|i| i.key_pressed(Key::Escape)) || (!widget_response.clicked() && inner.response.clicked_elsewhere()) {
+        if ui.input(|i| i.key_pressed(Key::Escape))
+            || (!widget_response.clicked() && inner.response.clicked_elsewhere())
+        {
             ui.memory_mut(|mem| mem.close_popup());
         }
         Some(inner.inner)

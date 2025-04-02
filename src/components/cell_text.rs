@@ -6,7 +6,7 @@ pub struct CellText {
     text: String,
 }
 
-impl  CellText {
+impl CellText {
     pub fn new(text: String) -> CellText {
         CellText { text }
     }
@@ -19,7 +19,8 @@ impl  CellText {
         let rich_text = RichText::new(self.text.clone());
 
         let widget_text = WidgetText::RichText(rich_text);
-        let mut layout_job = widget_text.into_layout_job(ui.style(), FontSelection::Default, valign);
+        let mut layout_job =
+            widget_text.into_layout_job(ui.style(), FontSelection::Default, valign);
 
         layout_job.break_on_newline = false;
         layout_job.wrap.max_width = f32::INFINITY;
@@ -32,11 +33,12 @@ impl  CellText {
             Align::RIGHT => rect.right_top(),
         };
 
-        ui.painter().add(
-            epaint::TextShape::new(galley_pos, galley, ui.style().visuals.text_color())
-        );
+        ui.painter().add(epaint::TextShape::new(
+            galley_pos,
+            galley,
+            ui.style().visuals.text_color(),
+        ));
 
         cell_zone
     }
-
 }

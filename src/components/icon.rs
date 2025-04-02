@@ -1,9 +1,11 @@
-
+use crate::components::icon;
+use eframe::egui::{
+    Button, Color32, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget,
+    WidgetInfo, WidgetText, WidgetType,
+};
 use eframe::emath::{pos2, Vec2};
 use eframe::epaint;
 use eframe::epaint::{Rounding, Stroke};
-use eframe::egui::{Button, Color32, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget, WidgetInfo, WidgetText, WidgetType};
-use crate::components::icon;
 
 pub fn icon(name: &'static str) -> egui::RichText {
     icon_with_size(name, 12.0)
@@ -14,7 +16,12 @@ pub fn icon_with_size(name: &'static str, size: f32) -> egui::RichText {
         .size(size)
 }
 
-pub fn button(ui: &mut Ui, name: &'static str, tooltip: Option<&str>, color: Option<Color32>) -> Response {
+pub fn button(
+    ui: &mut Ui,
+    name: &'static str,
+    tooltip: Option<&str>,
+    color: Option<Color32>,
+) -> Response {
     let mut icon = icon::icon(name);
     if color.is_some() {
         icon = icon.color(color.unwrap());
@@ -22,7 +29,9 @@ pub fn button(ui: &mut Ui, name: &'static str, tooltip: Option<&str>, color: Opt
     let button = Button::new(icon);
     let mut response = ui.add(button);
     if let Some(tooltip) = tooltip {
-        response = response.on_hover_ui(|ui| { ui.label(tooltip); });
+        response = response.on_hover_ui(|ui| {
+            ui.label(tooltip);
+        });
     }
 
     response
@@ -136,13 +145,18 @@ impl Widget for ButtonWithIcon {
     fn ui(self, ui: &mut Ui) -> Response {
         let ButtonWithIcon {
             text,
-            icon, shortcut_text,
-            wrap, fill,
-            stroke, sense,
-            small, frame,
-            min_size, rounding, selected,
+            icon,
+            shortcut_text,
+            wrap,
+            fill,
+            stroke,
+            sense,
+            small,
+            frame,
+            min_size,
+            rounding,
+            selected,
         } = self;
-
 
         let frame = frame.unwrap_or_else(|| ui.visuals().button_frame);
 
@@ -173,10 +187,15 @@ impl Widget for ButtonWithIcon {
 
         let galley =
             text.map(|text| text.into_galley(ui, wrap, text_wrap_width, TextStyle::Button));
-        let icon_galley =
-            icon.into_galley(ui, wrap, text_wrap_width, TextStyle::Button);
-        let shortcut_galley = (!shortcut_text.is_empty())
-            .then(|| shortcut_text.into_galley(ui, Some(TextWrapMode::Extend), f32::INFINITY, TextStyle::Button));
+        let icon_galley = icon.into_galley(ui, wrap, text_wrap_width, TextStyle::Button);
+        let shortcut_galley = (!shortcut_text.is_empty()).then(|| {
+            shortcut_text.into_galley(
+                ui,
+                Some(TextWrapMode::Extend),
+                f32::INFINITY,
+                TextStyle::Button,
+            )
+        });
 
         let mut desired_size = Vec2::ZERO;
 
@@ -243,10 +262,10 @@ impl Widget for ButtonWithIcon {
 
             let mut cursor_x = rect.min.x + button_padding.x;
 
-
             let text_pos = pos2(cursor_x, rect.center().y - 0.5 * icon_galley.size().y);
             cursor_x += icon_galley.size().x;
-            ui.painter().galley(text_pos, icon_galley, visuals.text_color());
+            ui.painter()
+                .galley(text_pos, icon_galley, visuals.text_color());
 
             if let Some(galley) = galley {
                 cursor_x += ui.spacing().icon_spacing;

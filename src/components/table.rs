@@ -5,7 +5,6 @@
 /// - Do not render non visibile columns
 /// - Optimization for empty cell
 
-
 /// Size hint for table column/strip cell.
 #[derive(Clone, Debug, Copy)]
 pub enum Size {
@@ -145,10 +144,13 @@ impl From<Vec<Size>> for Sizing {
 // | fixed size | all available space/minimum | 30% of available width | fixed size |
 // Takes all available height, so if you want something below the table, put it in a strip.
 
-use std::mem;
-use eframe::egui::{scroll_area::ScrollBarVisibility, Align, NumExt as _, Rangef, Rect, Response, ScrollArea, Ui, Vec2, Vec2b, Pos2, Sense, Id, Color32, Stroke};
 use eframe::egui::scroll_area::ScrollAreaOutput;
+use eframe::egui::{
+    scroll_area::ScrollBarVisibility, Align, Color32, Id, NumExt as _, Pos2, Rangef, Rect,
+    Response, ScrollArea, Sense, Stroke, Ui, Vec2, Vec2b,
+};
 use egui::UiBuilder;
+use std::mem;
 
 #[derive(Clone, Copy)]
 pub(crate) enum CellSize {
@@ -290,21 +292,28 @@ impl<'l> StripLayout<'l> {
             );
         }
         if flags.highlighted && !flags.hovered {
-            self.ui.painter().rect_filled(
-                gapless_rect,
-                egui::Rounding::ZERO,
-                Color32::YELLOW,
-            );
+            self.ui
+                .painter()
+                .rect_filled(gapless_rect, egui::Rounding::ZERO, Color32::YELLOW);
         }
         if flags.selected_cell {
             self.ui.painter().rect_stroke(
                 gapless_rect.shrink(2.0),
                 egui::Rounding::ZERO,
-                Stroke { color: Color32::DARK_GRAY, width: 2.0 },
+                Stroke {
+                    color: Color32::DARK_GRAY,
+                    width: 2.0,
+                },
             );
         }
 
-        let (child_ui, child_response) = self.cell(flags, max_rect, child_ui_id_source, cell_index, add_cell_contents);
+        let (child_ui, child_response) = self.cell(
+            flags,
+            max_rect,
+            child_ui_id_source,
+            cell_index,
+            add_cell_contents,
+        );
 
         let used_rect = child_ui.min_rect();
 
@@ -331,30 +340,22 @@ impl<'l> StripLayout<'l> {
     /// This is the innermost part of [`crate::ArrayTable`] and [`crate::Strip`].
     ///
     /// Return the used space (`min_rect`) plus the [`Response`] of the whole cell.
-    pub(crate) fn add_empty(
-        &mut self,
-        width: CellSize,
-        height: CellSize,
-        color: Color32,
-    ) -> Rect {
+    pub(crate) fn add_empty(&mut self, width: CellSize, height: CellSize, color: Color32) -> Rect {
         let max_rect = self.cell_rect(&width, &height);
 
         // Make sure we don't have a gap in the stripe/frame/selection background:
         let item_spacing = self.ui.spacing().item_spacing;
         let gapless_rect = max_rect.expand2(0.5 * item_spacing);
 
-        self.ui.painter().rect_filled(
-            gapless_rect,
-            egui::Rounding::ZERO,
-            color,
-        );
+        self.ui
+            .painter()
+            .rect_filled(gapless_rect, egui::Rounding::ZERO, color);
 
         self.set_pos(max_rect);
 
         let allocation_rect = max_rect;
 
         self.ui.advance_cursor_after_rect(allocation_rect);
-
 
         max_rect
     }
@@ -390,9 +391,12 @@ impl<'l> StripLayout<'l> {
         cell_index: usize,
         add_cell_contents: Option<impl FnOnce(&mut Ui, usize) -> Option<Response>>,
     ) -> (Ui, Option<Response>) {
-
-        let mut child_ui =
-            self.ui.new_child(UiBuilder::new().id_salt(child_ui_id_source).layout(self.cell_layout).max_rect(rect));
+        let mut child_ui = self.ui.new_child(
+            UiBuilder::new()
+                .id_salt(child_ui_id_source)
+                .layout(self.cell_layout)
+                .max_rect(rect),
+        );
 
         if flags.clip {
             let margin = egui::Vec2::splat(self.ui.visuals().clip_rect_margin);
@@ -513,8 +517,8 @@ fn to_sizing(columns: &[Column]) -> Sizing {
             InitialColumnSize::Automatic(suggested_width) => Size::initial(suggested_width),
             InitialColumnSize::Remainder => Size::remainder(),
         }
-            .at_least(column.width_range.min)
-            .at_most(column.width_range.max);
+        .at_least(column.width_range.min)
+        .at_most(column.width_range.max);
         sizing.add(size);
     }
     sizing
@@ -639,7 +643,6 @@ impl<'a> TableBuilder<'a> {
         self
     }
 
-
     /// Set a row to scroll to.
     ///
     /// `align` specifies if the row should be positioned in the top, center, or bottom of the view
@@ -710,9 +713,8 @@ impl<'a> TableBuilder<'a> {
     fn available_width(&self) -> f32 {
         self.ui.available_rect_before_wrap().width()
             - (self.scroll_options.vscroll as i32 as f32)
-            * self.ui.spacing().scroll.allocated_width()
+                * self.ui.spacing().scroll.allocated_width()
     }
-
 
     /// Create a header row which always stays visible and at the top
     pub fn header(self, height: f32, add_header_row: impl FnOnce(TableRow<'_, '_>)) -> Table<'a> {
@@ -726,7 +728,7 @@ impl<'a> TableBuilder<'a> {
             cell_layout,
             scroll_options,
             sense,
-            is_pinned_column_table
+            is_pinned_column_table,
         } = self;
 
         let striped = striped.unwrap_or(ui.visuals().striped);
@@ -772,7 +774,7 @@ impl<'a> TableBuilder<'a> {
                     remainder_with += width + layout.ui.spacing().item_spacing[0];
                 }
             }
-            let mut hover_data= Default::default();
+            let mut hover_data = Default::default();
             add_header_row(TableRow {
                 layout: &mut layout,
                 columns: &columns,
@@ -827,7 +829,12 @@ struct TableState {
 
 impl TableState {
     /// Returns `true` if it did load.
-    fn load(ui: &egui::Ui, state_id: egui::Id, columns: &[Column], available_width: f32) -> (bool, Self) {
+    fn load(
+        ui: &egui::Ui,
+        state_id: egui::Id,
+        columns: &[Column],
+        available_width: f32,
+    ) -> (bool, Self) {
         let rect = Rect::from_min_size(ui.available_rect_before_wrap().min, Vec2::ZERO);
         ui.ctx().check_for_id_clash(state_id, rect, "Table");
 
@@ -895,7 +902,13 @@ pub struct TableResponse {
 
 impl<'a> Table<'a> {
     /// Create table body after adding a header row
-    pub fn body<F>(self, stored_hovered_row_index: Option<usize>, search_matching_row_index: Option<usize>, focused_cell: Option<CellLocation>, add_body_contents: F) -> TableResponse
+    pub fn body<F>(
+        self,
+        stored_hovered_row_index: Option<usize>,
+        search_matching_row_index: Option<usize>,
+        focused_cell: Option<CellLocation>,
+        add_body_contents: F,
+    ) -> TableResponse
     where
         F: for<'b> FnOnce(TableBody<'b>),
     {
@@ -912,7 +925,8 @@ impl<'a> Table<'a> {
             striped,
             cell_layout,
             scroll_options,
-            sense, is_pinned_column_table,
+            sense,
+            is_pinned_column_table,
         } = self;
 
         let TableScrollOptions {
@@ -936,7 +950,8 @@ impl<'a> Table<'a> {
             .stick_to_bottom(stick_to_bottom)
             .min_scrolled_height(min_scrolled_height)
             .max_height(max_scroll_height)
-            .scroll_bar_visibility(scroll_bar_visibility).animated(false);
+            .scroll_bar_visibility(scroll_bar_visibility)
+            .animated(false);
 
         if let Some(scroll_offset_y) = scroll_offset_y {
             scroll_area = scroll_area.vertical_scroll_offset(scroll_offset_y);
@@ -963,11 +978,13 @@ impl<'a> Table<'a> {
                 ui_builder = ui_builder.sizing_pass();
             }
             // Hide first-frame-jitters when auto-sizing.
-            ui.scope_builder(ui_builder,|ui| {
+            ui.scope_builder(ui_builder, |ui| {
                 let hovered_row_index_id = self.state_id.with("__table_hovered_row");
                 let hovered_cell_index_id = self.state_id.with("__table_hovered_cell");
-                let mut hovered_row_index = ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
-                hovered_cell_index = ui.data_mut(|data| data.remove_temp::<CellLocation>(hovered_cell_index_id));
+                let mut hovered_row_index =
+                    ui.data_mut(|data| data.remove_temp::<usize>(hovered_row_index_id));
+                hovered_cell_index =
+                    ui.data_mut(|data| data.remove_temp::<CellLocation>(hovered_cell_index_id));
                 if focused_cell.is_some() {
                     hovered_cell_index = focused_cell;
                 }
@@ -1155,7 +1172,7 @@ pub struct CellLocation {
 pub struct HoverData {
     pub hovered_row: Option<usize>,
     pub hovered_cell: Option<CellLocation>,
-    pub response_rows: Option<Response>
+    pub response_rows: Option<Response>,
 }
 
 impl HoverData {
@@ -1177,7 +1194,6 @@ impl HoverData {
         new_data
     }
 }
-
 
 /// The body of a table.
 ///
@@ -1261,7 +1277,7 @@ impl<'a> TableBody<'a> {
             ((scroll_offset_y + max_height) / row_height_with_spacing).ceil() as usize + 1;
         let max_row = max_row.min(total_rows);
 
-        let mut response_union : Option<Response> = None;
+        let mut response_union: Option<Response> = None;
         let mut hover_data = Default::default();
         for row_index in min_row..max_row {
             let mut response: Option<Response> = None;
@@ -1305,9 +1321,9 @@ impl<'a> TableBody<'a> {
             hovered_row: self.hovered_row_index,
             hovered_cell: self.hovered_cell_index,
             response_rows: response_union,
-        }.union(hover_data)
+        }
+        .union(hover_data)
     }
-
 
     // Create a table row buffer of the given height to represent the non-visible portion of the
     // table.
@@ -1383,7 +1399,10 @@ impl<'a, 'b> TableRow<'a, 'b> {
     ///
     /// Returns the used space (`min_rect`) plus the [`Response`] of the whole cell.
     #[cfg_attr(debug_assertions, track_caller)]
-    pub fn col(&mut self, add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> (Rect, Response) {
+    pub fn col(
+        &mut self,
+        add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>,
+    ) -> (Rect, Response) {
         let col_index = self.col_index;
 
         let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
@@ -1436,12 +1455,20 @@ impl<'a, 'b> TableRow<'a, 'b> {
         );
 
         if response.hovered() {
-            self.capture_hover_cell_state(CellLocation { column_index: col_index, row_index: self.row_index, is_pinned_column_table: false });
+            self.capture_hover_cell_state(CellLocation {
+                column_index: col_index,
+                row_index: self.row_index,
+                is_pinned_column_table: false,
+            });
         }
 
         (used_rect, response)
     }
-    pub fn cols(&mut self, is_header: bool, mut add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>) -> ColumnResponse {
+    pub fn cols(
+        &mut self,
+        is_header: bool,
+        mut add_cell_contents: impl FnMut(&mut Ui, usize) -> Option<Response>,
+    ) -> ColumnResponse {
         let width = self.first_col_visible_offset;
 
         self.layout.add_empty(
@@ -1451,7 +1478,11 @@ impl<'a, 'b> TableRow<'a, 'b> {
         );
 
         let mut last_index = 0;
-        let mut column_response = ColumnResponse { clicked_col_index: None, double_clicked_col_index: None, hovered_col_index: None };
+        let mut column_response = ColumnResponse {
+            clicked_col_index: None,
+            double_clicked_col_index: None,
+            hovered_col_index: None,
+        };
         for col_index in self.visible_columns {
             let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
             let width = if let Some(width) = self.widths.get(*col_index) {
@@ -1465,10 +1496,11 @@ impl<'a, 'b> TableRow<'a, 'b> {
             let width = CellSize::Absolute(width);
             let height = CellSize::Absolute(self.height);
 
-
             let selected_cell = if self.selected_cell.is_some() {
                 let cell = self.selected_cell.unwrap();
-                cell.row_index == self.row_index && cell.column_index == *col_index && self.is_pinned_column_table == cell.is_pinned_column_table
+                cell.row_index == self.row_index
+                    && cell.column_index == *col_index
+                    && self.is_pinned_column_table == cell.is_pinned_column_table
             } else {
                 false
             };
@@ -1510,7 +1542,11 @@ impl<'a, 'b> TableRow<'a, 'b> {
             last_index = *col_index;
         }
         if let Some(hovered_col_index) = column_response.hovered_col_index {
-            let cell_location = CellLocation { column_index: hovered_col_index, row_index: self.row_index, is_pinned_column_table: self.is_pinned_column_table };
+            let cell_location = CellLocation {
+                column_index: hovered_col_index,
+                row_index: self.row_index,
+                is_pinned_column_table: self.is_pinned_column_table,
+            };
             self.capture_hover_cell_state(cell_location);
             self.hover_data.hovered_cell = Some(cell_location);
         }
@@ -1523,7 +1559,6 @@ impl<'a, 'b> TableRow<'a, 'b> {
         }
         column_response
     }
-
 
     /// Returns the index of the row.
     #[inline]
