@@ -535,7 +535,7 @@ impl eframe::App for MyApp<'_> {
                     let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
                         ui.horizontal(|ui| {
                             ui.add(Label::new("Scroll to row: ").extend());
-                            let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                            let scroll_to_row_mode_response = ComboBox::from_id_salt("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
                                     || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
                             });

@@ -257,7 +257,7 @@ const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
 const LINE_ENDING: &[u8] = ",\n".as_bytes();
 pub fn save_to_file(
     parent_pointer: &str,
-    array: &Vec<JsonArrayEntries<String>>,
+    array: &[JsonArrayEntries<String>],
     file_path: &Path,
 ) -> std::io::Result<()> {
     // let start = crate::compatibility::now();

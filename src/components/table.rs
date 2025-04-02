@@ -1,9 +1,9 @@
-/// Heavily inspired from egui codebase
-///
-/// Credit egui_extras: https://github.com/emilk/egui
-/// Modifications are:
-/// - Do not render non visibile columns
-/// - Optimization for empty cell
+//! Heavily inspired from egui codebase
+//!
+//! Credit egui_extras: https://github.com/emilk/egui
+//! Modifications are:
+//! - Do not render non visibile columns
+//! - Optimization for empty cell
 
 /// Size hint for table column/strip cell.
 #[derive(Clone, Debug, Copy)]
@@ -327,13 +327,11 @@ impl<'l> StripLayout<'l> {
 
         // self.ui.advance_cursor_after_rect(allocation_rect);
 
-        let response;
-
-        if child_response.is_none() {
-            response = child_ui.response();
+        let response = if let Some(response) = child_response {
+            response
         } else {
-            response = child_response.unwrap();
-        }
+            child_ui.response()
+        };
         (used_rect, response)
     }
 
