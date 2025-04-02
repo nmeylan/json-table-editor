@@ -1,46 +1,51 @@
 extern crate core;
 
 mod array_table;
-mod components;
-mod subtable_window;
-pub mod parser;
-mod object_table;
-pub mod fonts;
-mod web;
 mod compatibility;
+mod components;
+pub mod fonts;
+mod object_table;
 mod panels;
+pub mod parser;
 mod replace_panel;
+mod subtable_window;
+mod web;
 
-use std::{env, mem};
 use std::any::Any;
-use std::collections::{BTreeSet};
+use std::collections::BTreeSet;
+use std::fmt::{format, Write};
 use std::fs::File;
 use std::io::Read;
-use std::fmt::{format, Write};
+use std::{env, mem};
 
-use std::path::{PathBuf};
-use std::sync::{Arc, Mutex};
 use crate::components::fps::FrameHistory;
 use parking_lot_mpsc::{Receiver, SyncSender};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-use eframe::{CreationContext, Renderer};
-use eframe::egui::Context;
-use eframe::egui::{Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label, LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2, Widget};
-use eframe::epaint::text::TextWrapMode;
-use egui::{ScrollArea, TextBuffer};
-use egui::style::ScrollStyle;
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::{AboutPanel, PANEL_ABOUT};
 use crate::parser::save_to_file;
+use eframe::egui::Context;
+use eframe::egui::{
+    Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label,
+    LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2,
+    Widget,
+};
+use eframe::epaint::text::TextWrapMode;
+use eframe::{CreationContext, Renderer};
+use egui::style::ScrollStyle;
+use egui::{ScrollArea, TextBuffer};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
 
 pub const SHORTCUT_SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-pub const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
+pub const SHORTCUT_SAVE_AS: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::S);
 pub const SHORTCUT_COPY: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
 pub const SHORTCUT_PASTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
 pub const SHORTCUT_DELETE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
@@ -69,31 +74,42 @@ pub trait Window<R> {
 struct ArrayResponse {
     pub(crate) edited_value: Vec<FlatJsonValue<String>>,
     pub(crate) hover_data: HoverData,
-    pub(crate) focused_cell: bool
+    pub(crate) focused_cell: bool,
 }
 
 impl ArrayResponse {
     pub fn union(&mut self, other: ArrayResponse) -> Self {
         let mut new_response = mem::take(self);
         new_response.edited_value.extend(other.edited_value);
-        if new_response.hover_data.hovered_cell.is_none() && other.hover_data.hovered_cell.is_some() {
+        if new_response.hover_data.hovered_cell.is_none() && other.hover_data.hovered_cell.is_some()
+        {
             new_response.hover_data.hovered_cell = other.hover_data.hovered_cell;
         }
         new_response
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let options = eframe::NativeOptions {
-            persist_window: false,
-            renderer: Renderer::Glow,
-            viewport: eframe::egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1200.0, y: 900.0 }).with_maximized(true).with_icon(Arc::new(eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap())),
-            // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
-            ..eframe::NativeOptions::default()
-        };
-        eframe::run_native("JSON table editor", options, Box::new(|cc| {
+    let options = eframe::NativeOptions {
+        persist_window: false,
+        renderer: Renderer::Glow,
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_inner_size(Vec2 {
+                x: 1200.0,
+                y: 900.0,
+            })
+            .with_maximized(true)
+            .with_icon(Arc::new(
+                eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap(),
+            )),
+        // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
+        ..eframe::NativeOptions::default()
+    };
+    eframe::run_native(
+        "JSON table editor",
+        options,
+        Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             let mut style = (*cc.egui_ctx.style()).clone();
             style.spacing.scroll.floating = false;
@@ -112,8 +128,9 @@ fn main() {
                 app.selected_pointer = Some(args[2].clone());
             }
             Ok(Box::new(app))
-        })).unwrap();
-    }
+        }),
+    )
+    .unwrap();
 }
 
 struct MyApp<'array> {
@@ -139,18 +156,16 @@ struct MyApp<'array> {
 
 enum AsyncEvent {
     LoadJson(Vec<u8>),
-    LoadSampleErr(String)
+    LoadSampleErr(String),
 }
 
 impl<'array> MyApp<'array> {
     fn new(cc: &CreationContext) -> Self {
         let mut fonts = eframe::egui::FontDefinitions::default();
 
-        let font_data = eframe::egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
-        fonts.font_data.insert(
-            "fa".into(),
-            font_data,
-        );
+        let font_data =
+            eframe::egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
+        fonts.font_data.insert("fa".into(), font_data);
         fonts.families.insert(
             eframe::egui::FontFamily::Name("fa".into()),
             vec!["fa".into()],
@@ -176,7 +191,7 @@ impl<'array> MyApp<'array> {
             web_loaded_json: None,
             async_events_channel: (sender, receiver),
             failed_to_load_sample_json: None,
-            force_repaint: false
+            force_repaint: false,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -216,11 +231,14 @@ impl<'array> MyApp<'array> {
         }
     }
 
-
     fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
         let mut found_array = false;
         let size = json.len() / 1024 / 1024;
-        log!("open_json_content with size {}mb, found array {}", size, found_array);
+        log!(
+            "open_json_content with size {}mb, found array {}",
+            size,
+            found_array
+        );
         for byte in json {
             if *byte == b'[' {
                 found_array = true;
@@ -232,7 +250,9 @@ impl<'array> MyApp<'array> {
         }
         if found_array || self.selected_pointer.is_some() {
             let start = crate::compatibility::now();
-            let mut options = ParseOptions::default().parse_array(false).max_depth(max_depth);
+            let mut options = ParseOptions::default()
+                .parse_array(false)
+                .max_depth(max_depth);
             if let Some(ref start_at) = self.selected_pointer {
                 options = options.start_parse_at(start_at.clone());
             }
@@ -240,15 +260,27 @@ impl<'array> MyApp<'array> {
 
             let result = parse_result.unwrap().to_owned();
             let parsing_max_depth = result.parsing_max_depth;
-            log!("Custom parser took {}ms for a {}mb file, max depth {}, {}", start.elapsed().as_millis(), size, parsing_max_depth, result.json.len());
+            log!(
+                "Custom parser took {}ms for a {}mb file, max depth {}, {}",
+                start.elapsed().as_millis(),
+                size,
+                parsing_max_depth,
+                result.json.len()
+            );
             let parse_result = result.clone_except_json();
 
             let start = crate::compatibility::now();
             let (result1, columns) = crate::parser::as_array(result).unwrap();
-            log!("Transformation to array took {}ms, root array len {}, columns {}", start.elapsed().as_millis(), result1.len(), columns.len());
+            log!(
+                "Transformation to array took {}ms, root array len {}, columns {}",
+                start.elapsed().as_millis(),
+                result1.len(),
+                columns.len()
+            );
 
             let max_depth = parse_result.max_json_depth;
-            let depth = (parse_result.depth_after_start_at + 1).max(parsing_max_depth.min(max_depth as u8));
+            let depth =
+                (parse_result.depth_after_start_at + 1).max(parsing_max_depth.min(max_depth as u8));
             let min_depth = if parse_result.depth_after_start_at + 1 > 1 {
                 parse_result.depth_after_start_at + 1
             } else {
@@ -259,7 +291,13 @@ impl<'array> MyApp<'array> {
                 prefix = start_at.clone();
             }
             let len = result1.len();
-            let table = ArrayTable::new(Some(parse_result), result1, columns, depth, PointerKey::from_pointer(prefix, ValueType::Array(len), 1, 0));
+            let table = ArrayTable::new(
+                Some(parse_result),
+                result1,
+                columns,
+                depth,
+                PointerKey::from_pointer(prefix, ValueType::Array(len), 1, 0),
+            );
             self.table = Some(table);
             self.depth = depth;
             self.max_depth = max_depth as u8;
@@ -270,7 +308,9 @@ impl<'array> MyApp<'array> {
             self.selected_pointer = None;
             self.unsaved_changes = false;
         } else {
-            let options = ParseOptions::default().parse_array(false).max_depth(max_depth);
+            let options = ParseOptions::default()
+                .parse_array(false)
+                .max_depth(max_depth);
             let result = JSONParser::parse_bytes(json, options.clone()).unwrap();
             self.should_parse_again = true;
             self.parsing_invalid = true;
@@ -279,9 +319,12 @@ impl<'array> MyApp<'array> {
             {
                 self.web_loaded_json = Some(json.to_vec());
             }
-            self.parsing_invalid_pointers = result.json.iter()
+            self.parsing_invalid_pointers = result
+                .json
+                .iter()
                 .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
-                .map(|entry| entry.pointer.pointer.clone()).collect();
+                .map(|entry| entry.pointer.pointer.clone())
+                .collect();
         }
     }
 
@@ -336,7 +379,12 @@ impl<'array> MyApp<'array> {
 
     fn save(&mut self) {
         let table = self.table.as_ref().unwrap();
-        save_to_file(table.parent_pointer.pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+        save_to_file(
+            table.parent_pointer.pointer.as_str(),
+            table.nodes(),
+            self.selected_file.as_ref().unwrap(),
+        )
+        .unwrap();
         self.unsaved_changes = false;
     }
     #[cfg(not(target_arch = "wasm32"))]
@@ -344,7 +392,12 @@ impl<'array> MyApp<'array> {
         if let Some(path) = rfd::FileDialog::new().save_file() {
             self.selected_file = Some(path);
             let table = self.table.as_ref().unwrap();
-            save_to_file(table.parent_pointer.pointer.as_str(), table.nodes(), self.selected_file.as_ref().unwrap()).unwrap();
+            save_to_file(
+                table.parent_pointer.pointer.as_str(),
+                table.nodes(),
+                self.selected_file.as_ref().unwrap(),
+            )
+            .unwrap();
             self.unsaved_changes = false;
         }
     }
@@ -373,7 +426,8 @@ impl<'array> eframe::App for MyApp<'array> {
             self.force_repaint = false;
             match event {
                 AsyncEvent::LoadJson(json_bytes) => {
-                    #[cfg(target_arch = "wasm32")] {
+                    #[cfg(target_arch = "wasm32")]
+                    {
                         self.web_loaded_json = Some(json_bytes);
                         self.open_json();
                     }
@@ -384,10 +438,15 @@ impl<'array> eframe::App for MyApp<'array> {
                 }
             }
         }
-        #[cfg(not(target_arch = "wasm32"))] {
-            let mut title = format!("json table editor - {}{}",
-                                    self.selected_file.as_ref().map(|p| p.display().to_string()).unwrap_or("No file selected".to_string()),
-                                    if self.unsaved_changes { " *" } else { "" }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let mut title = format!(
+                "json table editor - {}{}",
+                self.selected_file
+                    .as_ref()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or("No file selected".to_string()),
+                if self.unsaved_changes { " *" } else { "" }
             );
 
             if self.show_fps {
@@ -396,7 +455,10 @@ impl<'array> eframe::App for MyApp<'array> {
                 title = format!("{} - {:.2}", title, self.frame_history.fps())
             }
 
-            ctx.send_viewport_cmd_to(ctx.parent_viewport_id(), egui::ViewportCommand::Title(title));
+            ctx.send_viewport_cmd_to(
+                ctx.parent_viewport_id(),
+                egui::ViewportCommand::Title(title),
+            );
         }
         self.windows(ctx);
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
@@ -552,12 +614,23 @@ impl<'array> eframe::App for MyApp<'array> {
                     }
                     if !table.columns_filter.is_empty() {
                         ui.separator();
-                        if ui.label(RichText::new(format!("{} active filters", table.columns_filter.len())).underline())
+                        if ui
+                            .label(
+                                RichText::new(format!(
+                                    "{} active filters",
+                                    table.columns_filter.len()
+                                ))
+                                .underline(),
+                            )
                             .on_hover_ui(|ui| {
                                 ui.vertical(|ui| {
-                                    table.columns_filter.iter().for_each(|(k, _)| { ui.label(k.as_str()); })
+                                    table.columns_filter.iter().for_each(|(k, _)| {
+                                        ui.label(k.as_str());
+                                    })
                                 });
-                            }).hovered() {
+                            })
+                            .hovered()
+                        {
                             ui.ctx().set_cursor_icon(CursorIcon::Help);
                         }
                     }
@@ -717,7 +790,8 @@ impl<'array> eframe::App for MyApp<'array> {
             }
         });
         if self.table.is_some() {
-            #[cfg(not(target_arch = "wasm32"))] {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
                 ctx.input_mut(|i| {
                     if i.consume_shortcut(&SHORTCUT_SAVE_AS) {
                         self.save_as();
@@ -735,3 +809,8 @@ impl<'array> eframe::App for MyApp<'array> {
     }
 }
 
+// When compiling to web using trunk:
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    web::run_on_web();
+}
