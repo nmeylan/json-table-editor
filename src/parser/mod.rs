@@ -129,7 +129,7 @@ pub fn as_array<'array>(
 ) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>), String> {
     let (root_value, start_index, mut end_index) =
         if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
-            let mut root_value = previous_parse_result.json
+            let root_value = previous_parse_result.json
                 [previous_parse_result.started_parsing_at_index_start]
                 .clone();
             (
@@ -410,21 +410,18 @@ pub fn replace_occurrences(
                                     search_replace_response.search_criteria.as_str(),
                                     replace_value,
                                 ))
+                            } else if (search_replace_response.search_criteria.is_empty()
+                                && value.is_empty())
+                                || (!search_replace_response
+                                    .search_criteria
+                                    .is_empty()
+                                    && value.contains(
+                                        search_replace_response.search_criteria.as_str(),
+                                    ))
+                            {
+                                None
                             } else {
-                                if (search_replace_response.search_criteria.as_str().is_empty()
-                                    && value.is_empty())
-                                    || (!search_replace_response
-                                        .search_criteria
-                                        .as_str()
-                                        .is_empty()
-                                        && value.contains(
-                                            search_replace_response.search_criteria.as_str(),
-                                        ))
-                                {
-                                    None
-                                } else {
-                                    Some(value.clone())
-                                }
+                                Some(value.clone())
                             };
                             new_values.push((
                                 FlatJsonValue {
@@ -495,14 +492,12 @@ fn replace_with_regex(
 ) -> Option<String> {
     let new_value = if let Some(ref replace_value) = search_replace_response.replace_value {
         Some(re.replace_all(value, replace_value.as_str()).to_string())
+    } else if (search_replace_response.search_criteria.is_empty() && value.is_empty())
+        || (!search_replace_response.search_criteria.is_empty() && re.is_match(value))
+    {
+        None
     } else {
-        if (search_replace_response.search_criteria.as_str().is_empty() && value.is_empty())
-            || (!search_replace_response.search_criteria.as_str().is_empty() && re.is_match(value))
-        {
-            None
-        } else {
-            Some(value.clone())
-        }
+        Some(value.clone())
     };
     new_value
 }

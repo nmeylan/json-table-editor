@@ -1,7 +1,6 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-
 /// Our handle to the web app from JavaScript.
 #[derive(Clone)]
 #[cfg(target_arch = "wasm32")]
@@ -17,7 +16,6 @@ impl WebHandle {
     #[allow(clippy::new_without_default)]
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
-
         Self {
             runner: eframe::WebRunner::new(),
         }
@@ -25,7 +23,10 @@ impl WebHandle {
 
     #[cfg(target_arch = "wasm32")]
     #[wasm_bindgen]
-    pub async fn start(&self, canvas: web_sys::HtmlCanvasElement) -> Result<(), wasm_bindgen::JsValue> {
+    pub async fn start(
+        &self,
+        canvas: web_sys::HtmlCanvasElement,
+    ) -> Result<(), wasm_bindgen::JsValue> {
         self.runner
             .start(
                 canvas,

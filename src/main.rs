@@ -13,9 +13,8 @@ mod replace_panel;
 mod subtable_window;
 mod web;
 
-use std::any::Any;
 use std::collections::BTreeSet;
-use std::fmt::{format, Write};
+use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 use std::{env, mem};
@@ -23,7 +22,7 @@ use std::{env, mem};
 use crate::components::fps::FrameHistory;
 use parking_lot_mpsc::{Receiver, SyncSender};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -163,7 +162,7 @@ enum AsyncEvent {
     LoadSampleErr(String),
 }
 
-impl<'array> MyApp<'array> {
+impl MyApp<'_> {
     fn new(cc: &CreationContext) -> Self {
         let mut fonts = eframe::egui::FontDefinitions::default();
 
@@ -449,7 +448,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
     }
 }
 
-impl<'array> eframe::App for MyApp<'array> {
+impl eframe::App for MyApp<'_> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         // ctx.set_theme(Theme::Light);
         ctx.style_mut(|style| {
@@ -461,7 +460,7 @@ impl<'array> eframe::App for MyApp<'array> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
-                AsyncEvent::LoadJson(json_bytes) => {
+                AsyncEvent::LoadJson(_json_bytes) => {
                     #[cfg(target_arch = "wasm32")]
                     {
                         self.web_loaded_json = Some(json_bytes);
@@ -571,7 +570,7 @@ impl<'array> eframe::App for MyApp<'array> {
                     let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
                         ui.horizontal(|ui| {
                             ui.add(Label::new("Scroll to row: ").extend());
-                            let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                            let scroll_to_row_mode_response = ComboBox::from_id_salt("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
                                     || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
                             });
@@ -739,7 +738,7 @@ impl<'array> eframe::App for MyApp<'array> {
                 let max_rect = ui.max_rect();
                 let mut rect = ui.max_rect();
                 rect.min.y = rect.max.y / 2.0 - 20.0;
-                let mut already_interact = false;
+                let already_interact = false;
 
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
