@@ -128,7 +128,7 @@ pub fn as_array<'array>(
     mut previous_parse_result: ParseResult<String>,
 ) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>), String> {
     let (root_value, start_index, mut end_index) =
-        if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+        if let Some(ref _started_parsing_at) = previous_parse_result.started_parsing_at {
             let root_value = previous_parse_result.json
                 [previous_parse_result.started_parsing_at_index_start]
                 .clone();
@@ -271,23 +271,24 @@ pub fn save_to_file(
             }
             let b = &frag.as_bytes()[0];
             if *b >= 0x30 && *b <= 0x39 {
-                file.write("[".as_bytes()).unwrap();
+                file.write_all("[".as_bytes()).unwrap();
             } else {
-                file.write(format!("{{\"{}\":", frag).as_bytes()).unwrap();
+                file.write_all(format!("{{\"{}\":", frag).as_bytes())
+                    .unwrap();
             }
         }
     }
-    file.write("[".as_bytes()).unwrap();
+    file.write_all("[".as_bytes()).unwrap();
     for (i, entry) in array.iter().enumerate() {
         if let Some(serialized_entry) = entry.entries.last() {
             file.write_all(serialized_entry.value.as_ref().unwrap().as_bytes())
                 .unwrap();
             if i < array.len() - 1 {
-                file.write(LINE_ENDING).unwrap();
+                file.write_all(LINE_ENDING).unwrap();
             }
         }
     }
-    file.write("]".as_bytes()).unwrap();
+    file.write_all("]".as_bytes()).unwrap();
     if !parent_pointer.is_empty() {
         let split = parent_pointer.split('/');
         for frag in split {
@@ -296,9 +297,9 @@ pub fn save_to_file(
             }
             let b = &frag.as_bytes()[0];
             if *b >= 0x30 && *b <= 0x39 {
-                file.write("]".as_bytes()).unwrap();
+                file.write_all("]".as_bytes()).unwrap();
             } else {
-                file.write("}".as_bytes()).unwrap();
+                file.write_all("}".as_bytes()).unwrap();
             }
         }
     }
@@ -372,7 +373,7 @@ pub fn search_occurrences(
 }
 
 pub fn replace_occurrences(
-    previous_parse_result: &Vec<JsonArrayEntries<String>>,
+    previous_parse_result: &[JsonArrayEntries<String>],
     search_replace_response: SearchReplaceResponse,
 ) -> Vec<(FlatJsonValue<String>, usize)> {
     let column_ids = if let Some(ref selected_columns) = search_replace_response.selected_column {
@@ -399,12 +400,9 @@ pub fn replace_occurrences(
                                 ))
                             } else if (search_replace_response.search_criteria.is_empty()
                                 && value.is_empty())
-                                || (!search_replace_response
-                                    .search_criteria
-                                    .is_empty()
-                                    && value.contains(
-                                        search_replace_response.search_criteria.as_str(),
-                                    ))
+                                || (!search_replace_response.search_criteria.is_empty()
+                                    && value
+                                        .contains(search_replace_response.search_criteria.as_str()))
                             {
                                 None
                             } else {
@@ -474,7 +472,7 @@ pub fn replace_occurrences(
 
 fn replace_with_regex(
     search_replace_response: &SearchReplaceResponse,
-    value: &String,
+    value: &str,
     re: Regex,
 ) -> Option<String> {
     let new_value = if let Some(ref replace_value) = search_replace_response.replace_value {
@@ -484,7 +482,7 @@ fn replace_with_regex(
     {
         None
     } else {
-        Some(value.clone())
+        Some(value.to_string())
     };
     new_value
 }

@@ -426,7 +426,7 @@ impl eframe::App for MyApp<'_> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
-                AsyncEvent::LoadJson(json_bytes) => {
+                AsyncEvent::LoadJson(_json_bytes) => {
                     #[cfg(target_arch = "wasm32")]
                     {
                         self.web_loaded_json = Some(json_bytes);

@@ -937,7 +937,7 @@ impl Table<'_> {
             scroll_offset_y,
             min_scrolled_height,
             max_scroll_height,
-            auto_shrink,
+            auto_shrink: _,
             scroll_bar_visibility,
         } = scroll_options;
 

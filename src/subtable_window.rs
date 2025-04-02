@@ -59,11 +59,11 @@ impl SubTable<'_> {
     }
 
     fn parse(
-        content: &String,
+        content: &str,
         options: &ParseOptions,
         state_seen_start_parse_at: bool,
     ) -> ParseResult<String> {
-        let mut lexer = Lexer::new(content.as_str().as_bytes());
+        let mut lexer = Lexer::new(content.as_bytes());
         let mut parser = Parser::new(&mut lexer);
         parser.state_seen_start_parse_at = state_seen_start_parse_at;
         let result = parser
