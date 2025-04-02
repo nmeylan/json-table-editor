@@ -6,7 +6,6 @@
 use eframe::egui::{InnerResponse, Response, ScrollArea, Ui, WidgetInfo, WidgetType};
 
 use eframe::egui::*;
-use egui::CursorIcon::Text;
 
 pub struct PopupMenu {
     id_source: Id,

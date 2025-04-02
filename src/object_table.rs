@@ -269,12 +269,10 @@ impl ObjectTable {
 
             if is_table_focused {
                 if let Some(focused_cell) = self.focused_cell.as_mut() {
-                    if i.consume_key(Modifiers::NONE, Key::Tab) {
-                        if focused_cell.row_index < self.filtered_nodes.len() - 1 {
-                            focused_cell.row_index = focused_cell.row_index + 1;
-                            self.scroll_to_row_number = focused_cell.row_index;
-                            self.changed_arrow_vertical_scroll = true;
-                        }
+                    if i.consume_key(Modifiers::NONE, Key::Tab) && focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                        focused_cell.row_index += 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
                     }
                     if i.consume_key(Modifiers::NONE, Key::ArrowLeft) {
                         // do nothing but consume the event
@@ -282,19 +280,15 @@ impl ObjectTable {
                     if i.consume_key(Modifiers::NONE, Key::ArrowRight) {
                         // do nothing but consume the event
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
-                        if focused_cell.row_index > 0 {
-                            focused_cell.row_index = focused_cell.row_index - 1;
-                            self.scroll_to_row_number = focused_cell.row_index;
-                            self.changed_arrow_vertical_scroll = true;
-                        }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowUp) && focused_cell.row_index > 0 {
+                        focused_cell.row_index -= 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
-                        if focused_cell.row_index < self.filtered_nodes.len() - 1 {
-                            focused_cell.row_index = focused_cell.row_index + 1;
-                            self.scroll_to_row_number = focused_cell.row_index;
-                            self.changed_arrow_vertical_scroll = true;
-                        }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) && focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                        focused_cell.row_index += 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
                     }
                     let typed_alphanum = ArrayTable::get_typed_alphanum_from_events(i);
                     if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))

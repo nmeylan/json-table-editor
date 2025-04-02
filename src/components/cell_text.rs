@@ -1,6 +1,6 @@
 use eframe::emath::Align;
 use eframe::epaint;
-use egui::{FontSelection, Id, Response, RichText, Sense, Style, Ui, Visuals, WidgetText};
+use egui::{FontSelection, Id, Response, RichText, Sense, Ui, WidgetText};
 
 pub struct CellText {
     text: String,

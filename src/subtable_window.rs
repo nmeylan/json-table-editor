@@ -14,7 +14,7 @@ pub struct SubTable<'array> {
     row_index: usize,
 }
 
-impl<'array> SubTable<'array> {
+impl SubTable<'_> {
     pub fn new(
         parent_pointer: PointerKey,
         content: String,
@@ -135,7 +135,7 @@ impl<'array> SubTable<'array> {
     }
 }
 
-impl<'array> super::View<ArrayResponse> for SubTable<'array> {
+impl super::View<ArrayResponse> for SubTable<'_> {
     fn ui(&mut self, ui: &mut Ui) -> ArrayResponse {
         ui.vertical(|ui| {
             if let Some(ref mut array_table) = self.array_table {

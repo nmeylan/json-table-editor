@@ -1,6 +1,5 @@
 use crate::array_table::Column;
 use crate::components::popover::PopupMenu;
-use crate::panels::ReplaceMode::Simple;
 use crate::ACTIVE_COLOR;
 use eframe::egui::Context;
 use eframe::egui::Ui;
@@ -11,8 +10,8 @@ use json_flat_parser::ValueType;
 use std::borrow::Cow;
 use std::cell::RefCell;
 
-pub const PANEL_ABOUT: &'static str = "About";
-pub const PANEL_REPLACE: &'static str = "Replace";
+pub const PANEL_ABOUT: &str = "About";
+pub const PANEL_REPLACE: &str = "Replace";
 
 #[derive(Default)]
 pub struct AboutPanel {}
@@ -27,16 +26,13 @@ pub struct SearchReplacePanel<'array> {
     title: Option<String>,
 }
 #[derive(Clone)]
+#[derive(Default)]
 pub enum ReplaceMode {
+    #[default]
     Simple,
     Regex,
     ExactWord,
     MatchingCase,
-}
-impl Default for ReplaceMode {
-    fn default() -> Self {
-        Simple
-    }
 }
 
 pub struct SearchReplaceResponse<'array> {
@@ -221,7 +217,7 @@ impl<'array> super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                 let replace_regex_mode = Button::new(replace_regex_text);
                 let replace_exact_word_mode = Button::new(replace_exact_word_text);
                 let replace_match_case_mode = Button::new(replace_match_case_text);
-                let mut replace_response = ui
+                let replace_response = ui
                     .with_layout(Layout::right_to_left(Align::Center), |ui| {
                         if self.selected_columns.borrow().len() == 0 {
                             button = button.sense(Sense::hover());

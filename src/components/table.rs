@@ -327,7 +327,7 @@ impl<'l> StripLayout<'l> {
 
         // self.ui.advance_cursor_after_rect(allocation_rect);
 
-        let mut response;
+        let response;
 
         if child_response.is_none() {
             response = child_ui.response();
@@ -900,7 +900,7 @@ pub struct TableResponse {
     pub last_visible_offset: f32,
 }
 
-impl<'a> Table<'a> {
+impl Table<'_> {
     /// Create table body after adding a header row
     pub fn body<F>(
         self,
@@ -1236,7 +1236,7 @@ pub struct TableBody<'a> {
     is_pinned_column_table: bool,
 }
 
-impl<'a> TableBody<'a> {
+impl TableBody<'_> {
     fn scroll_offset_y(&self) -> f32 {
         self.start_y - self.layout.rect.top()
     }
@@ -1332,7 +1332,7 @@ impl<'a> TableBody<'a> {
     }
 
     fn capture_hover_state(&mut self, response: &Option<Response>, row_index: usize) {
-        let is_row_hovered = response.as_ref().map_or(false, |r| r.hovered());
+        let is_row_hovered = response.as_ref().is_some_and(|r| r.hovered());
         if is_row_hovered {
             self.layout
                 .ui
@@ -1341,7 +1341,7 @@ impl<'a> TableBody<'a> {
     }
 }
 
-impl<'a> Drop for TableBody<'a> {
+impl Drop for TableBody<'_> {
     fn drop(&mut self) {
         self.layout.allocate_rect();
     }
@@ -1386,7 +1386,7 @@ pub struct ColumnResponse {
     pub hovered_col_index: Option<usize>,
 }
 
-impl<'a, 'b> TableRow<'a, 'b> {
+impl TableRow<'_, '_> {
     fn capture_hover_cell_state(&mut self, cell_index: CellLocation) {
         if let Some(hovered_cell_index_id) = self.hovered_cell_index_id {
             self.layout
@@ -1405,7 +1405,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
     ) -> (Rect, Response) {
         let col_index = self.col_index;
 
-        let clip = self.columns.get(col_index).map_or(false, |c| c.clip);
+        let clip = self.columns.get(col_index).is_some_and(|c| c.clip);
 
         let width = if let Some(width) = self.widths.get(col_index) {
             self.col_index += 1;
@@ -1484,7 +1484,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
             hovered_col_index: None,
         };
         for col_index in self.visible_columns {
-            let clip = self.columns.get(*col_index).map_or(false, |c| c.clip);
+            let clip = self.columns.get(*col_index).is_some_and(|c| c.clip);
             let width = if let Some(width) = self.widths.get(*col_index) {
                 *width
             } else {
@@ -1573,7 +1573,7 @@ impl<'a, 'b> TableRow<'a, 'b> {
     }
 }
 
-impl<'a, 'b> Drop for TableRow<'a, 'b> {
+impl Drop for TableRow<'_, '_> {
     #[inline]
     fn drop(&mut self) {
         self.layout.end_line();
