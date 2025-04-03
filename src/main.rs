@@ -737,7 +737,7 @@ impl eframe::App for MyApp<'_> {
                 let max_rect = ui.max_rect();
                 let mut rect = ui.max_rect();
                 rect.min.y = rect.max.y / 2.0 - 20.0;
-                let already_interact = false;
+                let mut already_interact = false;
 
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
@@ -843,6 +843,9 @@ impl eframe::App for MyApp<'_> {
         }
     }
 }
+
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 // When compiling to web using trunk
 #[cfg(target_arch = "wasm32")]

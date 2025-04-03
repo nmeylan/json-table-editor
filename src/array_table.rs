@@ -17,7 +17,6 @@ use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
     WidgetText,
 };
-use eframe::epaint::text::TextWrapMode;
 use egui::{EventFilter, InputState, Modifiers, Rangef, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
@@ -629,7 +628,12 @@ impl<'array> ArrayTable<'array> {
                 if pinned_column_table && i == 0 {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
                 } else if i == columns_count - 1 {
-                    table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(240.0, f32::INFINITY)));
+                    table = table.column(
+                        Column::remainder()
+                            .clip(false)
+                            .resizable(true)
+                            .range(Rangef::new(240.0, f32::INFINITY)),
+                    );
                 } else {
                     table = table.column(
                         Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
@@ -638,7 +642,6 @@ impl<'array> ArrayTable<'array> {
                     );
                 }
                 // table = table.column(Column::initial(10.0).clip(true).resizable(true));
-
             }
         }
 
@@ -1523,7 +1526,9 @@ impl<'array> ArrayTable<'array> {
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) && focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                    if i.consume_key(Modifiers::NONE, Key::ArrowDown)
+                        && focused_cell.row_index < self.filtered_nodes.len() - 1
+                    {
                         focused_cell.row_index += 1;
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;
