@@ -1,4 +1,7 @@
-#![cfg_attr(all(target_os = "windows", feature = "dist"), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(target_os = "windows", feature = "dist"),
+    windows_subsystem = "windows"
+)]
 
 extern crate core;
 
@@ -11,7 +14,6 @@ mod panels;
 pub mod parser;
 mod replace_panel;
 mod subtable_window;
-mod web;
 
 use std::collections::BTreeSet;
 use std::fmt::Write;
@@ -29,7 +31,7 @@ use crate::components::icon;
 use crate::components::table::HoverData;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::{AboutPanel, PANEL_ABOUT};
-use crate::parser::{save_to_buffer, save_to_file};
+use crate::parser::save_to_file;
 use eframe::egui::Context;
 use eframe::egui::{
     Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label,
@@ -41,6 +43,9 @@ use eframe::{CreationContext, Renderer};
 use egui::style::ScrollStyle;
 use egui::ScrollArea;
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
+
+#[cfg(target_arch = "wasm32")]
+use crate::parser::save_to_buffer;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
 
@@ -90,50 +95,48 @@ impl ArrayResponse {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        let options = eframe::NativeOptions {
-            persist_window: false,
-            renderer: Renderer::Glow,
-            viewport: eframe::egui::ViewportBuilder::default()
-                .with_inner_size(Vec2 {
-                    x: 1200.0,
-                    y: 900.0,
-                })
-                .with_maximized(true)
-                .with_icon(Arc::new(
-                    eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap(),
-                )),
-            // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
-            ..eframe::NativeOptions::default()
-        };
-        eframe::run_native(
-            "JSON table editor",
-            options,
-            Box::new(|cc| {
-                egui_extras::install_image_loaders(&cc.egui_ctx);
-                let mut style = (*cc.egui_ctx.style()).clone();
-                style.spacing.scroll.floating = false;
-                style.spacing.scroll.bar_width = 4.0;
-                style.spacing.scroll.bar_inner_margin = 6.0;
-                cc.egui_ctx.set_style(style);
-                let mut app = MyApp::new(cc);
+    let options = eframe::NativeOptions {
+        persist_window: false,
+        renderer: Renderer::Glow,
+        viewport: eframe::egui::ViewportBuilder::default()
+            .with_inner_size(Vec2 {
+                x: 1200.0,
+                y: 900.0,
+            })
+            .with_maximized(true)
+            .with_icon(Arc::new(
+                eframe::icon_data::from_png_bytes(include_bytes!("../icons/logo.png")).unwrap(),
+            )),
+        // viewport: egui::ViewportBuilder::default().with_inner_size(Vec2 { x: 1900.0, y: 1200.0 }).with_maximized(true),
+        ..eframe::NativeOptions::default()
+    };
+    eframe::run_native(
+        "JSON table editor",
+        options,
+        Box::new(|cc| {
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+            let mut style = (*cc.egui_ctx.style()).clone();
+            style.spacing.scroll.floating = false;
+            style.spacing.scroll.bar_width = 4.0;
+            style.spacing.scroll.bar_inner_margin = 6.0;
+            cc.egui_ctx.set_style(style);
+            let mut app = MyApp::new(cc);
 
-                let args: Vec<_> = env::args().collect();
-                if args.len() >= 2 {
-                    println!("Opening {}", args[1].as_str());
-                    app.selected_file = Some(PathBuf::from(args[1].as_str()));
-                    app.should_parse_again = true;
-                }
-                if args.len() >= 3 {
-                    app.selected_pointer = Some(args[2].clone());
-                }
-                Ok(Box::new(app))
-            }),
-        )
-        .unwrap();
-    }
+            let args: Vec<_> = env::args().collect();
+            if args.len() >= 2 {
+                println!("Opening {}", args[1].as_str());
+                app.selected_file = Some(PathBuf::from(args[1].as_str()));
+                app.should_parse_again = true;
+            }
+            if args.len() >= 3 {
+                app.selected_pointer = Some(args[2].clone());
+            }
+            Ok(Box::new(app))
+        }),
+    )
+    .unwrap();
 }
 
 struct MyApp<'array> {
@@ -204,33 +207,32 @@ impl MyApp<'_> {
         set_open(open, self.about_panel.name(), is_open);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open_json(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
-            let metadata1 = file.metadata().unwrap();
+        let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
+        let metadata1 = file.metadata().unwrap();
 
-            let size = (metadata1.len() / 1024 / 1024) as usize;
-            let max_depth = if size < 100 {
-                // 1
-                u8::MAX
-            } else {
-                1 // should start after prefix
-            };
-            let mut content = String::with_capacity(metadata1.len() as usize);
-            // let mut reader = LfToCrlfReader::new(file);
-            // reader.read_to_string(&mut content);
-            file.read_to_string(&mut content).unwrap();
+        let size = (metadata1.len() / 1024 / 1024) as usize;
+        let max_depth = if size < 100 {
+            // 1
+            u8::MAX
+        } else {
+            1 // should start after prefix
+        };
+        let mut content = String::with_capacity(metadata1.len() as usize);
+        // let mut reader = LfToCrlfReader::new(file);
+        // reader.read_to_string(&mut content);
+        file.read_to_string(&mut content).unwrap();
 
-            self.open_json_content(max_depth, content.as_bytes());
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            if self.web_loaded_json.is_some() {
-                let json = mem::take(&mut self.web_loaded_json);
-                self.open_json_content(u8::MAX, json.unwrap().as_slice());
-                self.selected_file = Some(PathBuf::default());
-            }
+        self.open_json_content(max_depth, content.as_bytes());
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn open_json(&mut self) {
+        if self.web_loaded_json.is_some() {
+            let json = mem::take(&mut self.web_loaded_json);
+            self.open_json_content(u8::MAX, json.unwrap().as_slice());
+            self.selected_file = Some(PathBuf::default());
         }
     }
 
@@ -331,27 +333,25 @@ impl MyApp<'_> {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn file_picker(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Some(path) = rfd::FileDialog::new().pick_file() {
-                self.selected_file = Some(path);
-                self.should_parse_again = true;
-                self.table = None;
-            }
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
+            self.selected_file = Some(path);
+            self.should_parse_again = true;
+            self.table = None;
         }
+    }
 
-        #[cfg(target_arch = "wasm32")]
-        {
-            let sender = self.async_events_channel.0.clone();
-            self.force_repaint = true;
-            let future = async move {
-                if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
-                    sender.send(AsyncEvent::LoadJson(file_handle.read().await));
-                }
-            };
-            wasm_bindgen_futures::spawn_local(future);
-        }
+    #[cfg(target_arch = "wasm32")]
+    fn file_picker(&mut self) {
+        let sender = self.async_events_channel.0.clone();
+        self.force_repaint = true;
+        let future = async move {
+            if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
+                sender.send(AsyncEvent::LoadJson(file_handle.read().await));
+            }
+        };
+        wasm_bindgen_futures::spawn_local(future);
     }
 
     fn goto_next_matching_row_occurrence(table: &mut ArrayTable) -> bool {
@@ -460,17 +460,16 @@ impl eframe::App for MyApp<'_> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
-                AsyncEvent::LoadJson(_json_bytes) => {
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        self.web_loaded_json = Some(json_bytes);
-                        self.open_json();
-                    }
+                #[cfg(target_arch = "wasm32")]
+                AsyncEvent::LoadJson(json_bytes) => {
+                    self.web_loaded_json = Some(json_bytes);
+                    self.open_json();
                 }
                 AsyncEvent::LoadSampleErr(err) => {
                     self.failed_to_load_sample_json = Some(err);
                     ctx.request_repaint();
                 }
+                _ => {}
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
@@ -738,7 +737,7 @@ impl eframe::App for MyApp<'_> {
                 let max_rect = ui.max_rect();
                 let mut rect = ui.max_rect();
                 rect.min.y = rect.max.y / 2.0 - 20.0;
-                let already_interact = false;
+                let mut already_interact = false;
 
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
@@ -755,7 +754,7 @@ impl eframe::App for MyApp<'_> {
                                                    if ui.button("Or load sample json file of 1mb").clicked() {
                                                        self.failed_to_load_sample_json = None;
                                                        already_interact = true;
-                                                       let request = ehttp::Request::get("https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json");
+                                                       let request = ehttp::Request::get("https://raw.githubusercontent.com/nmeylan/json-table-editor/master/public/skill.json");
                                                        self.force_repaint = true;
                                                        let sender = self.async_events_channel.0.clone();
                                                        ehttp::fetch(request, move |result: ehttp::Result<ehttp::Response>| {
@@ -775,7 +774,7 @@ impl eframe::App for MyApp<'_> {
                                                    if let Some(ref failed_to_load_sample_json) = self.failed_to_load_sample_json {
                                                        ui.colored_label(Color32::RED, failed_to_load_sample_json);
                                                    }
-                                                   if ui.hyperlink_to("Sample source available here", "https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json").clicked() {
+                                                   if ui.hyperlink_to("Sample source available here", "https://raw.githubusercontent.com/nmeylan/json-table-editor/master/public/skill.json").clicked() {
                                                        already_interact = true;
                                                    }
                                                }
@@ -843,4 +842,13 @@ impl eframe::App for MyApp<'_> {
             ctx.request_repaint();
         }
     }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod web;
+
+// When compiling to web using trunk
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    web::run_on_web();
 }
