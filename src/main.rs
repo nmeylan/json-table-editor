@@ -1,3 +1,5 @@
+#![cfg_attr(all(target_os = "windows", feature = "dist"), windows_subsystem = "windows")]
+
 extern crate core;
 
 mod array_table;
@@ -483,6 +485,7 @@ impl<'array> eframe::App for MyApp<'array> {
                 if self.unsaved_changes { " *" } else { "" }
             );
 
+            #[cfg(not(feature = "dist"))]
             if self.show_fps {
                 self.frame_history
                     .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
