@@ -1,4 +1,4 @@
-use std::time::{Duration,Instant};
+use std::time::Instant;
 #[macro_export]
 macro_rules! log {
     () => {
@@ -25,8 +25,6 @@ pub fn now() -> crate::compatibility::InstantWrapper {
 #[cfg(target_arch = "wasm32")]
 #[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Hash)]
 pub struct InstantWrapper(Duration);
-
-
 
 #[cfg(target_arch = "wasm32")]
 impl InstantWrapper {
@@ -128,13 +126,16 @@ fn duration_from_f64(millis: f64) -> Duration {
 
 #[cfg(target_arch = "wasm32")]
 fn _now() -> f64 {
-        let now = {
+    let now = {
         use wasm_bindgen::prelude::*;
         use wasm_bindgen::JsCast;
-            web_sys::js_sys::Reflect::get(&web_sys::js_sys::global(), &wasm_bindgen::JsValue::from_str("performance"))
-            .expect("failed to get performance from global object")
-            .unchecked_into::<web_sys::Performance>()
-            .now()
+        web_sys::js_sys::Reflect::get(
+            &web_sys::js_sys::global(),
+            &wasm_bindgen::JsValue::from_str("performance"),
+        )
+        .expect("failed to get performance from global object")
+        .unchecked_into::<web_sys::Performance>()
+        .now()
     };
 
     now

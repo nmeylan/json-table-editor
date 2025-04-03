@@ -7,7 +7,10 @@ fn main() {
         .output()
         .expect("Failed to execute git command");
 
-    let git_hash = String::from_utf8(output.stdout).unwrap_or_default().trim().to_string();
+    let git_hash = String::from_utf8(output.stdout)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
 
     // Set the version as an environment variable
     println!("cargo:rustc-env=GIT_HASH={}", git_hash);
