@@ -754,7 +754,7 @@ impl eframe::App for MyApp<'_> {
                                                    if ui.button("Or load sample json file of 1mb").clicked() {
                                                        self.failed_to_load_sample_json = None;
                                                        already_interact = true;
-                                                       let request = ehttp::Request::get("https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json");
+                                                       let request = ehttp::Request::get("https://raw.githubusercontent.com/nmeylan/json-table-editor/master/public/skill.json");
                                                        self.force_repaint = true;
                                                        let sender = self.async_events_channel.0.clone();
                                                        ehttp::fetch(request, move |result: ehttp::Result<ehttp::Response>| {
@@ -774,7 +774,7 @@ impl eframe::App for MyApp<'_> {
                                                    if let Some(ref failed_to_load_sample_json) = self.failed_to_load_sample_json {
                                                        ui.colored_label(Color32::RED, failed_to_load_sample_json);
                                                    }
-                                                   if ui.hyperlink_to("Sample source available here", "https://raw.githubusercontent.com/nmeylan/json-table-editor/master/web/skill.json").clicked() {
+                                                   if ui.hyperlink_to("Sample source available here", "https://raw.githubusercontent.com/nmeylan/json-table-editor/master/public/skill.json").clicked() {
                                                        already_interact = true;
                                                    }
                                                }
