@@ -18,7 +18,7 @@ use eframe::egui::{
     WidgetText,
 };
 use eframe::epaint::text::TextWrapMode;
-use egui::{EventFilter, InputState, Modifiers, TextBuffer};
+use egui::{EventFilter, InputState, Modifiers, Rangef, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
@@ -634,14 +634,17 @@ impl<'array> ArrayTable<'array> {
             for i in 0..columns_count {
                 if pinned_column_table && i == 0 {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
-                    continue;
+                } else if i == columns_count - 1 {
+                    table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(240.0, f32::INFINITY)));
+                } else {
+                    table = table.column(
+                        Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
+                            .clip(true)
+                            .resizable(true),
+                    );
                 }
                 // table = table.column(Column::initial(10.0).clip(true).resizable(true));
-                table = table.column(
-                    Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
-                        .clip(true)
-                        .resizable(true),
-                );
+
             }
         }
 
@@ -862,7 +865,8 @@ impl<'array> ArrayTable<'array> {
                         focused_changed = true;
                         focused_cell = None;
                         let ref_mut = &mut *self.editing_value.borrow_mut();
-                        let textedit_response = ui.add(TextEdit::singleline(ref_mut));
+                        let text_edit = TextEdit::singleline(ref_mut);
+                        let textedit_response = ui.add(text_edit.desired_width(f32::INFINITY));
                         if textedit_response.lost_focus()
                             || ui
                                 .ctx()

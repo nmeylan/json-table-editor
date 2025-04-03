@@ -497,6 +497,12 @@ impl Column {
         self
     }
 
+    #[inline]
+    pub fn range(mut self, range: impl Into<Rangef>) -> Self {
+        self.width_range = range.into();
+        self
+    }
+
     fn is_auto(&self) -> bool {
         match self.initial_width {
             InitialColumnSize::Automatic(_) => true,
