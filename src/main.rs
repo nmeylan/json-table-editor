@@ -11,8 +11,10 @@ mod replace_panel;
 mod subtable_window;
 mod web;
 
+use std::any::Any;
 use std::collections::BTreeSet;
-use std::fmt::Write;
+use std::fmt::{format, Write};
+
 use std::fs::File;
 use std::io::Read;
 use std::{env, mem};
@@ -20,14 +22,14 @@ use std::{env, mem};
 use crate::components::fps::FrameHistory;
 use parking_lot_mpsc::{Receiver, SyncSender};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::{AboutPanel, PANEL_ABOUT};
-use crate::parser::save_to_file;
+use crate::parser::{save_to_buffer, save_to_file};
 use eframe::egui::Context;
 use eframe::egui::{
     Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label,
@@ -378,6 +380,7 @@ impl MyApp<'_> {
         true
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn save(&mut self) {
         let table = self.table.as_ref().unwrap();
         save_to_file(
@@ -388,6 +391,37 @@ impl MyApp<'_> {
         .unwrap();
         self.unsaved_changes = false;
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save(&mut self) {
+        let table = self.table.as_ref().unwrap();
+        let mut buffer = vec![];
+        save_to_buffer(
+            table.parent_pointer.pointer.as_str(),
+            table.nodes(),
+            &mut buffer,
+        )
+        .unwrap();
+        use eframe::wasm_bindgen::JsCast;
+        use js_sys::Array;
+        use web_sys::js_sys;
+
+        let array_data = Array::new();
+        array_data.push(&js_sys::Uint8Array::from(buffer.as_slice()));
+        let blob = web_sys::Blob::new_with_u8_array_sequence(&array_data).unwrap();
+        let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
+        // create link
+        let document = web_sys::window().unwrap().document().unwrap();
+        let a = document.create_element("a").unwrap();
+        a.set_attribute("href", &url).unwrap();
+        a.set_attribute("download", "file.json").unwrap();
+        // click link
+        a.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
+        // revoke url
+        web_sys::Url::revoke_object_url(&url).unwrap();
+        self.unsaved_changes = false;
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn save_as(&mut self) {
         if let Some(path) = rfd::FileDialog::new().save_file() {
@@ -426,7 +460,7 @@ impl eframe::App for MyApp<'_> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
-                AsyncEvent::LoadJson(_json_bytes) => {
+                AsyncEvent::LoadJson(json_bytes) => {
                     #[cfg(target_arch = "wasm32")]
                     {
                         self.web_loaded_json = Some(json_bytes);
@@ -472,13 +506,13 @@ impl eframe::App for MyApp<'_> {
                             ui.close_menu();
                             self.file_picker();
                         }
+                        ui.separator();
+                        let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
+                        if ui.add(button).clicked() {
+                            ui.close_menu();
+                            self.save();
+                        }
                         #[cfg(not(target_arch = "wasm32"))] {
-                            ui.separator();
-                            let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
-                            if ui.add(button).clicked() {
-                                ui.close_menu();
-                                self.save();
-                            }
                             ui.separator();
                             let button = Button::new("Save as").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE_AS));
                             if ui.add(button).clicked() {

@@ -128,8 +128,8 @@ pub fn as_array<'array>(
     mut previous_parse_result: ParseResult<String>,
 ) -> Result<(Vec<JsonArrayEntries<String>>, Vec<Column<'array>>), String> {
     let (root_value, start_index, mut end_index) =
-        if let Some(ref _started_parsing_at) = previous_parse_result.started_parsing_at {
-            let root_value = previous_parse_result.json
+        if let Some(ref started_parsing_at) = previous_parse_result.started_parsing_at {
+            let mut root_value = previous_parse_result.json
                 [previous_parse_result.started_parsing_at_index_start]
                 .clone();
             (
@@ -255,6 +255,60 @@ pub fn row_number_entry(i: usize, position: usize, prefix: &str) -> FlatJsonValu
 const LINE_ENDING: &'static [u8] = ",\r\n".as_bytes();
 #[cfg(not(windows))]
 const LINE_ENDING: &[u8] = ",\n".as_bytes();
+
+pub fn save_to_buffer<T: Write>(
+    parent_pointer: &str,
+    array: &[JsonArrayEntries<String>],
+    buffer: &mut T,
+) -> std::io::Result<()> {
+    if !parent_pointer.is_empty() {
+        let split = parent_pointer.split('/');
+        for frag in split {
+            if frag.is_empty() {
+                continue;
+            }
+            let b = &frag.as_bytes()[0];
+            if *b >= 0x30 && *b <= 0x39 {
+                buffer.write_all("[".as_bytes()).unwrap();
+            } else {
+                buffer
+                    .write_all(format!("{{\"{}\":", frag).as_bytes())
+                    .unwrap();
+            }
+        }
+    }
+
+    buffer.write_all("[".as_bytes()).unwrap();
+    for (i, entry) in array.iter().enumerate() {
+        if let Some(serialized_entry) = entry.entries.last() {
+            buffer
+                .write_all(serialized_entry.value.as_ref().unwrap().as_bytes())
+                .unwrap();
+            if i < array.len() - 1 {
+                buffer.write_all(LINE_ENDING).unwrap();
+            }
+        }
+    }
+    buffer.write_all("]".as_bytes())?;
+    if !parent_pointer.is_empty() {
+        let split = parent_pointer.split('/');
+        for frag in split {
+            if frag.is_empty() {
+                continue;
+            }
+            let b = &frag.as_bytes()[0];
+            if *b >= 0x30 && *b <= 0x39 {
+
+                buffer.write_all("]".as_bytes()).unwrap();
+            } else {
+                buffer.write_all("}".as_bytes()).unwrap();
+            }
+        }
+    }
+    buffer.flush()?;
+    Ok(())
+}
+
 pub fn save_to_file(
     parent_pointer: &str,
     array: &[JsonArrayEntries<String>],
@@ -263,47 +317,7 @@ pub fn save_to_file(
     // let start = crate::compatibility::now();
     let file = fs::File::create(file_path)?;
     let mut file = BufWriter::new(file);
-    if !parent_pointer.is_empty() {
-        let split = parent_pointer.split('/');
-        for frag in split {
-            if frag.is_empty() {
-                continue;
-            }
-            let b = &frag.as_bytes()[0];
-            if *b >= 0x30 && *b <= 0x39 {
-                file.write_all("[".as_bytes()).unwrap();
-            } else {
-                file.write_all(format!("{{\"{}\":", frag).as_bytes())
-                    .unwrap();
-            }
-        }
-    }
-    file.write_all("[".as_bytes()).unwrap();
-    for (i, entry) in array.iter().enumerate() {
-        if let Some(serialized_entry) = entry.entries.last() {
-            file.write_all(serialized_entry.value.as_ref().unwrap().as_bytes())
-                .unwrap();
-            if i < array.len() - 1 {
-                file.write_all(LINE_ENDING).unwrap();
-            }
-        }
-    }
-    file.write_all("]".as_bytes()).unwrap();
-    if !parent_pointer.is_empty() {
-        let split = parent_pointer.split('/');
-        for frag in split {
-            if frag.is_empty() {
-                continue;
-            }
-            let b = &frag.as_bytes()[0];
-            if *b >= 0x30 && *b <= 0x39 {
-                file.write_all("]".as_bytes()).unwrap();
-            } else {
-                file.write_all("}".as_bytes()).unwrap();
-            }
-        }
-    }
-    file.flush()?;
+    save_to_buffer(parent_pointer, array, &mut file)?;
     // println!("serialize and save file took {}ms", start.elapsed().as_millis());
     Ok(())
 }
@@ -398,15 +412,21 @@ pub fn replace_occurrences(
                                     search_replace_response.search_criteria.as_str(),
                                     replace_value,
                                 ))
-                            } else if (search_replace_response.search_criteria.is_empty()
-                                && value.is_empty())
-                                || (!search_replace_response.search_criteria.is_empty()
-                                    && value
-                                        .contains(search_replace_response.search_criteria.as_str()))
-                            {
-                                None
                             } else {
-                                Some(value.clone())
+                                if (search_replace_response.search_criteria.as_str().is_empty()
+                                    && value.is_empty())
+                                    || (!search_replace_response
+                                        .search_criteria
+                                        .as_str()
+                                        .is_empty()
+                                        && value.contains(
+                                            search_replace_response.search_criteria.as_str(),
+                                        ))
+                                {
+                                    None
+                                } else {
+                                    Some(value.clone())
+                                }
                             };
                             new_values.push((
                                 FlatJsonValue {
@@ -482,7 +502,13 @@ fn replace_with_regex(
     {
         None
     } else {
-        Some(value.to_string())
+        if (search_replace_response.search_criteria.as_str().is_empty() && value.is_empty())
+            || (!search_replace_response.search_criteria.as_str().is_empty() && re.is_match(value))
+        {
+            None
+        } else {
+            Some(value.clone())
+        }
     };
     new_value
 }
