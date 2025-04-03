@@ -1,3 +1,8 @@
+#![cfg_attr(
+    all(target_os = "windows", feature = "dist"),
+    windows_subsystem = "windows"
+)]
+
 extern crate core;
 
 mod array_table;
@@ -9,11 +14,9 @@ mod panels;
 pub mod parser;
 mod replace_panel;
 mod subtable_window;
-mod web;
 
-use std::any::Any;
 use std::collections::BTreeSet;
-use std::fmt::{format, Write};
+use std::fmt::Write;
 use std::fs::File;
 use std::io::Read;
 use std::{env, mem};
@@ -21,7 +24,7 @@ use std::{env, mem};
 use crate::components::fps::FrameHistory;
 use parking_lot_mpsc::{Receiver, SyncSender};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
@@ -38,8 +41,11 @@ use eframe::egui::{
 use eframe::epaint::text::TextWrapMode;
 use eframe::{CreationContext, Renderer};
 use egui::style::ScrollStyle;
-use egui::{ScrollArea, TextBuffer};
+use egui::ScrollArea;
 use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
+
+#[cfg(target_arch = "wasm32")]
+use crate::parser::save_to_buffer;
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
 
@@ -159,7 +165,7 @@ enum AsyncEvent {
     LoadSampleErr(String),
 }
 
-impl<'array> MyApp<'array> {
+impl MyApp<'_> {
     fn new(cc: &CreationContext) -> Self {
         let mut fonts = eframe::egui::FontDefinitions::default();
 
@@ -377,6 +383,7 @@ impl<'array> MyApp<'array> {
         true
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn save(&mut self) {
         let table = self.table.as_ref().unwrap();
         save_to_file(
@@ -387,6 +394,37 @@ impl<'array> MyApp<'array> {
         .unwrap();
         self.unsaved_changes = false;
     }
+
+    #[cfg(target_arch = "wasm32")]
+    fn save(&mut self) {
+        let table = self.table.as_ref().unwrap();
+        let mut buffer = vec![];
+        save_to_buffer(
+            table.parent_pointer.pointer.as_str(),
+            table.nodes(),
+            &mut buffer,
+        )
+        .unwrap();
+        use eframe::wasm_bindgen::JsCast;
+        use js_sys::Array;
+        use web_sys::js_sys;
+
+        let array_data = Array::new();
+        array_data.push(&js_sys::Uint8Array::from(buffer.as_slice()));
+        let blob = web_sys::Blob::new_with_u8_array_sequence(&array_data).unwrap();
+        let url = web_sys::Url::create_object_url_with_blob(&blob).unwrap();
+        // create link
+        let document = web_sys::window().unwrap().document().unwrap();
+        let a = document.create_element("a").unwrap();
+        a.set_attribute("href", &url).unwrap();
+        a.set_attribute("download", "file.json").unwrap();
+        // click link
+        a.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
+        // revoke url
+        web_sys::Url::revoke_object_url(&url).unwrap();
+        self.unsaved_changes = false;
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn save_as(&mut self) {
         if let Some(path) = rfd::FileDialog::new().save_file() {
@@ -413,7 +451,7 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
     }
 }
 
-impl<'array> eframe::App for MyApp<'array> {
+impl eframe::App for MyApp<'_> {
     fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
         // ctx.set_theme(Theme::Light);
         ctx.style_mut(|style| {
@@ -449,6 +487,7 @@ impl<'array> eframe::App for MyApp<'array> {
                 if self.unsaved_changes { " *" } else { "" }
             );
 
+            #[cfg(not(feature = "dist"))]
             if self.show_fps {
                 self.frame_history
                     .on_new_frame(ctx.input(|i| i.time), frame.info().cpu_usage);
@@ -471,13 +510,13 @@ impl<'array> eframe::App for MyApp<'array> {
                             ui.close_menu();
                             self.file_picker();
                         }
+                        ui.separator();
+                        let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
+                        if ui.add(button).clicked() {
+                            ui.close_menu();
+                            self.save();
+                        }
                         #[cfg(not(target_arch = "wasm32"))] {
-                            ui.separator();
-                            let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
-                            if ui.add(button).clicked() {
-                                ui.close_menu();
-                                self.save();
-                            }
                             ui.separator();
                             let button = Button::new("Save as").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE_AS));
                             if ui.add(button).clicked() {
@@ -534,7 +573,7 @@ impl<'array> eframe::App for MyApp<'array> {
                     let (scroll_to_row_mode_response, scroll_to_row_response) = ui.allocate_ui(Vec2::new(410.0, ui.spacing().interact_size.y), |ui| {
                         ui.horizontal(|ui| {
                             ui.add(Label::new("Scroll to row: ").extend());
-                            let scroll_to_row_mode_response = ComboBox::from_id_source("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
+                            let scroll_to_row_mode_response = ComboBox::from_id_salt("scroll_mode").selected_text(table.scroll_to_row_mode.as_str()).show_ui(ui, |ui| {
                                 ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::RowNumber, ScrollToRowMode::RowNumber.as_str()).changed()
                                     || ui.selectable_value(&mut table.scroll_to_row_mode, ScrollToRowMode::MatchingTerm, ScrollToRowMode::MatchingTerm.as_str()).changed()
                             });
@@ -702,7 +741,7 @@ impl<'array> eframe::App for MyApp<'array> {
                 let max_rect = ui.max_rect();
                 let mut rect = ui.max_rect();
                 rect.min.y = rect.max.y / 2.0 - 20.0;
-                let mut already_interact = false;
+                let already_interact = false;
 
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
@@ -809,7 +848,7 @@ impl<'array> eframe::App for MyApp<'array> {
     }
 }
 
-// When compiling to web using trunk:
+// When compiling to web using trunk
 #[cfg(target_arch = "wasm32")]
 fn main() {
     web::run_on_web();

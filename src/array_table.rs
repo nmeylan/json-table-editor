@@ -18,7 +18,7 @@ use eframe::egui::{
     WidgetText,
 };
 use eframe::epaint::text::TextWrapMode;
-use egui::{EventFilter, InputState, Modifiers, TextBuffer};
+use egui::{EventFilter, InputState, Modifiers, Rangef, TextBuffer};
 use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
@@ -26,12 +26,11 @@ use json_flat_parser::{
 };
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
-use rayon::prelude::{ParallelSlice, ParallelSliceMut};
+use rayon::prelude::ParallelSliceMut;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
-use std::fmt::format;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
@@ -49,13 +48,13 @@ pub struct Column<'col> {
     pub id: usize,
 }
 
-impl<'col> Hash for Column<'col> {
+impl Hash for Column<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state)
     }
 }
 
-impl<'col> Column<'col> {
+impl Column<'_> {
     pub fn new(name: String, value_type: ValueType) -> Self {
         Self {
             name: Cow::from(name),
@@ -68,21 +67,21 @@ impl<'col> Column<'col> {
     }
 }
 
-impl<'col> Eq for Column<'col> {}
+impl Eq for Column<'_> {}
 
-impl<'col> PartialEq<Self> for Column<'col> {
+impl PartialEq<Self> for Column<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.name.eq(&other.name)
     }
 }
 
-impl<'col> PartialOrd<Self> for Column<'col> {
+impl PartialOrd<Self> for Column<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'col> Ord for Column<'col> {
+impl Ord for Column<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         match other.seen_count.cmp(&self.seen_count) {
             Ordering::Equal => other.order.cmp(&self.order),
@@ -167,7 +166,7 @@ pub struct ArrayTable<'array> {
     search_replace_panel: SearchReplacePanel<'array>,
 }
 
-impl<'array> super::View<ArrayResponse> for ArrayTable<'array> {
+impl super::View<ArrayResponse> for ArrayTable<'_> {
     fn ui(&mut self, ui: &mut egui::Ui) -> ArrayResponse {
         let mut array_response = ArrayResponse::default();
         self.windows(ui.ctx(), &mut array_response);
@@ -512,12 +511,7 @@ impl<'array> ArrayTable<'array> {
     fn selected_columns(all_columns: &Vec<Column<'array>>, depth: u8) -> Vec<Column<'array>> {
         let mut column_selected: Vec<Column<'array>> = vec![];
         for col in Self::visible_columns(all_columns, depth) {
-            match col.name {
-                // "id" => column_selected.push(i),
-                // "name" => column_selected.push(i),
-                // _ => {}
-                _ => column_selected.push(col.clone()),
-            }
+            column_selected.push(col.clone())
         }
         column_selected
     }
@@ -627,21 +621,24 @@ impl<'array> ArrayTable<'array> {
                 if pinned_column_table && i == 0 {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
                 } else {
-                    table = table.column(Column::auto().clip(true).resizable(true));
+                    table = table.column(Column::remainder().clip(true).resizable(true));
                 }
             }
         } else {
             for i in 0..columns_count {
                 if pinned_column_table && i == 0 {
                     table = table.column(Column::initial(40.0).clip(true).resizable(true));
-                    continue;
+                } else if i == columns_count - 1 {
+                    table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(240.0, f32::INFINITY)));
+                } else {
+                    table = table.column(
+                        Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
+                            .clip(true)
+                            .resizable(true),
+                    );
                 }
                 // table = table.column(Column::initial(10.0).clip(true).resizable(true));
-                table = table.column(
-                    Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
-                        .clip(true)
-                        .resizable(true),
-                );
+
             }
         }
 
@@ -729,7 +726,7 @@ impl<'array> ArrayTable<'array> {
                         if response.clicked() {
                             pinned_column = Some(index);
                         }
-                        let column_id = Id::new(&name);
+                        let column_id = Id::new(name);
                         let checked_filtered_values = self.columns_filter.get(column.name.as_str());
                         PopupMenu::new(column_id.with("filter")).show_ui(
                             ui,
@@ -862,7 +859,8 @@ impl<'array> ArrayTable<'array> {
                         focused_changed = true;
                         focused_cell = None;
                         let ref_mut = &mut *self.editing_value.borrow_mut();
-                        let textedit_response = ui.add(TextEdit::singleline(ref_mut));
+                        let text_edit = TextEdit::singleline(ref_mut);
+                        let textedit_response = ui.add(text_edit.desired_width(f32::INFINITY));
                         if textedit_response.lost_focus()
                             || ui
                                 .ctx()
@@ -897,7 +895,7 @@ impl<'array> ArrayTable<'array> {
                             return Some(label.ui(ui));
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
-                                let mut label = CellText::new(value.clone());
+                                let label = CellText::new(value.clone());
 
                                 let mut response = label.ui(ui, cell_id);
 
@@ -963,6 +961,7 @@ impl<'array> ArrayTable<'array> {
                 });
             }
         });
+        // Context menu
         if let Some(ref hover_cell) = hover_data.hovered_cell {
             if let Some(ref response) = hover_data.response_rows {
                 response.context_menu(|ui| {
@@ -995,7 +994,7 @@ impl<'array> ArrayTable<'array> {
                                 *self.editing_value.borrow_mut() = mem::take(&mut edit_value);
                                 ui.close_menu();
                             }
-                            if edit_value.len() > 0 {
+                            if !edit_value.is_empty() {
                                 // Context menu: copy
                                 let button = ButtonWithIcon::new("Copy", COPY)
                                     .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
@@ -1403,7 +1402,7 @@ impl<'array> ArrayTable<'array> {
     ) -> Option<&'a FlatJsonValue<String>> {
         let key = column.name.as_str();
         let key = Self::pointer_key(parent_pointer, row_index, key);
-        return data.iter().find(|entry| entry.pointer.pointer.eq(&key));
+        data.iter().find(|entry| entry.pointer.pointer.eq(&key))
     }
 
     #[inline]
@@ -1474,64 +1473,60 @@ impl<'array> ArrayTable<'array> {
                         if !focused_cell.is_pinned_column_table
                             && focused_cell.column_index < self.column_selected.len() - 1
                         {
-                            focused_cell.column_index = focused_cell.column_index + 1;
+                            focused_cell.column_index += 1;
                             self.scroll_to_column_number = focused_cell.column_index;
                             self.changed_arrow_horizontal_scroll = true;
                         } else if !focused_cell.is_pinned_column_table
                             && focused_cell.row_index < self.filtered_nodes.len() - 1
                         {
                             focused_cell.column_index = 0;
-                            focused_cell.row_index = focused_cell.row_index + 1;
+                            focused_cell.row_index += 1;
                             self.scroll_to_row_number = focused_cell.row_index;
                             self.changed_arrow_vertical_scroll = true;
                         } else if focused_cell.is_pinned_column_table
                             && focused_cell.column_index < self.column_pinned.len() - 1
                         {
-                            focused_cell.column_index = focused_cell.column_index + 1;
+                            focused_cell.column_index += 1;
                         } else if focused_cell.is_pinned_column_table {
                             focused_cell.column_index = 1;
-                            focused_cell.row_index = focused_cell.row_index + 1;
+                            focused_cell.row_index += 1;
                             self.scroll_to_row_number = focused_cell.row_index;
                             self.changed_arrow_vertical_scroll = true;
                         }
                     }
                     if i.consume_key(Modifiers::NONE, Key::ArrowLeft) {
                         if !focused_cell.is_pinned_column_table && focused_cell.column_index > 0 {
-                            focused_cell.column_index = focused_cell.column_index - 1;
+                            focused_cell.column_index -= 1;
                             self.scroll_to_column_number = focused_cell.column_index;
                             self.changed_arrow_horizontal_scroll = true;
                         } else if focused_cell.is_pinned_column_table
                             && focused_cell.column_index > 1
                         {
-                            focused_cell.column_index = focused_cell.column_index - 1;
+                            focused_cell.column_index -= 1;
                         }
                     }
                     if i.consume_key(Modifiers::NONE, Key::ArrowRight) {
                         if !focused_cell.is_pinned_column_table
                             && focused_cell.column_index < self.column_selected.len() - 1
                         {
-                            focused_cell.column_index = focused_cell.column_index + 1;
+                            focused_cell.column_index += 1;
                             self.scroll_to_column_number = focused_cell.column_index;
                             self.changed_arrow_horizontal_scroll = true;
                         } else if focused_cell.is_pinned_column_table
                             && focused_cell.column_index < self.column_pinned.len() - 1
                         {
-                            focused_cell.column_index = focused_cell.column_index + 1;
+                            focused_cell.column_index += 1;
                         }
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
-                        if focused_cell.row_index > 0 {
-                            focused_cell.row_index = focused_cell.row_index - 1;
-                            self.scroll_to_row_number = focused_cell.row_index;
-                            self.changed_arrow_vertical_scroll = true;
-                        }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowUp) && focused_cell.row_index > 0 {
+                        focused_cell.row_index -= 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
-                        if focused_cell.row_index < self.filtered_nodes.len() - 1 {
-                            focused_cell.row_index = focused_cell.row_index + 1;
-                            self.scroll_to_row_number = focused_cell.row_index;
-                            self.changed_arrow_vertical_scroll = true;
-                        }
+                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) && focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                        focused_cell.row_index += 1;
+                        self.scroll_to_row_number = focused_cell.row_index;
+                        self.changed_arrow_vertical_scroll = true;
                     }
                     let typed_alphanum = Self::get_typed_alphanum_from_events(i);
                     if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
@@ -1754,7 +1749,7 @@ impl<'array> ArrayTable<'array> {
             for (flat_json_value, row_index) in occurrences.iter() {
                 self.update_sub_tables_value(flat_json_value, *row_index);
             }
-            let mut json_array = mem::take(&mut self.nodes);
+            let json_array = mem::take(&mut self.nodes);
             let mut len = json_array.len();
             let new_json_array = Arc::new(Mutex::new(json_array));
 
