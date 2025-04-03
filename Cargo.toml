@@ -40,3 +40,6 @@ web-sys = { version = "0.3.70", features = ["console"], default-features = false
 
 [profile.release]
 opt-level = 2
+
+[features]
+dist = []
