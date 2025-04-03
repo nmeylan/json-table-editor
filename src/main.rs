@@ -207,33 +207,32 @@ impl MyApp<'_> {
         set_open(open, self.about_panel.name(), is_open);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn open_json(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
-            let metadata1 = file.metadata().unwrap();
+        let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
+        let metadata1 = file.metadata().unwrap();
 
-            let size = (metadata1.len() / 1024 / 1024) as usize;
-            let max_depth = if size < 100 {
-                // 1
-                u8::MAX
-            } else {
-                1 // should start after prefix
-            };
-            let mut content = String::with_capacity(metadata1.len() as usize);
-            // let mut reader = LfToCrlfReader::new(file);
-            // reader.read_to_string(&mut content);
-            file.read_to_string(&mut content).unwrap();
+        let size = (metadata1.len() / 1024 / 1024) as usize;
+        let max_depth = if size < 100 {
+            // 1
+            u8::MAX
+        } else {
+            1 // should start after prefix
+        };
+        let mut content = String::with_capacity(metadata1.len() as usize);
+        // let mut reader = LfToCrlfReader::new(file);
+        // reader.read_to_string(&mut content);
+        file.read_to_string(&mut content).unwrap();
 
-            self.open_json_content(max_depth, content.as_bytes());
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            if self.web_loaded_json.is_some() {
-                let json = mem::take(&mut self.web_loaded_json);
-                self.open_json_content(u8::MAX, json.unwrap().as_slice());
-                self.selected_file = Some(PathBuf::default());
-            }
+        self.open_json_content(max_depth, content.as_bytes());
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn open_json(&mut self) {
+        if self.web_loaded_json.is_some() {
+            let json = mem::take(&mut self.web_loaded_json);
+            self.open_json_content(u8::MAX, json.unwrap().as_slice());
+            self.selected_file = Some(PathBuf::default());
         }
     }
 
@@ -334,27 +333,25 @@ impl MyApp<'_> {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn file_picker(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            if let Some(path) = rfd::FileDialog::new().pick_file() {
-                self.selected_file = Some(path);
-                self.should_parse_again = true;
-                self.table = None;
-            }
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
+            self.selected_file = Some(path);
+            self.should_parse_again = true;
+            self.table = None;
         }
+    }
 
-        #[cfg(target_arch = "wasm32")]
-        {
-            let sender = self.async_events_channel.0.clone();
-            self.force_repaint = true;
-            let future = async move {
-                if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
-                    sender.send(AsyncEvent::LoadJson(file_handle.read().await));
-                }
-            };
-            wasm_bindgen_futures::spawn_local(future);
-        }
+    #[cfg(target_arch = "wasm32")]
+    fn file_picker(&mut self) {
+        let sender = self.async_events_channel.0.clone();
+        self.force_repaint = true;
+        let future = async move {
+            if let Some(file_handle) = rfd::AsyncFileDialog::new().pick_file().await {
+                sender.send(AsyncEvent::LoadJson(file_handle.read().await));
+            }
+        };
+        wasm_bindgen_futures::spawn_local(future);
     }
 
     fn goto_next_matching_row_occurrence(table: &mut ArrayTable) -> bool {
@@ -463,17 +460,16 @@ impl eframe::App for MyApp<'_> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
+                #[cfg(target_arch = "wasm32")]
                 AsyncEvent::LoadJson(json_bytes) => {
-                    #[cfg(target_arch = "wasm32")]
-                    {
-                        self.web_loaded_json = Some(json_bytes);
-                        self.open_json();
-                    }
+                    self.web_loaded_json = Some(json_bytes);
+                    self.open_json();
                 }
                 AsyncEvent::LoadSampleErr(err) => {
                     self.failed_to_load_sample_json = Some(err);
                     ctx.request_repaint();
                 }
+                _ => {}
             }
         }
         #[cfg(not(target_arch = "wasm32"))]
