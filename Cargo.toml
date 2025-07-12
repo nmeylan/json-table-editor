@@ -17,7 +17,7 @@ egui_extras = { version = "0.29.1", default-features = false, features = ["svg"]
 #egui = { path = "C:\\dev\\egui\\crates\\egui"}
 #eframe = { path = "C:\\dev\\egui\\crates\\eframe"}
 #egui_extras = { path = "C:\\dev\\egui\\crates\\egui_extras"}
-json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "4604c8e99ed2d11b345e55317d47ff83b1f1fc9e", features = ["indexmap", "simdutf8", "serde"]}
+json-flat-parser = {git = "https://github.com/nmeylan/json-parser-flat-format.git", rev = "c2503441dcd1ee98a9839d30534f151b9948b9b2", features = ["indexmap", "simdutf8", "serde"]}
 rayon = {version = "1.10.0"}
 rfd = {version = "0.14.1"}
 indexmap = "2.2.6"

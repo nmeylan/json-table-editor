@@ -237,11 +237,6 @@ impl MyApp<'_> {
     fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
         let mut found_array = false;
         let size = json.len() / 1024 / 1024;
-        log!(
-            "open_json_content with size {}mb, found array {}",
-            size,
-            found_array
-        );
         for byte in json {
             if *byte == b'[' {
                 found_array = true;
@@ -251,6 +246,11 @@ impl MyApp<'_> {
                 break;
             }
         }
+        log!(
+            "open_json_content with size {}mb, found array {}",
+            size,
+            found_array
+        );
         if found_array || self.selected_pointer.is_some() {
             let start = crate::compatibility::now();
             let mut options = ParseOptions::default()
@@ -460,7 +460,7 @@ impl eframe::App for MyApp<'_> {
         if let Ok(event) = self.async_events_channel.1.try_recv() {
             self.force_repaint = false;
             match event {
-                AsyncEvent::LoadJson(_json_bytes) => {
+                AsyncEvent::LoadJson(json_bytes) => {
                     #[cfg(target_arch = "wasm32")]
                     {
                         self.web_loaded_json = Some(json_bytes);
@@ -738,7 +738,7 @@ impl eframe::App for MyApp<'_> {
                 let max_rect = ui.max_rect();
                 let mut rect = ui.max_rect();
                 rect.min.y = rect.max.y / 2.0 - 20.0;
-                let already_interact = false;
+                let mut already_interact = false;
 
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
