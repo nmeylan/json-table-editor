@@ -3,12 +3,12 @@ use eframe::epaint;
 use egui::{FontSelection, Id, Response, RichText, Sense, Ui, WidgetText};
 
 pub struct CellText {
-    text: String,
+    text: WidgetText,
 }
 
 impl CellText {
-    pub fn new(text: String) -> CellText {
-        CellText { text }
+    pub fn new(text: impl Into<WidgetText>) -> CellText {
+        CellText { text: text.into() }
     }
 
     pub fn ui(self, ui: &mut Ui, cell_id: usize) -> Response {
@@ -16,9 +16,8 @@ impl CellText {
         let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
         let valign = ui.text_valign();
-        let rich_text = RichText::new(self.text.clone());
 
-        let widget_text = WidgetText::RichText(rich_text);
+        let widget_text = self.text;
         let mut layout_job =
             widget_text.into_layout_job(ui.style(), FontSelection::Default, valign);
 

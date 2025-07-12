@@ -895,7 +895,11 @@ impl<'array> ArrayTable<'array> {
                             return Some(label.ui(ui));
                         } else if let Some(value) = entry.value.as_ref() {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
-                                let label = CellText::new(value.clone());
+                                let label = if value.len() > 1000 {
+                                    CellText::new(&value[0..1000])
+                                } else {
+                                    CellText::new(value)
+                                };
 
                                 let mut response = label.ui(ui, cell_id);
 
