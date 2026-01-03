@@ -235,8 +235,17 @@ impl MyApp<'_> {
     }
 
     fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
-        let mut found_array = false;
         let size = json.len() / 1024 / 1024;
+
+        let is_jsonl = JSONParser::is_jsonl(json);
+
+        if is_jsonl {
+            log!("Detected JSONL format, size {}mb", size);
+            self.open_jsonl_content(max_depth, json);
+            return;
+        }
+
+        let mut found_array = false;
         for byte in json {
             if *byte == b'[' {
                 found_array = true;
@@ -328,6 +337,70 @@ impl MyApp<'_> {
                 .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
                 .map(|entry| entry.pointer.pointer.clone())
                 .collect();
+        }
+    }
+
+    fn open_jsonl_content(&mut self, max_depth: u8, json: &[u8]) {
+        let size = json.len() / 1024 / 1024;
+        let start = crate::compatibility::now();
+
+        let options = ParseOptions::default()
+            .parse_array(false)
+            .max_depth(max_depth);
+
+        match JSONParser::parse_jsonl(json, options) {
+            Ok(result) => {
+                let parsing_max_depth = result.parsing_max_depth;
+                log!(
+                    "JSONL parser took {}ms for a {}mb file, max depth {}, {} entries",
+                    start.elapsed().as_millis(),
+                    size,
+                    parsing_max_depth,
+                    result.json.len()
+                );
+                let parse_result = result.clone_except_json();
+
+                let start = crate::compatibility::now();
+                let (result1, columns) = crate::parser::as_array(result).unwrap();
+                log!(
+                    "Transformation to array took {}ms, root array len {}, columns {}",
+                    start.elapsed().as_millis(),
+                    result1.len(),
+                    columns.len()
+                );
+
+                let max_depth = parse_result.max_json_depth;
+                let depth = (parse_result.depth_after_start_at + 1).max(parsing_max_depth.min(max_depth as u8));
+                let min_depth = if parse_result.depth_after_start_at + 1 > 1 {
+                    parse_result.depth_after_start_at + 1
+                } else {
+                    1
+                };
+
+                let len = result1.len();
+                let table = ArrayTable::new(
+                    Some(parse_result),
+                    result1,
+                    columns,
+                    depth,
+                    PointerKey::from_pointer(String::new(), ValueType::Array(len), 1, 0),
+                );
+                self.table = Some(table);
+                self.depth = depth;
+                self.max_depth = max_depth as u8;
+                self.min_depth = min_depth;
+                self.parsing_invalid_pointers.clear();
+                self.should_parse_again = false;
+                self.parsing_invalid = false;
+                self.selected_pointer = None;
+                self.unsaved_changes = false;
+            }
+            Err(e) => {
+                log!("Error parsing JSONL: {}", e);
+                // Fall back to regular JSON parsing which will show error or pointer selection
+                self.should_parse_again = true;
+                self.parsing_invalid = true;
+            }
         }
     }
 
