@@ -1,4 +1,5 @@
-use crate::array_table::ArrayTable;
+use crate::array_table::{ArrayTable, TEXT_WIDTH};
+use crate::components::cell_text::pointer_text;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::table::CellLocation;
 use crate::fonts::{COPY, PENCIL};
@@ -6,6 +7,7 @@ use crate::{ArrayResponse, SHORTCUT_COPY, SHORTCUT_DELETE};
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::{Id, Key, Label, Sense, TextEdit};
 use eframe::emath::Align;
+use egui::style::Spacing;
 use egui::{EventFilter, Modifiers, Ui};
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{FlatJsonValue, PointerKey, ValueType};
@@ -15,7 +17,9 @@ use std::mem;
 pub struct ObjectTable {
     pub table_id: Id,
     pub nodes: Vec<FlatJsonValue<String>>,
-    filtered_nodes: Vec<usize>,
+    // Pointer of the object, stripped from displayed pointers
+    prefix: String,
+    pub(crate) filtered_nodes: Vec<usize>,
     arrays: Vec<FlatJsonValue<String>>,
     pub scroll_to_row_number: usize,
 
@@ -44,6 +48,7 @@ impl ObjectTable {
         Self {
             table_id: Id::new(format!("table-object-{}", name)),
             nodes,
+            prefix: name,
             filtered_nodes,
             arrays,
             editing_index: RefCell::new(None),
@@ -53,6 +58,23 @@ impl ObjectTable {
             changed_arrow_vertical_scroll: false,
             was_editing: false,
         }
+    }
+
+    /// Width needed to show pointers and values, long values being capped
+    pub fn content_width(&self, spacing: &Spacing) -> f32 {
+        let (pointer_len, value_len) =
+            self.filtered_nodes
+                .iter()
+                .fold((0, 0), |(pointer_len, value_len), index| {
+                    let entry = &self.nodes[*index];
+                    (
+                        pointer_len.max(entry.pointer.pointer.len().saturating_sub(self.prefix.len())),
+                        value_len.max(entry.value.as_ref().map_or(0, |v| v.len().min(80))),
+                    )
+                });
+        (pointer_len + value_len) as f32 * TEXT_WIDTH
+            + 2.0 * spacing.item_spacing.x
+            + spacing.scroll.allocated_width()
     }
 
     fn table_ui(&mut self, ui: &mut egui::Ui, _pinned: bool) -> ArrayResponse {
@@ -90,7 +112,12 @@ impl ObjectTable {
                         let table_row_index = row.index();
                         let row_index = self.filtered_nodes[table_row_index];
                         let entry = &self.nodes[row_index];
-                        row.col(|c, _| Some(c.label(&entry.pointer.pointer)));
+                        let pointer = entry
+                            .pointer
+                            .pointer
+                            .strip_prefix(self.prefix.as_str())
+                            .unwrap_or(&entry.pointer.pointer);
+                        row.col(|c, _| Some(c.label(pointer_text(c, pointer))));
                         row.col(|ui, _| {
                             let mut editing_index = self.editing_index.borrow_mut();
                             if editing_index.is_some() && editing_index.unwrap() == (row_index) {

@@ -1,14 +1,14 @@
 use super::ArrayTable;
 use super::row_view::{ColumnFilter, SortDirection};
 use crate::ACTIVE_COLOR;
+use crate::components::cell_text::pointer_text;
 use crate::components::filter::Filter;
 use crate::components::icon;
 use crate::components::table::TableRow;
 use crate::fonts::{FILTER, SEARCH, THUMBTACK};
 use crate::panels::SearchReplacePanel;
 use eframe::egui::{
-    Align, Color32, Id, Label, Layout, Painter, Rect, Sense, Stroke, TextBuffer, Ui, Vec2,
-    WidgetText, pos2,
+    Align, Color32, Id, Label, Layout, Painter, Rect, Sense, Stroke, TextBuffer, Ui, Vec2, pos2,
 };
 use std::cell::OnceCell;
 
@@ -24,10 +24,9 @@ impl<'array> ArrayTable<'array> {
             let columns = self.columns(pinned_column_table);
             let column = columns.get(index).unwrap();
             let name = column.name.as_str();
-            let strong = Label::new(WidgetText::RichText(egui::RichText::from(name).into()));
             let label = Label::new(name);
             let response = ui.vertical(|ui| {
-                let response = ui.add(strong).on_hover_ui(|ui| {
+                let response = ui.add(Label::new(pointer_text(ui, name))).on_hover_ui(|ui| {
                     ui.add(label);
                 });
 
