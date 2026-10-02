@@ -136,7 +136,7 @@
         // Here we tell bindgen the path to the wasm file so it can start
         // initialization and return to us a promise when it's done.
         console.debug("Loading wasm…");
-        wasm_bindgen("./json-editor_bg.wasm")
+        wasm_bindgen({ module_or_path: "./json-editor_bg.wasm" })
             .then(on_wasm_loaded)
             .catch(on_error);
 

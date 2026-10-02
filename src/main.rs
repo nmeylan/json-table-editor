@@ -33,8 +33,8 @@ use crate::parser::{save_to_buffer, save_to_file};
 use eframe::egui::Context;
 use eframe::egui::{
     Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label,
-    LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, Vec2,
-    Widget,
+    LayerId, Layout, Modifiers, Order, RichText, Sense, Separator, TextEdit, TextStyle, UiBuilder,
+    Vec2, Widget,
 };
 use eframe::epaint::text::TextWrapMode;
 use eframe::{CreationContext, Renderer};
@@ -113,11 +113,11 @@ fn main() {
             options,
             Box::new(|cc| {
                 egui_extras::install_image_loaders(&cc.egui_ctx);
-                let mut style = (*cc.egui_ctx.style()).clone();
+                let mut style = (*cc.egui_ctx.global_style()).clone();
                 style.spacing.scroll.floating = false;
                 style.spacing.scroll.bar_width = 4.0;
                 style.spacing.scroll.bar_inner_margin = 6.0;
-                cc.egui_ctx.set_style(style);
+                cc.egui_ctx.set_global_style(style);
                 let mut app = MyApp::new(cc);
 
                 let args: Vec<_> = env::args().collect();
@@ -168,7 +168,7 @@ impl MyApp<'_> {
 
         let font_data =
             eframe::egui::FontData::from_static(include_bytes!("../icons/fa-solid-900.ttf"));
-        fonts.font_data.insert("fa".into(), font_data);
+        fonts.font_data.insert("fa".into(), Arc::new(font_data));
         fonts.families.insert(
             eframe::egui::FontFamily::Name("fa".into()),
             vec!["fa".into()],
@@ -522,9 +522,10 @@ fn set_open(open: &mut BTreeSet<String>, key: &'static str, is_open: bool) {
 }
 
 impl eframe::App for MyApp<'_> {
-    fn update(&mut self, ctx: &Context, frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
         // ctx.set_theme(Theme::Light);
-        ctx.style_mut(|style| {
+        ctx.global_style_mut(|style| {
             style.spacing.scroll = ScrollStyle::thin();
             style.spacing.scroll.bar_width = 4.0;
             style.spacing.scroll.floating = false;
@@ -569,28 +570,28 @@ impl eframe::App for MyApp<'_> {
                 egui::ViewportCommand::Title(title),
             );
         }
-        self.windows(ctx);
-        egui::TopBottomPanel::top("top").show(ctx, |ui| {
+        self.windows(&ctx);
+        egui::Panel::top("top").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 if self.table.is_some() {
                     ui.menu_button("File", |ui| {
                         ui.set_min_width(220.0);
                         ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
                         if ui.button("Open json file").clicked() {
-                            ui.close_menu();
+                            ui.close();
                             self.file_picker();
                         }
                         ui.separator();
                         let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
                         if ui.add(button).clicked() {
-                            ui.close_menu();
+                            ui.close();
                             self.save();
                         }
                         #[cfg(not(target_arch = "wasm32"))] {
                             ui.separator();
                             let button = Button::new("Save as").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE_AS));
                             if ui.add(button).clicked() {
-                                ui.close_menu();
+                                ui.close();
                                 self.save_as();
                             }
                         }
@@ -601,7 +602,7 @@ impl eframe::App for MyApp<'_> {
                         ui.set_min_width(220.0);
                         let replace_button = Button::new("Replace").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_REPLACE));
                         if ui.add(replace_button).clicked() {
-                            ui.close_menu();
+                            ui.close();
                             self.table.as_mut().unwrap().open_replace_panel(None);
                         }
                     });
@@ -708,7 +709,7 @@ impl eframe::App for MyApp<'_> {
             }
         });
 
-        egui::TopBottomPanel::bottom("bottom-panel").show(ctx, |ui| {
+        egui::Panel::bottom("bottom-panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if self.table.is_some() {
                     let table = self.table.as_ref().unwrap();
@@ -755,7 +756,7 @@ impl eframe::App for MyApp<'_> {
                 })
             });
         });
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::CentralPanel::default().show(ui, |ui| {
             if !ctx.input(|i| i.raw.hovered_files.is_empty()) {
                 let text = ctx.input(|i| {
                     let mut text = "Dropping files:\n".to_owned();
@@ -774,13 +775,13 @@ impl eframe::App for MyApp<'_> {
                 let painter =
                     ctx.layer_painter(LayerId::new(Order::Foreground, Id::new("file_drop_target")));
 
-                let screen_rect = ctx.screen_rect();
+                let screen_rect = ctx.content_rect();
                 painter.rect_filled(screen_rect, 0.0, Color32::from_black_alpha(192));
                 painter.text(
                     screen_rect.center(),
                     Align2::CENTER_CENTER,
                     text,
-                    TextStyle::Heading.resolve(&ctx.style()),
+                    TextStyle::Heading.resolve(&ctx.global_style()),
                     Color32::WHITE,
                 );
             }
@@ -794,10 +795,23 @@ impl eframe::App for MyApp<'_> {
                     self.should_parse_again = true;
                     self.parsing_invalid = false;
                     self.parsing_invalid_pointers.clear();
-                    if let Some(bytes) = file.bytes {
-                        self.open_json_content(u8::MAX, bytes.as_ref());
-                    } else {
-                        self.selected_file = Some(file.path.unwrap());
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        self.selected_file = Some(file.path().to_path_buf());
+                    }
+                    // On web, dropped file content can only be read asynchronously.
+                    #[cfg(target_arch = "wasm32")]
+                    {
+                        let sender = self.async_events_channel.0.clone();
+                        self.force_repaint = true;
+                        wasm_bindgen_futures::spawn_local(async move {
+                            let _ = match file.bytes_async().await {
+                                Ok(bytes) => sender.send(AsyncEvent::LoadJson(bytes)),
+                                Err(err) => sender.send(AsyncEvent::LoadSampleErr(format!(
+                                    "Failed to read dropped file: {err}"
+                                ))),
+                            };
+                        });
                     }
                 }
             });
@@ -819,7 +833,7 @@ impl eframe::App for MyApp<'_> {
                         self.file_picker();
                     }
                 }
-                ui.allocate_ui_at_rect(rect,
+                ui.scope_builder(UiBuilder::new().max_rect(rect),
                                        |ui| {
                                            ui.vertical_centered(|ui| {
                                                ui.heading("Select or drop a json file");
@@ -860,7 +874,7 @@ impl eframe::App for MyApp<'_> {
                 if self.parsing_invalid {
                     let mut rect = ui.max_rect();
                     rect.min.y = 40.0_f32.max(rect.max.y / 2.0 - (20.0 * self.parsing_invalid_pointers.len() as f32));
-                    ui.allocate_ui_at_rect(rect,
+                    ui.scope_builder(UiBuilder::new().max_rect(rect),
                                            |ui| {
                                                ui.vertical_centered(|ui| {
                                                    let scroll_area = ScrollArea::vertical();

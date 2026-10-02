@@ -5,14 +5,13 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-eframe = { version = "0.29.1", default-features = false, features = [
+eframe = { version = "0.36.2", default-features = false, features = [
     "default_fonts",
     "glow",
     "wayland",
-    "wgpu",
     "x11"] }
-egui = { version = "0.29.1", default-features = false, features = [] }
-egui_extras = { version = "0.29.1", default-features = false, features = ["svg"] }
+egui = { version = "0.36.2", default-features = false, features = [] }
+egui_extras = { version = "0.36.2", default-features = false, features = ["svg"] }
 #
 #egui = { path = "C:\\dev\\egui\\crates\\egui"}
 #eframe = { path = "C:\\dev\\egui\\crates\\eframe"}
@@ -34,9 +33,9 @@ ehttp = "0.5.0"
 
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.99"
+wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3.70", features = ["console"], default-features = false }
+web-sys = { version = "0.3.106", features = ["console"], default-features = false }
 
 [profile.release]
 opt-level = 2

@@ -121,7 +121,7 @@ impl SubTable<'_> {
                 };
                 r.default_height(
                     40.0 + nodes as f32
-                        * ArrayTable::row_height(&ctx.style(), &ctx.style().spacing),
+                        * ArrayTable::row_height(&ctx.global_style(), &ctx.global_style().spacing),
                 )
                 .default_width(480.0)
             })

@@ -1,5 +1,6 @@
 use eframe::emath::Align;
 use eframe::epaint;
+use std::sync::Arc;
 use egui::{FontSelection, Id, Response, RichText, Sense, Ui, WidgetText};
 
 pub struct CellText {
@@ -18,14 +19,17 @@ impl CellText {
         let valign = ui.text_valign();
 
         let widget_text = self.text;
-        let mut layout_job =
-            widget_text.into_layout_job(ui.style(), FontSelection::Default, valign);
+        let mut layout_job = Arc::unwrap_or_clone(widget_text.into_layout_job(
+            ui.style(),
+            FontSelection::Default,
+            valign,
+        ));
 
         layout_job.break_on_newline = false;
         layout_job.wrap.max_width = f32::INFINITY;
         layout_job.halign = Align::LEFT;
         layout_job.justify = false;
-        let galley = ui.fonts(|fonts| fonts.layout_job(layout_job));
+        let galley = ui.fonts_mut(|fonts| fonts.layout_job(layout_job));
         let galley_pos = match galley.job.halign {
             Align::LEFT => rect.left_top(),
             Align::Center => rect.center_top(),

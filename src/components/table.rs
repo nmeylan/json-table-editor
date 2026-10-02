@@ -146,7 +146,7 @@ impl From<Vec<Size>> for Sizing {
 
 use eframe::egui::scroll_area::ScrollAreaOutput;
 use eframe::egui::{
-    scroll_area::ScrollBarVisibility, Align, Color32, Id, NumExt as _, Pos2, Rangef, Rect,
+    scroll_area::{DragScroll, ScrollBarVisibility, ScrollSource}, Align, Color32, Id, NumExt as _, Pos2, Rangef, Rect,
     Response, ScrollArea, Sense, Stroke, Ui, Vec2, Vec2b,
 };
 use egui::UiBuilder;
@@ -271,7 +271,7 @@ impl<'l> StripLayout<'l> {
         if flags.striped {
             self.ui.painter().rect_filled(
                 gapless_rect,
-                egui::Rounding::ZERO,
+                egui::CornerRadius::ZERO,
                 self.ui.visuals().faint_bg_color,
             );
         }
@@ -279,7 +279,7 @@ impl<'l> StripLayout<'l> {
         if flags.selected {
             self.ui.painter().rect_filled(
                 gapless_rect,
-                egui::Rounding::ZERO,
+                egui::CornerRadius::ZERO,
                 self.ui.visuals().selection.bg_fill,
             );
         }
@@ -287,23 +287,24 @@ impl<'l> StripLayout<'l> {
         if flags.hovered && !flags.selected && self.sense.interactive() {
             self.ui.painter().rect_filled(
                 gapless_rect,
-                egui::Rounding::ZERO,
+                egui::CornerRadius::ZERO,
                 self.ui.visuals().widgets.hovered.bg_fill,
             );
         }
         if flags.highlighted && !flags.hovered {
             self.ui
                 .painter()
-                .rect_filled(gapless_rect, egui::Rounding::ZERO, Color32::YELLOW);
+                .rect_filled(gapless_rect, egui::CornerRadius::ZERO, Color32::YELLOW);
         }
         if flags.selected_cell {
             self.ui.painter().rect_stroke(
                 gapless_rect.shrink(2.0),
-                egui::Rounding::ZERO,
+                egui::CornerRadius::ZERO,
                 Stroke {
                     color: Color32::DARK_GRAY,
                     width: 2.0,
                 },
+                egui::StrokeKind::Inside,
             );
         }
 
@@ -347,7 +348,7 @@ impl<'l> StripLayout<'l> {
 
         self.ui
             .painter()
-            .rect_filled(gapless_rect, egui::Rounding::ZERO, color);
+            .rect_filled(gapless_rect, egui::CornerRadius::ZERO, color);
 
         self.set_pos(max_rect);
 
@@ -397,10 +398,7 @@ impl<'l> StripLayout<'l> {
         );
 
         if flags.clip {
-            let margin = egui::Vec2::splat(self.ui.visuals().clip_rect_margin);
-            let margin = margin.min(0.5 * self.ui.spacing().item_spacing);
-            let clip_rect = rect.expand2(margin);
-            child_ui.set_clip_rect(clip_rect.intersect(child_ui.clip_rect()));
+            child_ui.set_clip_rect(rect.intersect(child_ui.clip_rect()));
         }
 
         if flags.selected {
@@ -950,7 +948,14 @@ impl Table<'_> {
         let mut scroll_area = ScrollArea::new([false, vscroll])
             .id_salt(self.state_id.with("__scroll_area"))
             .auto_shrink(true)
-            .drag_to_scroll(drag_to_scroll)
+            .scroll_source(ScrollSource {
+                drag: if drag_to_scroll {
+                    DragScroll::Always
+                } else {
+                    DragScroll::Never
+                },
+                ..Default::default()
+            })
             .stick_to_bottom(stick_to_bottom)
             .min_scrolled_height(min_scrolled_height)
             .max_height(max_scroll_height)
@@ -973,7 +978,25 @@ impl Table<'_> {
         let mut first_col_visible_offset = 0.0;
         let mut last_col_visible_offset = 0.0;
         let mut columns_offset = Vec::with_capacity(number_of_columns);
+        // Since egui 0.34, a solid scroll bar lying outside the clip rect (our vertical body is
+        // nested in a horizontal ScrollArea wider than the screen) is clamped to an empty rect and
+        // not drawn, while a floating one is moved back into view. So draw it as a floating bar
+        // with the solid bar's width, allocated space and opacity.
+        let scroll_style = ui.spacing().scroll;
+        if !scroll_style.floating {
+            let scroll = &mut ui.spacing_mut().scroll;
+            scroll.floating = true;
+            scroll.floating_width = scroll_style.bar_width;
+            scroll.floating_allocated_width = scroll_style.allocated_width();
+            scroll.dormant_background_opacity = 1.0;
+            scroll.active_background_opacity = 1.0;
+            scroll.interact_background_opacity = 1.0;
+            scroll.dormant_handle_opacity = 1.0;
+            scroll.active_handle_opacity = 1.0;
+            scroll.interact_handle_opacity = 1.0;
+        }
         let scroll_area_output = scroll_area.show(ui, |ui| {
+            ui.spacing_mut().scroll = scroll_style;
             let mut scroll_to_y_range = None;
 
             let clip_rect = ui.clip_rect();
@@ -1056,6 +1079,7 @@ impl Table<'_> {
                 ui.scroll_to_rect(rect, align);
             }
         });
+        ui.spacing_mut().scroll = scroll_style;
 
         let bottom = ui.min_rect().bottom();
 

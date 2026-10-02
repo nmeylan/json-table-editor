@@ -30,7 +30,10 @@ impl WebHandle {
         self.runner
             .start(
                 canvas,
-                eframe::WebOptions::default(),
+                eframe::WebOptions {
+                    renderer: eframe::Renderer::Glow,
+                    ..eframe::WebOptions::default()
+                },
                 Box::new(|cc| Ok(Box::new(crate::MyApp::new(cc)))),
             )
             .await

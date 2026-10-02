@@ -14,7 +14,7 @@ pub struct PopupMenu {
 }
 
 impl PopupMenu {
-    pub fn new(id_source: impl std::hash::Hash) -> Self {
+    pub fn new(id_source: impl std::hash::Hash + std::fmt::Debug) -> Self {
         Self {
             id_source: Id::new(id_source),
             width: None,
@@ -76,28 +76,11 @@ fn popup<'c, R>(
 ) -> InnerResponse<Option<R>> {
     let popup_id = button_id.with("popup");
 
-    let _is_popup_open = ui.memory(|m| m.is_popup_open(popup_id));
-
-    let popup_height = 100.0;
-    // let popup_height = ui.memory(|m| m.areas().get(popup_id).map_or(100.0, |state| state.size.y));
-
-    let above_or_below =
-        if ui.next_widget_position().y + ui.spacing().interact_size.y + popup_height
-            < ui.ctx().screen_rect().bottom()
-        {
-            AboveOrBelow::Below
-        } else {
-            AboveOrBelow::Above
-        };
-
     let button_response = button.ui(ui);
-    if button_response.clicked() {
-        ui.memory_mut(|mem| mem.toggle_popup(popup_id));
-    }
 
     let height = height.unwrap_or_else(|| ui.spacing().combo_height);
 
-    let inner = popup_above_or_below_widget(ui, popup_id, &button_response, above_or_below, |ui| {
+    let inner = popup_below_or_above_widget(ui, popup_id, &button_response, |ui| {
         ScrollArea::vertical()
             .max_height(height)
             .show(ui, |ui| {
@@ -113,45 +96,23 @@ fn popup<'c, R>(
     }
 }
 
-pub fn popup_above_or_below_widget<R>(
+pub fn popup_below_or_above_widget<R>(
     ui: &Ui,
     popup_id: Id,
     widget_response: &Response,
-    above_or_below: AboveOrBelow,
     add_contents: impl FnOnce(&mut Ui) -> R,
 ) -> Option<R> {
-    if ui.memory(|mem| mem.is_popup_open(popup_id)) {
-        let (pos, pivot) = match above_or_below {
-            AboveOrBelow::Above => (widget_response.rect.left_top(), Align2::LEFT_BOTTOM),
-            AboveOrBelow::Below => (widget_response.rect.left_bottom(), Align2::LEFT_TOP),
-        };
-
-        let inner = Area::new(popup_id)
-            .order(Order::Foreground)
-            .constrain(true)
-            .fixed_pos(pos)
-            .pivot(pivot)
-            .show(ui.ctx(), |ui| {
-                let frame = Frame::popup(ui.style());
-                let frame_margin = frame.total_margin();
-                frame
-                    .show(ui, |ui| {
-                        ui.with_layout(Layout::top_down_justified(Align::LEFT), |ui| {
-                            ui.set_width(widget_response.rect.width() - frame_margin.sum().x);
-                            add_contents(ui)
-                        })
-                        .inner
-                    })
-                    .inner
-            });
-
-        if ui.input(|i| i.key_pressed(Key::Escape))
-            || (!widget_response.clicked() && inner.response.clicked_elsewhere())
-        {
-            ui.memory_mut(|mem| mem.close_popup());
-        }
-        Some(inner.inner)
-    } else {
-        None
-    }
+    let frame_margin = Frame::popup(ui.style()).total_margin();
+    Popup::from_response(widget_response)
+        .id(popup_id)
+        .open_memory(widget_response.clicked().then_some(SetOpenCommand::Toggle))
+        .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
+        .align(RectAlign::BOTTOM_START)
+        .align_alternatives(&[RectAlign::TOP_START])
+        .layout(Layout::top_down_justified(Align::LEFT))
+        .show(|ui| {
+            ui.set_width(widget_response.rect.width() - frame_margin.sum().x);
+            add_contents(ui)
+        })
+        .map(|response| response.inner)
 }

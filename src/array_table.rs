@@ -701,7 +701,7 @@ impl<'array> ArrayTable<'array> {
             let columns = self.columns(pinned_column_table);
             let column = columns.get(index).unwrap();
             let name = column.name.as_str();
-            let strong = Label::new(WidgetText::RichText(egui::RichText::from(name)));
+            let strong = Label::new(WidgetText::RichText(egui::RichText::from(name).into()));
             let label = Label::new(name);
             let response = ui.vertical(|ui| {
                 let response = ui.add(strong).on_hover_ui(|ui| {
@@ -996,7 +996,7 @@ impl<'array> ArrayTable<'array> {
                                 *self.editing_index.borrow_mut() =
                                     Some((col_index, row_index, pinned_column_table));
                                 *self.editing_value.borrow_mut() = mem::take(&mut edit_value);
-                                ui.close_menu();
+                                ui.close();
                             }
                             if !edit_value.is_empty() {
                                 // Context menu: copy
@@ -1004,7 +1004,7 @@ impl<'array> ArrayTable<'array> {
                                     .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
                                 if ui.add(button).clicked() {
                                     ui.ctx().copy_text(edit_value.clone());
-                                    ui.close_menu();
+                                    ui.close();
                                 }
                                 // Context menu: filter by value
                                 if Self::is_filterable(&columns[col_index]) {
@@ -1015,7 +1015,7 @@ impl<'array> ArrayTable<'array> {
                                             columns[col_index].name.to_string(),
                                             edit_value.clone(),
                                         ));
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                 }
                             }
@@ -1024,14 +1024,14 @@ impl<'array> ArrayTable<'array> {
                             let button = ButtonWithIcon::new("Insert row above", PLUS);
                             if ui.add(button).clicked() {
                                 insert_row_at_index = Some((table_row_index, 0));
-                                ui.close_menu();
+                                ui.close();
                             }
 
                             // Context menu: insert row below
                             let button = ButtonWithIcon::new("Insert row below", PLUS);
                             if ui.add(button).clicked() {
                                 insert_row_at_index = Some((table_row_index, 1));
-                                ui.close_menu();
+                                ui.close();
                             }
                             // Context menu: Open array or object in subtable
                             if let Some(entry) = edit_entry {
@@ -1049,7 +1049,7 @@ impl<'array> ArrayTable<'array> {
                                         TABLE_CELLS,
                                     );
                                     if ui.add(button).clicked() {
-                                        ui.close_menu();
+                                        ui.close();
                                         let content = edit_value.clone();
                                         subtable = Self::open_subtable(row_index, entry, content);
                                     }
@@ -1061,7 +1061,7 @@ impl<'array> ArrayTable<'array> {
                                 ui.separator();
                                 let button = ButtonWithIcon::new("Open row in sub table", TABLE);
                                 if ui.add(button).clicked() {
-                                    ui.close_menu();
+                                    ui.close();
                                     let root_node = row_data.entries.last().unwrap();
                                     subtable = Some(SubTable::new(
                                         root_node.pointer.clone(),
@@ -1077,7 +1077,7 @@ impl<'array> ArrayTable<'array> {
                                 ui.separator();
                                 if ui.button("Copy pointer").clicked() {
                                     ui.ctx().copy_text(entry.pointer.pointer.clone());
-                                    ui.close_menu();
+                                    ui.close();
                                 }
                             }
                         }

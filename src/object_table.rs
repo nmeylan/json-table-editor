@@ -147,18 +147,18 @@ impl ObjectTable {
                                         *self.editing_value.borrow_mut() =
                                             entry.value.clone().unwrap_or_default();
                                         *editing_index = Some(row_index);
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                     let button = ButtonWithIcon::new("Copy", COPY)
                                         .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
                                     if ui.add(button).clicked() {
                                         ui.ctx().copy_text(entry.value.clone().unwrap_or_default());
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                     ui.separator();
                                     if ui.button("Copy pointer").clicked() {
                                         ui.ctx().copy_text(entry.pointer.pointer.clone());
-                                        ui.close_menu();
+                                        ui.close();
                                     }
                                 });
 

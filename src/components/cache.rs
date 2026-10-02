@@ -90,7 +90,7 @@ pub trait ComputerMut<Key, Param, Value> {
 
 #[derive(Default)]
 pub struct CacheStorage {
-    caches: egui::ahash::HashMap<std::any::TypeId, Box<dyn CacheTrait>>,
+    caches: std::collections::HashMap<std::any::TypeId, Box<dyn CacheTrait>>,
 }
 
 impl CacheStorage {

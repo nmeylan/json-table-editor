@@ -1,11 +1,11 @@
 use crate::components::icon;
 use eframe::egui::{
-    Button, Color32, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget,
+    Button, Color32, FontSelection, NumExt, Response, Sense, Style, TextStyle, TextWrapMode, Ui, Widget,
     WidgetInfo, WidgetText, WidgetType,
 };
 use eframe::emath::{pos2, Vec2};
 use eframe::epaint;
-use eframe::epaint::{Rounding, Stroke};
+use eframe::epaint::{CornerRadius, Stroke, StrokeKind};
 
 pub fn icon(name: &'static str) -> egui::RichText {
     icon_with_size(name, 12.0)
@@ -50,7 +50,7 @@ pub struct ButtonWithIcon {
     small: bool,
     frame: Option<bool>,
     min_size: Vec2,
-    rounding: Option<Rounding>,
+    rounding: Option<CornerRadius>,
     selected: bool,
 }
 
@@ -123,7 +123,7 @@ impl ButtonWithIcon {
     }
 
     #[inline]
-    pub fn rounding(mut self, rounding: impl Into<Rounding>) -> Self {
+    pub fn rounding(mut self, rounding: impl Into<CornerRadius>) -> Self {
         self.rounding = Some(rounding.into());
         self
     }
@@ -170,7 +170,7 @@ impl Widget for ButtonWithIcon {
         }
 
         let space_available_for_icon = if let Some(text) = &text {
-            let font_height = ui.fonts(|fonts| font_height(text, fonts, ui.style()));
+            let font_height = ui.fonts_mut(|fonts| font_height(text, fonts, ui.style()));
             Vec2::splat(font_height) // Reasonable?
         } else {
             ui.available_size() - 2.0 * button_padding
@@ -235,7 +235,7 @@ impl Widget for ButtonWithIcon {
                 let selection = ui.visuals().selection;
                 (
                     Vec2::ZERO,
-                    Rounding::ZERO,
+                    CornerRadius::ZERO,
                     selection.bg_fill,
                     selection.stroke,
                 )
@@ -243,7 +243,7 @@ impl Widget for ButtonWithIcon {
                 let expansion = Vec2::splat(visuals.expansion);
                 (
                     expansion,
-                    visuals.rounding,
+                    visuals.corner_radius,
                     visuals.weak_bg_fill,
                     visuals.bg_stroke,
                 )
@@ -258,6 +258,7 @@ impl Widget for ButtonWithIcon {
                 frame_rounding,
                 frame_fill,
                 frame_stroke,
+                StrokeKind::Inside,
             );
 
             let mut cursor_x = rect.min.x + button_padding.x;
@@ -287,7 +288,7 @@ impl Widget for ButtonWithIcon {
         }
 
         if let Some(cursor) = ui.visuals().interact_cursor {
-            if response.hovered {
+            if response.hovered() {
                 ui.ctx().set_cursor_icon(cursor);
             }
         }
@@ -296,8 +297,9 @@ impl Widget for ButtonWithIcon {
     }
 }
 
-fn font_height(text: &WidgetText, fonts: &epaint::Fonts, style: &Style) -> f32 {
+fn font_height(text: &WidgetText, fonts: &mut epaint::FontsView<'_>, style: &Style) -> f32 {
     match text {
+        WidgetText::Text(_) => fonts.row_height(&FontSelection::Default.resolve(style)),
         WidgetText::RichText(text) => text.font_height(fonts, style),
         WidgetText::LayoutJob(job) => job.font_height(fonts),
         WidgetText::Galley(galley) => {
