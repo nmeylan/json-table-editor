@@ -1,12 +1,11 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hasher};
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::{fs, mem};
 
-use crate::array_table::{Column, NON_NULL_FILTER_VALUE};
+use crate::array_table::Column;
 use crate::panels::{ReplaceMode, SearchReplaceResponse};
 use json_flat_parser::{
     FlatJsonValue, JSONParser, JsonArrayEntries, ParseOptions, ParseResult, PointerKey, ValueType,
@@ -19,7 +18,7 @@ use regex_lite::Regex;
 #[macro_export]
 macro_rules! concat_string {
     () => { String::with_capacity(0) };
-    ($($s:expr),+) => {{
+    ($($s:expr_2021),+) => {{
         use std::ops::AddAssign;
         let mut len = 0;
         $(len.add_assign(AsRef::<str>::as_ref(&$s).len());)+
@@ -27,6 +26,13 @@ macro_rules! concat_string {
         $(buf.push_str($s.as_ref());)+
         buf
     }};
+}
+
+/// Id stored in `PointerKey.column_id` for every entry of the column named `name`.
+pub fn column_id(name: &str) -> usize {
+    let mut hasher = DefaultHasher::new();
+    hasher.write(name.as_bytes());
+    hasher.finish() as usize
 }
 
 pub fn change_depth_array<'array>(
@@ -91,9 +97,7 @@ pub fn change_depth_array<'array>(
                             entry.pointer.column_id = column.id;
                             column.seen_count += 1;
                         } else if !column.name.contains('#') {
-                            let mut hasher = DefaultHasher::new();
-                            hasher.write(column.name.as_bytes());
-                            column.id = hasher.finish() as usize;
+                            column.id = column_id(&column.name);
                             entry.pointer.column_id = column.id;
                             unique_keys.push(column);
                         }
@@ -202,9 +206,7 @@ pub fn as_array<'array>(
                             }
                             entry.pointer.column_id = existing_column.id;
                         } else {
-                            let mut hasher = DefaultHasher::new();
-                            hasher.write(column.name.as_bytes());
-                            column.id = hasher.finish() as usize;
+                            column.id = column_id(&column.name);
                             entry.pointer.column_id = column.id;
                             unique_keys.push(column);
                         }
@@ -320,49 +322,6 @@ pub fn save_to_file(
     Ok(())
 }
 
-pub fn filter_columns(
-    previous_parse_result: &Vec<JsonArrayEntries<String>>,
-    prefix: &str,
-    filters: &HashMap<String, Vec<String>>,
-) -> Vec<usize> {
-    let mut res: Vec<usize> = Vec::with_capacity(previous_parse_result.len());
-    for row in previous_parse_result {
-        let mut should_add_row = true;
-        for (pointer, filters) in filters {
-            let pointer_to_find = concat_string!(prefix, "/", row.index().to_string(), pointer);
-            let mut filters_clone = Vec::with_capacity(filters.len());
-            let mut should_filter_by_non_null = false;
-            for filter in filters {
-                if filter.eq(NON_NULL_FILTER_VALUE) {
-                    should_filter_by_non_null = true;
-                } else {
-                    filters_clone.push(filter.clone());
-                }
-            }
-            if let Some(entry) = row.find_node_at(&pointer_to_find) {
-                if should_filter_by_non_null && entry.value.is_none() {
-                    should_add_row = false;
-                    break;
-                }
-                if !filters_clone.is_empty()
-                    && (entry.value.as_ref().is_none()
-                        || !filters_clone.contains(entry.value.as_ref().unwrap()))
-                {
-                    should_add_row = false;
-                    break;
-                }
-            } else {
-                should_add_row = false;
-                break;
-            }
-        }
-
-        if should_add_row {
-            res.push(row.index);
-        }
-    }
-    res
-}
 pub fn search_occurrences(
     previous_parse_result: &[JsonArrayEntries<String>],
     term: &str,

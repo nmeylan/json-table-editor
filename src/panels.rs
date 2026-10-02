@@ -169,7 +169,7 @@ impl<'array> super::View<Option<SearchReplaceResponse<'array>>> for SearchReplac
                             })
                         })
                     },
-                    |ui| {
+                    |ui, _| {
                         for col in self.columns.iter().filter(|c| Self::can_be_replaced(c)) {
                             if col.name.is_empty() {
                                 continue;

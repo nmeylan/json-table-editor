@@ -1,25 +1,26 @@
+mod cell_lookup;
+mod header;
+mod row_view;
+
 use crate::components::cell_text::CellText;
-use crate::components::icon;
 use crate::components::icon::ButtonWithIcon;
-use crate::components::popover::PopupMenu;
-use crate::components::table::{CellLocation, TableBody, TableRow};
-use crate::fonts::{COPY, FILTER, PENCIL, PLUS, SEARCH, TABLE, TABLE_CELLS, THUMBTACK};
+use crate::components::table::{CellLocation, TableBody};
+use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS};
 use crate::panels::{SearchReplacePanel, SearchReplaceResponse, PANEL_REPLACE};
-use crate::parser::{replace_occurrences, row_number_entry, search_occurrences};
+use crate::parser::{column_id, replace_occurrences, row_number_entry, search_occurrences};
 use crate::subtable_window::SubTable;
+use row_view::{ColumnFilter, RowView};
 use crate::{
-    concat_string, set_open, ArrayResponse, Window, ACTIVE_COLOR, SHORTCUT_COPY, SHORTCUT_DELETE,
+    concat_string, set_open, ArrayResponse, Window, SHORTCUT_COPY, SHORTCUT_DELETE,
     SHORTCUT_REPLACE,
 };
 use eframe::egui::scroll_area::ScrollBarVisibility;
 use eframe::egui::style::Spacing;
 use eframe::egui::{
     Align, Context, CursorIcon, Id, Key, Label, Sense, Style, TextEdit, Ui, Vec2, Widget,
-    WidgetText,
 };
 use eframe::epaint::text::TextWrapMode;
 use egui::{EventFilter, InputState, Modifiers, Rangef, TextBuffer};
-use indexmap::IndexSet;
 use json_flat_parser::serializer::serialize_to_json_with_option;
 use json_flat_parser::{
     FlatJsonValue, JSONParser, JsonArrayEntries, ParseOptions, ParseResult, PointerKey, ValueType,
@@ -30,7 +31,7 @@ use rayon::prelude::ParallelSliceMut;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashSet};
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Sub;
@@ -115,9 +116,8 @@ pub struct ArrayTable<'array> {
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResult<String>>,
     pub nodes: Vec<JsonArrayEntries<String>>,
-    filtered_nodes: Vec<usize>,
+    row_view: RowView,
     scroll_y: f32,
-    pub columns_filter: HashMap<String, Vec<String>>,
     pub hovered_row_index: Option<usize>,
     columns_offset: Vec<f32>,
     windows: Vec<SubTable<'array>>,
@@ -272,101 +272,6 @@ impl super::View<ArrayResponse> for ArrayTable<'_> {
     }
 }
 
-#[derive(Default)]
-struct CacheFilterOptions {}
-
-#[derive(Default)]
-struct CacheGetPointer {}
-
-#[derive(Copy, Clone)]
-struct CachePointerKey {
-    pinned_column_table: bool,
-    index: usize,
-    row_index: usize,
-}
-
-impl Hash for CachePointerKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.pinned_column_table.hash(state);
-        self.index.hash(state);
-        self.row_index.hash(state);
-    }
-}
-
-impl<'array>
-    crate::components::cache::ComputerMut<
-        (&Column<'array>, &String),
-        &Vec<JsonArrayEntries<String>>,
-        IndexSet<String>,
-    > for CacheFilterOptions
-{
-    fn compute(
-        &mut self,
-        (column, parent_pointer): (&Column<'array>, &String),
-        nodes: &Vec<JsonArrayEntries<String>>,
-    ) -> IndexSet<String> {
-        let mut unique_values = IndexSet::new();
-        if ArrayTable::is_filterable(column) {
-            nodes
-                .iter()
-                .enumerate()
-                .map(|(i, row)| {
-                    ArrayTable::get_pointer_for_column(parent_pointer, &&row.entries, i, column)
-                        .filter(|entry| entry.value.is_some())
-                        .map(|entry| entry.value.clone().unwrap())
-                })
-                .for_each(|value| {
-                    if let Some(value) = value {
-                        unique_values.insert(value);
-                    }
-                })
-        }
-        if matches!(column.value_type, ValueType::Number) {
-            unique_values.sort_by(|a, b| {
-                let num_a = a.parse::<f64>();
-                let num_b = b.parse::<f64>();
-
-                // Compare parsed numbers; handle parse errors by pushing them to the end
-                match (num_a, num_b) {
-                    (Ok(a), Ok(b)) => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
-                    (Ok(_), Err(_)) => std::cmp::Ordering::Less, // Numbers are less than errors
-                    (Err(_), Ok(_)) => std::cmp::Ordering::Greater, // Errors are greater than numbers
-                    (Err(_), Err(_)) => std::cmp::Ordering::Equal,  // Treat errors equally
-                }
-            });
-        } else {
-            unique_values.sort_by(|a, b| a.cmp(b));
-        }
-        unique_values
-    }
-}
-
-impl<'array>
-    crate::components::cache::ComputerMut<CachePointerKey, &ArrayTable<'array>, Option<usize>>
-    for CacheGetPointer
-{
-    fn compute(
-        &mut self,
-        cache_pointer_key: CachePointerKey,
-        table: &ArrayTable<'array>,
-    ) -> Option<usize> {
-        let columns = if cache_pointer_key.pinned_column_table {
-            &table.column_pinned
-        } else {
-            &table.column_selected
-        };
-        ArrayTable::get_pointer_index(
-            &table.parent_pointer,
-            columns,
-            &table.nodes()[cache_pointer_key.row_index].entries(),
-            cache_pointer_key.index,
-            cache_pointer_key.row_index,
-        )
-    }
-}
-
-pub const NON_NULL_FILTER_VALUE: &str = "__non_null";
-
 impl<'array> ArrayTable<'array> {
     pub fn new(
         parse_result: Option<ParseResult<String>>,
@@ -381,7 +286,7 @@ impl<'array> ArrayTable<'array> {
             column_selected: Self::selected_columns(&all_columns, depth),
             all_columns,
             max_depth: depth,
-            filtered_nodes: (0..nodes.len()).collect::<Vec<usize>>(),
+            row_view: RowView::new(nodes.len()),
             nodes,
             parse_result,
             // states
@@ -401,7 +306,6 @@ impl<'array> ArrayTable<'array> {
             scroll_to_column: "".to_string(),
             changed_scroll_to_column_value: false,
             last_parsed_max_depth,
-            columns_filter: HashMap::new(),
             scroll_to_row_mode: ScrollToRowMode::RowNumber,
             scroll_to_row: "".to_string(),
             scroll_to_row_number: 0,
@@ -493,6 +397,8 @@ impl<'array> ArrayTable<'array> {
             column_selected.retain(|c| !self.column_pinned.contains(c));
             self.column_selected = column_selected;
             self.nodes = new_json_array;
+            self.row_view.rows_changed();
+            self.refresh_row_view();
             self.last_parsed_max_depth = depth;
             self.parse_result.as_mut().unwrap().parsing_max_depth = depth;
             self.parse_result.as_mut().unwrap().max_json_depth = new_max_depth;
@@ -574,20 +480,23 @@ impl<'array> ArrayTable<'array> {
             match self.scroll_to_row_mode {
                 ScrollToRowMode::RowNumber => {
                     self.changed_scroll_to_row_value = None;
-                    table = table.scroll_to_row(
-                        self.scroll_to_row.parse::<usize>().unwrap_or_else(|_| {
+                    // Typed number is the "#" column value (data index): rows hidden by a filter are not reachable
+                    let view_index = match self.scroll_to_row.parse::<usize>() {
+                        Ok(data_index) => self.row_view.data_to_view(data_index),
+                        Err(_) => {
                             self.scroll_to_row.clear();
-                            0
-                        }),
-                        Some(Align::TOP),
-                    );
+                            Some(0)
+                        }
+                    };
+                    if let Some(view_index) = view_index {
+                        table = table.scroll_to_row(view_index, Some(Align::TOP));
+                    }
                 }
                 ScrollToRowMode::MatchingTerm => {
                     if changed_scroll_to_row_value.elapsed().as_millis() >= 300 {
                         self.changed_scroll_to_row_value = None;
                         if !self.scroll_to_row.is_empty() {
-                            self.matching_rows =
-                                search_occurrences(&self.nodes, &self.scroll_to_row.to_lowercase());
+                            self.search_matching_rows();
                             self.matching_row_selected = 0;
                             if !self.matching_rows.is_empty() {
                                 self.changed_matching_row_selected = true;
@@ -691,135 +600,6 @@ impl<'array> ArrayTable<'array> {
         array_response
     }
 
-    fn header(&mut self, pinned_column_table: bool, mut header: TableRow) {
-        // Mutation after interaction
-        let mut clicked_filter_non_null_column: Option<String> = None;
-        let mut clicked_filter_column_value: Option<(String, String)> = None;
-        let mut pinned_column: Option<usize> = None;
-        let mut clicked_replace_column: Option<usize> = None;
-        header.cols(true, |ui, index| {
-            let columns = self.columns(pinned_column_table);
-            let column = columns.get(index).unwrap();
-            let name = column.name.as_str();
-            let strong = Label::new(WidgetText::RichText(egui::RichText::from(name).into()));
-            let label = Label::new(name);
-            let response = ui.vertical(|ui| {
-                let response = ui.add(strong).on_hover_ui(|ui| {
-                    ui.add(label);
-                });
-
-                if !pinned_column_table || index > 0 {
-                    ui.horizontal(|ui| {
-                        if column.name.eq("") {
-                            return;
-                        }
-                        let response = icon::button(
-                            ui,
-                            THUMBTACK,
-                            Some(if pinned_column_table {
-                                "Unpin column"
-                            } else {
-                                "Pin column to left"
-                            }),
-                            None,
-                        );
-                        if response.clicked() {
-                            pinned_column = Some(index);
-                        }
-                        let column_id = Id::new(name);
-                        let checked_filtered_values = self.columns_filter.get(column.name.as_str());
-                        PopupMenu::new(column_id.with("filter")).show_ui(
-                            ui,
-                            |ui| {
-                                icon::button(
-                                    ui,
-                                    FILTER,
-                                    None,
-                                    if checked_filtered_values.is_some() {
-                                        Some(ACTIVE_COLOR)
-                                    } else {
-                                        None
-                                    },
-                                )
-                            },
-                            |ui| {
-                                let mut chcked = if let Some(filters) = checked_filtered_values {
-                                    filters.contains(&NON_NULL_FILTER_VALUE.to_owned())
-                                } else {
-                                    false
-                                };
-                                if ui.checkbox(&mut chcked, "Non null").clicked() {
-                                    clicked_filter_non_null_column = Some(name.to_string());
-                                }
-
-                                if Self::is_filterable(column) {
-                                    let mut cache_ref_mut = self.cache.borrow_mut();
-                                    let cache = cache_ref_mut
-                                        .cache::<crate::components::cache::FrameCache<
-                                            IndexSet<String>,
-                                            CacheFilterOptions,
-                                        >>();
-
-                                    let values = cache
-                                        .get((column, &self.parent_pointer.pointer), &self.nodes);
-                                    if !values.is_empty() {
-                                        let checked_filtered_values =
-                                            self.columns_filter.get(column.name.as_str());
-                                        ui.separator();
-                                        values.iter().for_each(|value| {
-                                            let mut chcked =
-                                                if let Some(filters) = checked_filtered_values {
-                                                    filters.contains(value)
-                                                } else {
-                                                    false
-                                                };
-                                            if ui.checkbox(&mut chcked, value).clicked() {
-                                                clicked_filter_column_value =
-                                                    Some((column.name.to_string(), value.clone()));
-                                            }
-                                        });
-                                    }
-                                }
-                            },
-                        );
-
-                        if SearchReplacePanel::can_be_replaced(column) {
-                            let response =
-                                icon::button(ui, SEARCH, Some("Replace in column"), None);
-                            if response.clicked() {
-                                clicked_replace_column = Some(index);
-                            }
-                        }
-                    });
-                }
-
-                response
-            });
-            Some(response.inner)
-        });
-        if let Some(pinned_column) = pinned_column {
-            if pinned_column_table {
-                let column = self.column_pinned.remove(pinned_column);
-                self.column_selected.push(column);
-                self.column_selected.sort();
-            } else {
-                let column = self.column_selected.remove(pinned_column);
-                self.column_pinned.push(column);
-            }
-            self.cache.borrow_mut().evict();
-        }
-        if let Some(replace_column) = clicked_replace_column {
-            let column = self.columns(pinned_column_table)[replace_column].clone();
-            self.open_replace_panel(Some(column));
-        }
-        if let Some(clicked_column) = clicked_filter_non_null_column {
-            self.on_filter_column_value((clicked_column, NON_NULL_FILTER_VALUE.to_string()));
-        }
-        if let Some(clicked_column) = clicked_filter_column_value {
-            self.on_filter_column_value(clicked_column);
-        }
-    }
-
     fn body(
         &mut self,
         text_height: f32,
@@ -836,9 +616,9 @@ impl<'array> ArrayTable<'array> {
         let mut filter_by_value: Option<(String, String)> = None; // col name, value
         let mut insert_row_at_index: Option<(usize, u8)> = None; // table_row_index, 0 = above, 1 = below
         let columns = self.columns(pinned_column_table);
-        let hover_data = body.rows(text_height, self.filtered_nodes.len(), |mut row| {
+        let hover_data = body.rows(text_height, self.row_view.len(), |mut row| {
             let table_row_index = row.index();
-            let row_index = self.filtered_nodes[table_row_index];
+            let row_index = self.row_view.view_to_data(table_row_index);
             let node = self.nodes().get(row_index);
 
             if let Some(row_data) = node.as_ref() {
@@ -971,9 +751,8 @@ impl<'array> ArrayTable<'array> {
                 response.context_menu(|ui| {
                     let table_row_index = hover_cell.row_index;
                     let col_index = hover_cell.column_index;
-                    let row_index = self.filtered_nodes.get(table_row_index);
-                    if let Some(row_index) = row_index {
-                        let row_index = *row_index;
+                    if table_row_index < self.row_view.len() {
+                        let row_index = self.row_view.view_to_data(table_row_index);
                         let node = self.nodes().get(row_index);
                         if let Some(row_data) = node.as_ref() {
                             let index = self.get_pointer_index_from_cache(
@@ -1093,7 +872,11 @@ impl<'array> ArrayTable<'array> {
             self.windows.push(subtable);
         }
         if let Some((column_name, filter_value)) = filter_by_value {
-            self.on_filter_column_value((column_name, filter_value));
+            self.row_view.set_filter(
+                column_name,
+                Some(ColumnFilter::Include(HashSet::from([filter_value]))),
+            );
+            self.do_filter_column();
         }
         if let Some((table_row_index, above_or_below)) = insert_row_at_index {
             self.insert_new_row(table_row_index, above_or_below);
@@ -1164,13 +947,10 @@ impl<'array> ArrayTable<'array> {
     }
 
     fn insert_new_row(&mut self, table_row_index: usize, above_or_below: u8) {
-        let row_index = self.filtered_nodes[table_row_index];
+        let row_index = self.row_view.view_to_data(table_row_index);
         let depth = self.nodes[row_index].entries.last().unwrap().pointer.depth;
         let new_table_row_index = table_row_index + above_or_below as usize;
         let new_index = row_index + above_or_below as usize;
-        for i in new_table_row_index..self.filtered_nodes.len() {
-            self.filtered_nodes[i] += 1;
-        }
         // Performance are not good on large json but hopefully the feature is used rarely
         // We need to update all json pointer coming after the new row
         // For that we substring the pointer to remove the "prefix" containing the index in the json array
@@ -1196,7 +976,8 @@ impl<'array> ArrayTable<'array> {
                             value_type: ValueType::Object(true, 0),
                             depth,
                             position: 0,
-                            column_id: 0,
+                            // Row root entry belongs to the "" column, as in parser::as_array
+                            column_id: column_id(""),
                         },
                         value: Some("{}".to_string()),
                     },
@@ -1204,8 +985,7 @@ impl<'array> ArrayTable<'array> {
                 index: new_index,
             },
         );
-        self.filtered_nodes
-            .insert(table_row_index + above_or_below as usize, new_index);
+        self.row_view.on_row_inserted(new_table_row_index, new_index);
         self.cache.borrow_mut().evict();
     }
 
@@ -1218,31 +998,20 @@ impl<'array> ArrayTable<'array> {
         }
     }
 
-    fn get_pointer_index_from_cache(
-        &self,
-        pinned_column_table: bool,
-        row_data: &&JsonArrayEntries<String>,
-        col_index: usize,
-    ) -> Option<usize> {
-        let index = {
-            let mut cache_ref_mut = self.cache.borrow_mut();
-            let cache = cache_ref_mut
-                .cache::<crate::components::cache::FrameCache<Option<usize>, CacheGetPointer>>();
-            let key = CachePointerKey {
-                pinned_column_table,
-                index: col_index,
-                row_index: row_data.index(),
-            };
-            cache.get(key, self)
-        };
-        index
-    }
-
     #[inline]
     fn is_filterable(column: &Column) -> bool {
         !(matches!(column.value_type, ValueType::Object(_, _))
             || matches!(column.value_type, ValueType::Array(_))
             || matches!(column.value_type, ValueType::Null))
+    }
+
+    /// Scalar columns only.
+    #[inline]
+    fn is_sortable(column: &Column) -> bool {
+        !matches!(
+            column.value_type,
+            ValueType::Object(_, _) | ValueType::Array(_)
+        )
     }
 
     fn open_subtable(
@@ -1278,6 +1047,7 @@ impl<'array> ArrayTable<'array> {
         );
         if value_changed {
             self.cache.borrow_mut().evict();
+            self.row_view.rows_changed();
         }
         value_changed
     }
@@ -1363,85 +1133,46 @@ impl<'array> ArrayTable<'array> {
         value_changed
     }
 
-    #[inline]
-    fn get_pointer_index(
-        parent_pointer: &PointerKey,
-        columns: &Vec<Column>,
-        data: &&Vec<FlatJsonValue<String>>,
-        index: usize,
-        row_index: usize,
-    ) -> Option<usize> {
-        if let Some(column) = columns.get(index) {
-            let key = column.name.as_str();
-            let key = Self::pointer_key(&parent_pointer.pointer, row_index, key);
-            return data.iter().position(|entry| entry.pointer.pointer.eq(&key));
-        }
-        None
+    fn do_filter_column(&mut self) {
+        self.refresh_row_view();
+        self.next_frame_reset_scroll = true;
     }
-    #[inline]
-    fn get_pointer<'a>(
-        &self,
-        columns: &Vec<Column>,
-        data: &&'a Vec<FlatJsonValue<String>>,
-        index: usize,
-        row_index: usize,
-    ) -> Option<&'a FlatJsonValue<String>> {
-        if let Some(column) = columns.get(index) {
-            return Self::get_pointer_for_column(
-                &self.parent_pointer.pointer,
-                data,
-                row_index,
-                column,
-            );
+
+    fn refresh_row_view(&mut self) {
+        self.row_view.recompute(&self.nodes);
+        // Matching rows are view indices: they are stale once the view changed
+        if !self.matching_rows.is_empty() {
+            self.search_matching_rows();
+            self.matching_row_selected = self
+                .matching_row_selected
+                .min(self.matching_rows.len().saturating_sub(1));
         }
-        None
+    }
+
+    /// Search occurrences of `scroll_to_row` among visible rows, as view indices.
+    fn search_matching_rows(&mut self) {
+        self.matching_rows =
+            search_occurrences(&self.nodes, &self.scroll_to_row.to_lowercase())
+                .into_iter()
+                .filter_map(|data_index| self.row_view.data_to_view(data_index))
+                .collect();
+        // Navigate occurrences in view order
+        self.matching_rows.sort_unstable();
     }
 
     #[inline]
-    fn get_pointer_for_column<'a>(
-        parent_pointer: &String,
-        data: &&'a Vec<FlatJsonValue<String>>,
-        row_index: usize,
-        column: &Column,
-    ) -> Option<&'a FlatJsonValue<String>> {
-        let key = column.name.as_str();
-        let key = Self::pointer_key(parent_pointer, row_index, key);
-        data.iter().find(|entry| entry.pointer.pointer.eq(&key))
+    pub fn row_view(&self) -> &RowView {
+        &self.row_view
     }
 
-    #[inline]
-    fn pointer_key(parent_pointer: &String, row_index: usize, key: &str) -> String {
-        concat_string!(parent_pointer, "/", row_index.to_string(), key)
-    }
-
-    fn on_filter_column_value(&mut self, (column, value): (String, String)) {
-        let maybe_filter = self.columns_filter.get_mut(column.as_str());
-        if let Some(filter) = maybe_filter {
-            if filter.contains(&value) {
-                filter.retain(|v| !v.eq(&value));
-                if filter.is_empty() {
-                    self.columns_filter.remove(column.as_str());
-                }
-            } else {
-                filter.push(value);
-            }
-        } else {
-            self.columns_filter.insert(column, vec![value]);
-        }
+    pub fn remove_filter(&mut self, column: &str) {
+        self.row_view.remove_filter(column);
         self.do_filter_column();
     }
 
-    fn do_filter_column(&mut self) {
-        if self.columns_filter.is_empty() {
-            self.filtered_nodes = (0..self.nodes.len()).collect::<Vec<usize>>();
-        } else {
-            self.filtered_nodes = crate::parser::filter_columns(
-                &self.nodes,
-                &self.parent_pointer.pointer,
-                &self.columns_filter,
-            );
-        }
-        self.next_frame_reset_scroll = true;
+    pub fn clear_filters(&mut self) {
+        self.row_view.clear_filters();
+        self.do_filter_column();
     }
 
     #[inline]
@@ -1481,7 +1212,7 @@ impl<'array> ArrayTable<'array> {
                             self.scroll_to_column_number = focused_cell.column_index;
                             self.changed_arrow_horizontal_scroll = true;
                         } else if !focused_cell.is_pinned_column_table
-                            && focused_cell.row_index < self.filtered_nodes.len() - 1
+                            && focused_cell.row_index < self.row_view.len() - 1
                         {
                             focused_cell.column_index = 0;
                             focused_cell.row_index += 1;
@@ -1527,7 +1258,7 @@ impl<'array> ArrayTable<'array> {
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;
                     }
-                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) && focused_cell.row_index < self.filtered_nodes.len() - 1 {
+                    if i.consume_key(Modifiers::NONE, Key::ArrowDown) && focused_cell.row_index < self.row_view.len() - 1 {
                         focused_cell.row_index += 1;
                         self.scroll_to_row_number = focused_cell.row_index;
                         self.changed_arrow_vertical_scroll = true;
@@ -1536,7 +1267,7 @@ impl<'array> ArrayTable<'array> {
                     if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
                         && !self.was_editing
                     {
-                        let row_index = self.filtered_nodes[focused_cell.row_index];
+                        let row_index = self.row_view.view_to_data(focused_cell.row_index);
                         *self.editing_index.borrow_mut() = Some((
                             focused_cell.column_index,
                             row_index,
@@ -1592,7 +1323,7 @@ impl<'array> ArrayTable<'array> {
                 _ => false,
             }) {
                 let cell_location = hovered_cell.unwrap();
-                let row_index = self.filtered_nodes[cell_location.row_index];
+                let row_index = self.row_view.view_to_data(cell_location.row_index);
                 let index = self.get_pointer_index_from_cache(
                     cell_location.is_pinned_column_table,
                     &&self.nodes[row_index],
@@ -1741,7 +1472,7 @@ impl<'array> ArrayTable<'array> {
         // let start = std::time::Instant::now();
         if let Some(ref columns) = search_replace_response.selected_column {
             for column in columns {
-                self.columns_filter.remove(column.name.as_str());
+                self.row_view.remove_filter(column.name.as_str());
             }
         }
         let mut occurrences = replace_occurrences(&mut self.nodes, search_replace_response);
@@ -1780,6 +1511,7 @@ impl<'array> ArrayTable<'array> {
             let mut new_json_array_guard = new_json_array.lock().unwrap();
             self.nodes = mem::take(&mut new_json_array_guard);
             self.cache.borrow_mut().evict();
+            self.row_view.rows_changed();
         }
         // println!("took {}ms to update columns", start.elapsed().as_millis());
         self.do_filter_column();
