@@ -1,6 +1,8 @@
 mod cell_lookup;
 mod header;
 mod row_view;
+pub mod table_source;
+use table_source::{CompactRows, TableSource};
 
 use crate::components::cell_text::CellText;
 use crate::components::icon::ButtonWithIcon;
@@ -121,6 +123,9 @@ pub struct ArrayTable<'array> {
     last_parsed_max_depth: u8,
     parse_result: Option<ParseResult<String>>,
     pub nodes: Vec<JsonArrayEntries<String>>,
+    // Read only tables keep rows as positions in json instead of nodes
+    compact: Option<CompactRows>,
+    pub editable: bool,
     row_view: RowView,
     scroll_y: f32,
     pub hovered_row_index: Option<usize>,
@@ -293,6 +298,8 @@ impl<'array> ArrayTable<'array> {
             max_depth: depth,
             row_view: RowView::new(nodes.len()),
             nodes,
+            compact: None,
+            editable: true,
             parse_result,
             // states
             next_frame_reset_scroll: false,
@@ -334,6 +341,28 @@ impl<'array> ArrayTable<'array> {
             was_editing: false,
         }
     }
+    /// Read only table, parsed at full depth
+    pub fn new_read_only(
+        parse_result: Option<ParseResult<String>>,
+        rows: CompactRows,
+        all_columns: Vec<Column<'array>>,
+        depth: u8,
+        parent_pointer: PointerKey,
+    ) -> Self {
+        let mut table = Self::new(parse_result, vec![], all_columns, depth, parent_pointer);
+        table.row_view = RowView::new(rows.rows_count());
+        table.compact = Some(rows);
+        table.editable = false;
+        table
+    }
+
+    pub fn source(&self) -> &dyn TableSource {
+        match self.compact {
+            Some(ref rows) => rows,
+            None => &self.nodes,
+        }
+    }
+
     pub fn windows(&mut self, ctx: &Context, array_response: &mut ArrayResponse) {
         let mut closed_windows = vec![];
         let mut updated_values = vec![];
@@ -351,7 +380,8 @@ impl<'array> ArrayTable<'array> {
                 closed_windows.push(window.name().clone());
             }
         }
-        for updated_value in updated_values {
+        let editable = self.editable;
+        for updated_value in updated_values.into_iter().filter(|_| editable) {
             if self.update_value(updated_value.0.clone(), updated_value.1, updated_value.2) {
                 array_response.edited_value.push(updated_value.0.clone())
             }
@@ -642,6 +672,10 @@ impl<'array> ArrayTable<'array> {
         mut request_repaint: bool,
         body: TableBody,
     ) {
+        if self.compact.is_some() {
+            self.body_read_only(text_height, pinned_column_table, array_response, body);
+            return;
+        }
         // Mutation after interaction
         let mut subtable = None;
         let mut focused_cell = None;
@@ -707,18 +741,18 @@ impl<'array> ArrayTable<'array> {
                         if pinned_column_table && col_index == 0 {
                             let label = Label::new(row_index.to_string());
                             return Some(label.ui(ui));
-                        } else if let Some(value) = entry.value.as_ref() {
+                        } else if let Some(value) = self.cell_value(row_data, index) {
                             if !matches!(entry.pointer.value_type, ValueType::Null) {
                                 let label = if value.len() > 1000 {
                                     CellText::new(&value[0..1000])
                                 } else {
-                                    CellText::new(value)
+                                    CellText::new(&*value)
                                 };
 
                                 let mut response = label.ui(ui, cell_id);
 
-                                if response.double_clicked() {
-                                    *self.editing_value.borrow_mut() = value.clone();
+                                if self.editable && response.double_clicked() {
+                                    *self.editing_value.borrow_mut() = value.to_string();
                                     *editing_index =
                                         Some((col_index, row_index, pinned_column_table));
                                 }
@@ -743,7 +777,7 @@ impl<'array> ArrayTable<'array> {
                                         ui.style_mut().interaction.selectable_labels = true;
                                         let scroll_area = egui::ScrollArea::vertical();
                                         scroll_area.show(ui, |ui| {
-                                            ui.label(value).request_focus();
+                                            ui.label(&*value).request_focus();
                                         });
                                     });
                                 };
@@ -754,7 +788,7 @@ impl<'array> ArrayTable<'array> {
                     // No value cell
                     let rect = ui.available_rect_before_wrap();
                     let response = ui.interact(rect, Id::new(cell_id), Sense::click());
-                    if response.double_clicked() {
+                    if self.editable && response.double_clicked() {
                         *self.editing_value.borrow_mut() = String::new();
                         *editing_index = Some((col_index, row_index, pinned_column_table));
                     }
@@ -798,14 +832,14 @@ impl<'array> ArrayTable<'array> {
                             let mut edit_entry: Option<&FlatJsonValue<String>> = None;
                             if let Some(index) = index {
                                 let entry = &row_data.entries()[index];
-                                if let Some(value) = entry.value.as_ref() {
-                                    edit_value = value.clone();
+                                if let Some(value) = self.cell_value(row_data, index) {
+                                    edit_value = value.to_string();
                                 }
                                 edit_entry = Some(entry);
                             }
                             // Context menu: edit
                             let button = ButtonWithIcon::new("Edit", PENCIL);
-                            if ui.add(button).clicked() {
+                            if self.editable && ui.add(button).clicked() {
                                 *self.editing_index.borrow_mut() =
                                     Some((col_index, row_index, pinned_column_table));
                                 *self.editing_value.borrow_mut() = mem::take(&mut edit_value);
@@ -835,14 +869,14 @@ impl<'array> ArrayTable<'array> {
                             ui.separator();
                             // Context menu: insert row above
                             let button = ButtonWithIcon::new("Insert row above", PLUS);
-                            if ui.add(button).clicked() {
+                            if self.editable && ui.add(button).clicked() {
                                 insert_row_at_index = Some((table_row_index, 0));
                                 ui.close();
                             }
 
                             // Context menu: insert row below
                             let button = ButtonWithIcon::new("Insert row below", PLUS);
-                            if ui.add(button).clicked() {
+                            if self.editable && ui.add(button).clicked() {
                                 insert_row_at_index = Some((table_row_index, 1));
                                 ui.close();
                             }
@@ -864,7 +898,7 @@ impl<'array> ArrayTable<'array> {
                                     if ui.add(button).clicked() {
                                         ui.close();
                                         let content = edit_value.clone();
-                                        subtable = Self::open_subtable(row_index, entry, content);
+                                        subtable = self.open_subtable(row_index, &entry.pointer, content);
                                     }
                                 }
                             }
@@ -882,6 +916,7 @@ impl<'array> ArrayTable<'array> {
                                         ValueType::Object(true, 0),
                                         row_index,
                                         root_node.pointer.depth,
+                                        self.editable,
                                     ));
                                 }
                             }
@@ -930,6 +965,170 @@ impl<'array> ArrayTable<'array> {
         if self.hovered_row_index != hover_data.hovered_row {
             self.hovered_row_index = hover_data.hovered_row;
             request_repaint = true;
+        }
+        array_response.hover_data = hover_data;
+    }
+
+    /// Body of a read only table: cells come from its source, no edition
+    fn body_read_only(
+        &mut self,
+        text_height: f32,
+        pinned_column_table: bool,
+        array_response: &mut ArrayResponse,
+        body: TableBody,
+    ) {
+        // Mutation after interaction
+        let mut subtable = None;
+        let mut focused_cell = None;
+        let mut focused_changed = false;
+        let mut filter_by_value: Option<(String, String)> = None; // col name, value
+        let columns = self.columns(pinned_column_table);
+        let source = self.source();
+        let hover_data = body.rows(text_height, self.row_view.len(), |mut row| {
+            let table_row_index = row.index();
+            let row_index = self.row_view.view_to_data(table_row_index);
+            row.cols(false, |ui, col_index| {
+                if pinned_column_table && col_index == 0 {
+                    return Some(Label::new(row_index.to_string()).ui(ui));
+                }
+                let cell_id = row_index * columns.len()
+                    + col_index
+                    + if pinned_column_table {
+                        self.seed1
+                    } else {
+                        self.seed2
+                    };
+                let value = source
+                    .cell(row_index, columns[col_index].id)
+                    .and_then(|cell| cell.value.filter(|_| !matches!(cell.value_type, ValueType::Null)));
+                let response = match value {
+                    Some(value) => {
+                        let label = CellText::new(if value.len() > 1000 { &value[0..1000] } else { value });
+                        let response = label.ui(ui, cell_id);
+                        if value.len() > 100 {
+                            response.on_hover_ui(|ui| {
+                                ui.style_mut().interaction.selectable_labels = true;
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    ui.label(value).request_focus();
+                                });
+                            })
+                        } else {
+                            response
+                        }
+                    }
+                    None => {
+                        let rect = ui.available_rect_before_wrap();
+                        ui.interact(rect, Id::new(cell_id), Sense::click())
+                    }
+                };
+                if response.secondary_clicked() || response.clicked() {
+                    focused_cell = Some(CellLocation {
+                        column_index: col_index,
+                        row_index: table_row_index,
+                        is_pinned_column_table: pinned_column_table,
+                    });
+                    ui.ctx().memory_mut(|m| m.request_focus(self.table_id));
+                    focused_changed = true;
+                }
+                if response.hovered() {
+                    ui.ctx().set_cursor_icon(CursorIcon::Cell);
+                }
+                Some(response)
+            });
+        });
+        // Context menu
+        if let (Some(hover_cell), Some(response)) = (hover_data.hovered_cell.as_ref(), hover_data.response_rows.as_ref()) {
+            response.context_menu(|ui| {
+                let table_row_index = hover_cell.row_index;
+                let col_index = hover_cell.column_index;
+                if table_row_index >= self.row_view.len() {
+                    return;
+                }
+                let row_index = self.row_view.view_to_data(table_row_index);
+                let column = &columns[col_index];
+                let cell = source.cell(row_index, column.id);
+                let pointer = PointerKey {
+                    pointer: Self::pointer_key(&self.parent_pointer.pointer, row_index, &column.name),
+                    value_type: cell.as_ref().map_or(column.value_type, |cell| cell.value_type),
+                    depth: column.depth,
+                    position: 0,
+                    column_id: column.id,
+                };
+                if let Some(value) = cell.as_ref().and_then(|cell| cell.value) {
+                    let button = ButtonWithIcon::new("Copy", COPY)
+                        .shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_COPY));
+                    if ui.add(button).clicked() {
+                        ui.ctx().copy_text(value.to_string());
+                        ui.close();
+                    }
+                    if Self::is_filterable(column) {
+                        let button = ButtonWithIcon::new("Filter by this value", FILTER);
+                        if ui.add(button).clicked() {
+                            filter_by_value = Some((column.name.to_string(), value.to_string()));
+                            ui.close();
+                        }
+                    }
+                    let is_array = matches!(pointer.value_type, ValueType::Array(_));
+                    let is_object = matches!(pointer.value_type, ValueType::Object(..));
+                    if is_array || is_object {
+                        ui.separator();
+                        let button = ButtonWithIcon::new(
+                            format!("Open {} in sub table", if is_array { "array" } else { "object" }),
+                            TABLE_CELLS,
+                        );
+                        if ui.add(button).clicked() {
+                            ui.close();
+                            subtable = self.open_subtable(row_index, &pointer, value.to_string());
+                        }
+                    }
+                }
+                // Row object is the cell of the column without name
+                let row_pointer_name = "";
+                if let Some(row) = source.cell(row_index, column_id(row_pointer_name)).and_then(|cell| cell.value) {
+                    ui.separator();
+                    let button = ButtonWithIcon::new("Open row in sub table", TABLE);
+                    if ui.add(button).clicked() {
+                        ui.close();
+                        let row_column = self.all_columns.iter().find(|column| column.name == row_pointer_name);
+                        subtable = Some(SubTable::new(
+                            PointerKey {
+                                pointer: Self::pointer_key(&self.parent_pointer.pointer, row_index, row_pointer_name),
+                                value_type: ValueType::Object(true, 0),
+                                depth: row_column.map_or(1, |column| column.depth),
+                                position: 0,
+                                column_id: column_id(row_pointer_name),
+                            },
+                            row.to_string(),
+                            ValueType::Object(true, 0),
+                            row_index,
+                            row_column.map_or(1, |column| column.depth),
+                            false,
+                        ));
+                    }
+                }
+                ui.separator();
+                if ui.button("Copy pointer").clicked() {
+                    ui.ctx().copy_text(pointer.pointer.clone());
+                    ui.close();
+                }
+            });
+        }
+
+        if focused_changed {
+            self.focused_cell = focused_cell;
+        }
+        if let Some(subtable) = subtable {
+            self.windows.push(subtable);
+        }
+        if let Some((column_name, filter_value)) = filter_by_value {
+            self.row_view.set_filter(
+                column_name,
+                Some(ColumnFilter::Include(HashSet::from([filter_value]))),
+            );
+            self.do_filter_column();
+        }
+        if self.hovered_row_index != hover_data.hovered_row {
+            self.hovered_row_index = hover_data.hovered_row;
         }
         array_response.hover_data = hover_data;
     }
@@ -1049,16 +1248,18 @@ impl<'array> ArrayTable<'array> {
     }
 
     fn open_subtable(
+        &self,
         row_index: usize,
-        entry: &FlatJsonValue<String>,
+        pointer: &PointerKey,
         content: String,
     ) -> Option<SubTable<'array>> {
         Some(SubTable::new(
-            entry.pointer.clone(),
+            pointer.clone(),
             content,
-            entry.pointer.value_type,
+            pointer.value_type,
             row_index,
-            entry.pointer.depth,
+            pointer.depth,
+            self.editable,
         ))
     }
 
@@ -1149,9 +1350,11 @@ impl<'array> ArrayTable<'array> {
                     newly_updated_value.pointer.value_type,
                     ValueType::Object(..)
                 ) {
+                    // Objects kept without raw data have their value computed from their content
                     row_entries
                         .iter_mut()
                         .find(|e| e.pointer.pointer.eq(&newly_updated_value.pointer.pointer))
+                        .filter(|entry_to_update| entry_to_update.value.is_some())
                         .map(|entry_to_update| entry_to_update.value = newly_updated_value.value);
                 }
             }
@@ -1173,7 +1376,11 @@ impl<'array> ArrayTable<'array> {
     }
 
     fn refresh_row_view(&mut self) {
-        self.row_view.recompute(&self.nodes);
+        let source: &dyn TableSource = match self.compact {
+            Some(ref rows) => rows,
+            None => &self.nodes,
+        };
+        self.row_view.recompute(source);
         // Matching rows are view indices: they are stale once the view changed
         if !self.matching_rows.is_empty() {
             self.search_matching_rows();
@@ -1186,7 +1393,7 @@ impl<'array> ArrayTable<'array> {
     /// Search occurrences of `scroll_to_row` among visible rows, as view indices.
     fn search_matching_rows(&mut self) {
         self.matching_rows =
-            search_occurrences(&self.nodes, &self.scroll_to_row.to_lowercase())
+            search_occurrences(self.source(), &self.scroll_to_row.to_lowercase())
                 .into_iter()
                 .filter_map(|data_index| self.row_view.data_to_view(data_index))
                 .collect();
@@ -1300,6 +1507,7 @@ impl<'array> ArrayTable<'array> {
                     let typed_alphanum = Self::get_typed_alphanum_from_events(i);
                     if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
                         && !self.was_editing
+                        && self.editable
                     {
                         let row_index = self.row_view.view_to_data(focused_cell.row_index);
                         *self.editing_index.borrow_mut() = Some((
@@ -1343,21 +1551,34 @@ impl<'array> ArrayTable<'array> {
                         modifiers: Default::default(),
                     })
                 }
-                if i.consume_shortcut(&SHORTCUT_REPLACE) {
+                if self.editable && i.consume_shortcut(&SHORTCUT_REPLACE) {
                     self.open_replace_panel(None);
                 }
             }
             let hovered_cell = array_response.hover_data.hovered_cell;
+            let editable = self.editable;
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => hovered_cell.is_some(),
-                egui::Event::Paste(_) => hovered_cell.is_some(),
+                egui::Event::Paste(_) => hovered_cell.is_some() && editable,
                 egui::Event::Key {
                     key: Key::Delete, ..
-                } => hovered_cell.is_some(),
+                } => hovered_cell.is_some() && editable,
                 _ => false,
             }) {
                 let cell_location = hovered_cell.unwrap();
                 let row_index = self.row_view.view_to_data(cell_location.row_index);
+                if let Some(ref rows) = self.compact {
+                    // Read only: only copy
+                    if matches!(event, egui::Event::Copy) {
+                        let columns = self.columns(cell_location.is_pinned_column_table);
+                        copied_value = columns
+                            .get(cell_location.column_index)
+                            .and_then(|column| rows.cell(row_index, column.id))
+                            .and_then(|cell| cell.value)
+                            .map(str::to_string);
+                    }
+                    continue;
+                }
                 let index = self.get_pointer_index_from_cache(
                     cell_location.is_pinned_column_table,
                     &&self.nodes[row_index],
@@ -1423,8 +1644,8 @@ impl<'array> ArrayTable<'array> {
                     }
                     egui::Event::Copy => {
                         if let Some(index) = index {
-                            if let Some(value) = &self.nodes[row_index].entries()[index].value {
-                                copied_value = Some(value.clone());
+                            if let Some(value) = self.cell_value(&self.nodes[row_index], index) {
+                                copied_value = Some(value.to_string());
                             }
                         }
                     }

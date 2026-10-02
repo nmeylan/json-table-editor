@@ -30,10 +30,11 @@ pub struct ObjectTable {
     // Handling interaction
     pub changed_arrow_vertical_scroll: bool,
     pub was_editing: bool,
+    editable: bool,
 }
 
 impl ObjectTable {
-    pub fn new(nodes: Vec<FlatJsonValue<String>>, name: String) -> Self {
+    pub fn new(nodes: Vec<FlatJsonValue<String>>, name: String, editable: bool) -> Self {
         let mut filtered_nodes = Vec::with_capacity(nodes.len());
         let mut arrays = vec![];
         for (index, entry) in nodes.iter().enumerate() {
@@ -57,6 +58,7 @@ impl ObjectTable {
             scroll_to_row_number: 0,
             changed_arrow_vertical_scroll: false,
             was_editing: false,
+            editable,
         }
     }
 
@@ -150,7 +152,7 @@ impl ObjectTable {
                                         .map(|v| ui.add(Label::new(v).sense(Sense::click())))
                                         .unwrap_or_else(|| ui.label("")),
                                 );
-                                if response.double_clicked() {
+                                if self.editable && response.double_clicked() {
                                     *self.editing_value.borrow_mut() =
                                         entry.value.clone().unwrap_or_default();
                                     *editing_index = Some(row_index);
@@ -170,7 +172,7 @@ impl ObjectTable {
                                         is_pinned_column_table: false,
                                     });
                                     let button = ButtonWithIcon::new("Edit", PENCIL);
-                                    if ui.add(button).clicked() {
+                                    if self.editable && ui.add(button).clicked() {
                                         *self.editing_value.borrow_mut() =
                                             entry.value.clone().unwrap_or_default();
                                         *editing_index = Some(row_index);
@@ -320,6 +322,7 @@ impl ObjectTable {
                     let typed_alphanum = ArrayTable::get_typed_alphanum_from_events(i);
                     if (typed_alphanum.is_some() || i.consume_key(Modifiers::NONE, Key::Enter))
                         && !self.was_editing
+                        && self.editable
                     {
                         let row_index = self.filtered_nodes[focused_cell.row_index];
                         *self.editing_index.borrow_mut() = Some(row_index);
@@ -342,12 +345,13 @@ impl ObjectTable {
                     })
                 }
             }
+            let editable = self.editable;
             for event in i.events.iter().filter(|e| match e {
                 egui::Event::Copy => has_hovered_cell,
-                egui::Event::Paste(_) => has_hovered_cell,
+                egui::Event::Paste(_) => has_hovered_cell && editable,
                 egui::Event::Key {
                     key: Key::Delete, ..
-                } => has_hovered_cell,
+                } => has_hovered_cell && editable,
                 _ => false,
             }) {
                 let cell_location = array_response.hover_data.hovered_cell.unwrap();

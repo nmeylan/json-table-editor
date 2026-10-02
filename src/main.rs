@@ -24,13 +24,14 @@ use parking_lot_mpsc::{Receiver, SyncSender};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use crate::array_table::table_source::TableSource;
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
 use crate::components::table_control_pane::TableControlPane;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::{AboutPanel, PANEL_ABOUT};
-use crate::parser::{save_to_buffer, save_to_file};
+use crate::parser::{FileFormat, save_to_buffer, save_to_file};
 use eframe::egui::Context;
 use eframe::egui::{
     Align, Align2, Button, Color32, ComboBox, CursorIcon, Id, Key, KeyboardShortcut, Label,
@@ -41,7 +42,7 @@ use eframe::epaint::text::TextWrapMode;
 use eframe::{CreationContext, Renderer};
 use egui::style::ScrollStyle;
 use egui::ScrollArea;
-use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, PointerKey, ValueType};
+use json_flat_parser::{FlatJsonValue, JSONParser, ParseOptions, ParseResult, PointerKey, ValueType};
 
 pub const ACTIVE_COLOR: Color32 = Color32::from_rgb(63, 142, 252);
 
@@ -121,7 +122,29 @@ fn main() {
                 cc.egui_ctx.set_global_style(style);
                 let mut app = MyApp::new(cc);
 
-                let args: Vec<_> = env::args().collect();
+                let mut args: Vec<_> = env::args().collect();
+                if let Some(i) = args.iter().position(|arg| arg == "--format") {
+                    app.file_format = match args.get(i + 1).map(String::as_str) {
+                        Some("json") => Some(FileFormat::Json),
+                        Some("jsonl") => Some(FileFormat::Jsonl),
+                        format => {
+                            println!("Unknown --format {:?}, expected json or jsonl, format will be detected", format);
+                            None
+                        }
+                    };
+                    args.drain(i..(i + 2).min(args.len()));
+                }
+                if let Some(i) = args.iter().position(|arg| arg == "--read-only") {
+                    app.read_only = true;
+                    args.remove(i);
+                }
+                if let Some(i) = args.iter().position(|arg| arg == "--max-depth") {
+                    match args.get(i + 1).map(|depth| depth.parse::<u8>()) {
+                        Some(Ok(depth)) if depth > 0 => app.max_parse_depth = depth,
+                        depth => println!("Invalid --max-depth {:?}, expected 1 to 255, depth will not be limited", depth),
+                    }
+                    args.drain(i..(i + 2).min(args.len()));
+                }
                 if args.len() >= 2 {
                     println!("Opening {}", args[1].as_str());
                     app.selected_file = Some(PathBuf::from(args[1].as_str()));
@@ -156,6 +179,15 @@ struct MyApp<'array> {
     async_events_channel: (SyncSender<AsyncEvent>, Receiver<AsyncEvent>),
     failed_to_load_sample_json: Option<String>,
     force_repaint: bool,
+    // None: detected from extension or content when opening the file
+    file_format: Option<FileFormat>,
+    // u8::MAX: no limit. Deeper content is parsed when depth slider goes beyond.
+    max_parse_depth: u8,
+    // Open next file as read only table, using less memory
+    read_only: bool,
+    // Ask which format to use before opening a file selected or dropped in the main window
+    ask_file_format: bool,
+    suggested_file_format: Option<FileFormat>,
 }
 
 enum AsyncEvent {
@@ -196,6 +228,11 @@ impl MyApp<'_> {
             async_events_channel: (sender, receiver),
             failed_to_load_sample_json: None,
             force_repaint: false,
+            file_format: None,
+            max_parse_depth: u8::MAX,
+            read_only: false,
+            ask_file_format: false,
+            suggested_file_format: None,
         }
     }
     pub fn windows(&mut self, ctx: &Context) {
@@ -211,38 +248,42 @@ impl MyApp<'_> {
             let mut file = File::open(self.selected_file.as_ref().unwrap()).unwrap();
             let metadata1 = file.metadata().unwrap();
 
-            let size = (metadata1.len() / 1024 / 1024) as usize;
-            let max_depth = if size < 100 {
-                // 1
-                u8::MAX
-            } else {
-                1 // should start after prefix
-            };
             let mut content = String::with_capacity(metadata1.len() as usize);
             // let mut reader = LfToCrlfReader::new(file);
             // reader.read_to_string(&mut content);
             file.read_to_string(&mut content).unwrap();
 
-            self.open_json_content(max_depth, content.as_bytes());
+            self.open_json_content(self.max_parse_depth, content);
         }
         #[cfg(target_arch = "wasm32")]
         {
             if self.web_loaded_json.is_some() {
-                let json = mem::take(&mut self.web_loaded_json);
-                self.open_json_content(u8::MAX, json.unwrap().as_slice());
+                let json = mem::take(&mut self.web_loaded_json).unwrap();
+                match String::from_utf8(json) {
+                    Ok(json) => self.open_json_content(self.max_parse_depth, json),
+                    Err(e) => log!("Invalid utf-8 json: {}", e),
+                }
                 self.selected_file = Some(PathBuf::default());
             }
         }
     }
 
-    fn open_json_content(&mut self, max_depth: u8, json: &[u8]) {
+    fn open_json_content(&mut self, max_depth: u8, content: String) {
+        let json = content.as_bytes();
         let size = json.len() / 1024 / 1024;
 
-        let is_jsonl = JSONParser::is_jsonl(json);
+        let format = self
+            .file_format
+            .unwrap_or_else(|| Self::detect_file_format(self.selected_file.as_ref(), json));
+        self.file_format = Some(format);
 
-        if is_jsonl {
+        if format == FileFormat::Jsonl {
             log!("Detected JSONL format, size {}mb", size);
-            self.open_jsonl_content(max_depth, json);
+            if self.read_only {
+                self.open_read_only(content);
+            } else {
+                self.open_jsonl_content(max_depth, json);
+            }
             return;
         }
 
@@ -261,32 +302,26 @@ impl MyApp<'_> {
             size,
             found_array
         );
-        if found_array || self.selected_pointer.is_some() {
+        if (found_array || self.selected_pointer.is_some()) && self.read_only {
+            self.open_read_only(content);
+        } else if found_array || self.selected_pointer.is_some() {
             let start = crate::compatibility::now();
+            // Raw data is only needed for rows, nested objects text is computed from their content
             let mut options = ParseOptions::default()
                 .parse_array(false)
-                .max_depth(max_depth);
+                .max_depth(max_depth)
+                .keep_object_raw_data_max_depth(1);
             if let Some(ref start_at) = self.selected_pointer {
                 options = options.start_parse_at(start_at.clone());
             }
-            let parse_result = JSONParser::parse_bytes(json, options);
-
-            let result = parse_result.unwrap().to_owned();
-            let parsing_max_depth = result.parsing_max_depth;
+            let (result1, columns, parse_result) =
+                crate::parser::json_array_as_array(json, &options).unwrap();
+            let parsing_max_depth = parse_result.parsing_max_depth;
             log!(
-                "Custom parser took {}ms for a {}mb file, max depth {}, {}",
+                "Parsing to array took {}ms for a {}mb file, max depth {}, root array len {}, columns {}",
                 start.elapsed().as_millis(),
                 size,
                 parsing_max_depth,
-                result.json.len()
-            );
-            let parse_result = result.clone_except_json();
-
-            let start = crate::compatibility::now();
-            let (result1, columns) = crate::parser::as_array(result).unwrap();
-            log!(
-                "Transformation to array took {}ms, root array len {}, columns {}",
-                start.elapsed().as_millis(),
                 result1.len(),
                 columns.len()
             );
@@ -321,23 +356,88 @@ impl MyApp<'_> {
             self.selected_pointer = None;
             self.unsaved_changes = false;
         } else {
+            // Only to list arrays which can be parsed: limited depth for large files
             let options = ParseOptions::default()
                 .parse_array(false)
-                .max_depth(max_depth);
+                .max_depth(if size < 100 { max_depth } else { 1 });
             let result = JSONParser::parse_bytes(json, options.clone()).unwrap();
             self.should_parse_again = true;
             self.parsing_invalid = true;
             self.unsaved_changes = false;
-            #[cfg(target_arch = "wasm32")]
-            {
-                self.web_loaded_json = Some(json.to_vec());
-            }
             self.parsing_invalid_pointers = result
                 .json
                 .iter()
                 .filter(|entry| matches!(entry.pointer.value_type, ValueType::Array(_)))
                 .map(|entry| entry.pointer.pointer.clone())
                 .collect();
+            #[cfg(target_arch = "wasm32")]
+            {
+                self.web_loaded_json = Some(content.into_bytes());
+            }
+        }
+    }
+
+    /// Open as a read only table: rows are kept as positions in json, parsed at full depth
+    fn open_read_only(&mut self, json: String) {
+        let size = json.len() / 1024 / 1024;
+        let start = crate::compatibility::now();
+        let mut options = ParseOptions::default().parse_array(false).max_depth(u8::MAX);
+        let result = if self.file_format == Some(FileFormat::Jsonl) {
+            crate::parser::jsonl_as_compact(json, &options).map(|(rows, columns, max_json_depth)| {
+                let parse_result = ParseResult::<String> {
+                    json: vec![],
+                    max_json_depth,
+                    parsing_max_depth: u8::MAX,
+                    started_parsing_at: None,
+                    started_parsing_at_index_start: 0,
+                    started_parsing_at_index_end: 0,
+                    parsing_prefix: None,
+                    depth_after_start_at: 0,
+                };
+                (rows, columns, parse_result)
+            })
+        } else {
+            if let Some(ref start_at) = self.selected_pointer {
+                options = options.start_parse_at(start_at.clone());
+            }
+            crate::parser::json_array_as_compact(json, &options)
+        };
+        match result {
+            Ok((rows, columns, parse_result)) => {
+                log!(
+                    "Read only parsing took {}ms for a {}mb file, root array len {}, columns {}, {}mb in memory",
+                    start.elapsed().as_millis(),
+                    size,
+                    rows.rows_count(),
+                    columns.len(),
+                    rows.size() / 1024 / 1024
+                );
+                let max_depth = parse_result.max_json_depth;
+                let depth = (parse_result.depth_after_start_at + 1).max(max_depth as u8);
+                let min_depth = (parse_result.depth_after_start_at + 1).max(1);
+                let prefix = self.selected_pointer.clone().unwrap_or_default();
+                let len = rows.rows_count();
+                self.table = Some(ArrayTable::new_read_only(
+                    Some(parse_result),
+                    rows,
+                    columns,
+                    depth,
+                    PointerKey::from_pointer(prefix, ValueType::Array(len), 1, 0),
+                ));
+                self.depth = depth;
+                self.max_depth = max_depth as u8;
+                self.min_depth = min_depth;
+                self.parsing_invalid_pointers.clear();
+                self.should_parse_again = false;
+                self.parsing_invalid = false;
+                self.selected_pointer = None;
+                self.unsaved_changes = false;
+            }
+            Err(e) => {
+                log!("Error parsing as read only: {}", e);
+                self.should_parse_again = false;
+                self.parsing_invalid = true;
+            }
         }
     }
 
@@ -347,28 +447,30 @@ impl MyApp<'_> {
 
         let options = ParseOptions::default()
             .parse_array(false)
-            .max_depth(max_depth);
+            .max_depth(max_depth)
+            .keep_object_raw_data_max_depth(1);
 
-        match JSONParser::parse_jsonl(json, options) {
-            Ok(result) => {
-                let parsing_max_depth = result.parsing_max_depth;
+        match crate::parser::jsonl_as_array(json, &options) {
+            Ok((result1, columns, max_json_depth)) => {
+                let parsing_max_depth = max_depth;
                 log!(
-                    "JSONL parser took {}ms for a {}mb file, max depth {}, {} entries",
+                    "JSONL parsing to array took {}ms for a {}mb file, max depth {}, root array len {}, columns {}",
                     start.elapsed().as_millis(),
                     size,
                     parsing_max_depth,
-                    result.json.len()
-                );
-                let parse_result = result.clone_except_json();
-
-                let start = crate::compatibility::now();
-                let (result1, columns) = crate::parser::as_array(result).unwrap();
-                log!(
-                    "Transformation to array took {}ms, root array len {}, columns {}",
-                    start.elapsed().as_millis(),
                     result1.len(),
                     columns.len()
                 );
+                let parse_result = ParseResult::<String> {
+                    json: vec![],
+                    max_json_depth,
+                    parsing_max_depth,
+                    started_parsing_at: None,
+                    started_parsing_at_index_start: 0,
+                    started_parsing_at_index_end: 0,
+                    parsing_prefix: None,
+                    depth_after_start_at: 0,
+                };
 
                 let max_depth = parse_result.max_json_depth;
                 let depth = (parse_result.depth_after_start_at + 1).max(parsing_max_depth.min(max_depth as u8));
@@ -405,18 +507,21 @@ impl MyApp<'_> {
         }
     }
 
-    fn file_picker(&mut self) {
+    /// `format` None: ask which format to use once the file is selected
+    fn file_picker(&mut self, format: Option<FileFormat>) {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if let Some(path) = rfd::FileDialog::new().pick_file() {
                 self.selected_file = Some(path);
                 self.should_parse_again = true;
                 self.table = None;
+                self.set_file_format(format);
             }
         }
 
         #[cfg(target_arch = "wasm32")]
         {
+            self.set_file_format(format);
             let sender = self.async_events_channel.0.clone();
             self.force_repaint = true;
             let future = async move {
@@ -426,6 +531,42 @@ impl MyApp<'_> {
             };
             wasm_bindgen_futures::spawn_local(future);
         }
+    }
+
+    fn set_file_format(&mut self, format: Option<FileFormat>) {
+        self.file_format = format;
+        self.ask_file_format = format.is_none();
+        self.suggested_file_format = None;
+    }
+
+    /// Format from the extension, otherwise guessed from the beginning of the content
+    fn detect_file_format(path: Option<&PathBuf>, content: &[u8]) -> FileFormat {
+        let jsonl_extension = path
+            .and_then(|path| path.extension())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("jsonl") || ext.eq_ignore_ascii_case("ndjson"));
+        if jsonl_extension || JSONParser::is_jsonl(content) {
+            FileFormat::Jsonl
+        } else {
+            FileFormat::Json
+        }
+    }
+
+    fn suggested_file_format(&mut self) -> FileFormat {
+        if self.suggested_file_format.is_none() {
+            let mut content = vec![];
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(path) = self.selected_file.as_ref() {
+                if let Ok(file) = File::open(path) {
+                    let _ = file.take(4096).read_to_end(&mut content);
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            if let Some(json) = self.web_loaded_json.as_ref() {
+                content.extend_from_slice(&json[0..json.len().min(4096)]);
+            }
+            self.suggested_file_format = Some(Self::detect_file_format(self.selected_file.as_ref(), &content));
+        }
+        self.suggested_file_format.unwrap()
     }
 
     fn goto_next_matching_row_occurrence(table: &mut ArrayTable) -> bool {
@@ -460,6 +601,7 @@ impl MyApp<'_> {
         save_to_file(
             table.parent_pointer.pointer.as_str(),
             table.nodes(),
+            self.file_format.unwrap(),
             self.selected_file.as_ref().unwrap(),
         )
         .unwrap();
@@ -473,6 +615,7 @@ impl MyApp<'_> {
         save_to_buffer(
             table.parent_pointer.pointer.as_str(),
             table.nodes(),
+            self.file_format.unwrap(),
             &mut buffer,
         )
         .unwrap();
@@ -488,7 +631,8 @@ impl MyApp<'_> {
         let document = web_sys::window().unwrap().document().unwrap();
         let a = document.create_element("a").unwrap();
         a.set_attribute("href", &url).unwrap();
-        a.set_attribute("download", "file.json").unwrap();
+        let file_name = if self.file_format == Some(FileFormat::Jsonl) { "file.jsonl" } else { "file.json" };
+        a.set_attribute("download", file_name).unwrap();
         // click link
         a.dyn_ref::<web_sys::HtmlElement>().unwrap().click();
         // revoke url
@@ -504,6 +648,7 @@ impl MyApp<'_> {
             save_to_file(
                 table.parent_pointer.pointer.as_str(),
                 table.nodes(),
+                self.file_format.unwrap(),
                 self.selected_file.as_ref().unwrap(),
             )
             .unwrap();
@@ -539,7 +684,11 @@ impl eframe::App for MyApp<'_> {
                     #[cfg(target_arch = "wasm32")]
                     {
                         self.web_loaded_json = Some(json_bytes);
-                        self.open_json();
+                        if self.ask_file_format {
+                            self.table = None;
+                        } else {
+                            self.open_json();
+                        }
                     }
                 }
                 AsyncEvent::LoadSampleErr(err) => {
@@ -558,6 +707,9 @@ impl eframe::App for MyApp<'_> {
                     .unwrap_or("No file selected".to_string()),
                 if self.unsaved_changes { " *" } else { "" }
             );
+            if self.table.as_ref().is_some_and(|table| !table.editable) {
+                title.push_str(" (read only)");
+            }
 
             #[cfg(not(feature = "dist"))]
             if self.show_fps {
@@ -580,15 +732,30 @@ impl eframe::App for MyApp<'_> {
                         ui.style_mut().wrap_mode = Some(TextWrapMode::Extend);
                         if ui.button("Open json file").clicked() {
                             ui.close();
-                            self.file_picker();
+                            self.read_only = false;
+                            self.file_picker(Some(FileFormat::Json));
                         }
-                        ui.separator();
-                        let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
-                        if ui.add(button).clicked() {
+                        if ui.button("Open jsonl file").clicked() {
                             ui.close();
-                            self.save();
+                            self.read_only = false;
+                            self.file_picker(Some(FileFormat::Jsonl));
                         }
-                        #[cfg(not(target_arch = "wasm32"))] {
+                        if ui.button("Open read only").clicked() {
+                            ui.close();
+                            self.read_only = true;
+                            self.file_picker(None);
+                        }
+                        let editable = self.table.as_ref().is_some_and(|table| table.editable);
+                        if editable {
+                            ui.separator();
+                            let button = Button::new("Save").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE));
+                            if ui.add(button).clicked() {
+                                ui.close();
+                                self.save();
+                            }
+                        }
+                        #[cfg(not(target_arch = "wasm32"))]
+                        if editable {
                             ui.separator();
                             let button = Button::new("Save as").shortcut_text(ui.ctx().format_shortcut(&SHORTCUT_SAVE_AS));
                             if ui.add(button).clicked() {
@@ -598,6 +765,7 @@ impl eframe::App for MyApp<'_> {
                         }
                     });
 
+                    if self.table.as_ref().is_some_and(|table| table.editable) {
                     ui.separator();
                     ui.menu_button("Edit", |ui| {
                         ui.set_min_width(220.0);
@@ -607,6 +775,7 @@ impl eframe::App for MyApp<'_> {
                             self.table.as_mut().unwrap().open_replace_panel(None);
                         }
                     });
+                    }
                 }
                 if let Some(ref mut table) = self.table {
                     ui.separator();
@@ -714,7 +883,7 @@ impl eframe::App for MyApp<'_> {
             ui.horizontal(|ui| {
                 if self.table.is_some() {
                     let table = self.table.as_mut().unwrap();
-                    TableControlPane::row_count(ui, table.row_view().len(), table.nodes.len());
+                    TableControlPane::row_count(ui, table.row_view().len(), table.source().rows_count());
                     ui.separator();
                     ui.label(format!("{} columns ", table.all_columns().len()));
                     ui.separator();
@@ -778,6 +947,7 @@ impl eframe::App for MyApp<'_> {
                     self.should_parse_again = true;
                     self.parsing_invalid = false;
                     self.parsing_invalid_pointers.clear();
+                    self.set_file_format(None);
                     #[cfg(not(target_arch = "wasm32"))]
                     {
                         self.selected_file = Some(file.path().to_path_buf());
@@ -799,7 +969,39 @@ impl eframe::App for MyApp<'_> {
                 }
             });
 
-            if let Some(ref mut table) = self.table {
+            if self.ask_file_format && (self.selected_file.is_some() || self.web_loaded_json.is_some()) {
+                // Detected format is the default selection of the radio
+                self.suggested_file_format();
+                let mut rect = ui.max_rect();
+                rect.min.y = rect.max.y / 2.0 - 40.0;
+                ui.scope_builder(UiBuilder::new().max_rect(rect), |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.heading("Open file as");
+                        ui.checkbox(&mut self.read_only, "Read only (uses less memory)");
+                        // A horizontal row can't be centered in one pass: center it using its width from previous frame
+                        let width_id = ui.id().with("file_format_radio_width");
+                        let width = ui.data(|d| d.get_temp::<f32>(width_id));
+                        ui.horizontal(|ui| {
+                            ui.add_space(((ui.available_width() - width.unwrap_or(0.0)) / 2.0).max(0.0));
+                            let start = ui.cursor().min.x;
+                            ui.radio_value(&mut self.suggested_file_format, Some(FileFormat::Json), "json");
+                            ui.radio_value(&mut self.suggested_file_format, Some(FileFormat::Jsonl), "jsonl");
+                            let row_width = ui.min_rect().max.x - start;
+                            if width != Some(row_width) {
+                                ui.data_mut(|d| d.insert_temp(width_id, row_width));
+                                ui.ctx().request_discard("center file format radio");
+                            }
+                        });
+                        if ui.button("Open").clicked() {
+                            self.file_format = self.suggested_file_format;
+                            self.ask_file_format = false;
+                            self.should_parse_again = true;
+                            #[cfg(target_arch = "wasm32")]
+                            self.open_json();
+                        }
+                    });
+                });
+            } else if let Some(ref mut table) = self.table {
                 let response1 = table.ui(ui);
                 if !response1.edited_value.is_empty() {
                     self.unsaved_changes = true;
@@ -813,7 +1015,7 @@ impl eframe::App for MyApp<'_> {
                 if !already_interact {
                     let response = ui.interact(max_rect, Id::new("select_file"), Sense::click());
                     if response.clicked() {
-                        self.file_picker();
+                        self.file_picker(None);
                     }
                 }
                 ui.scope_builder(UiBuilder::new().max_rect(rect),
@@ -890,12 +1092,12 @@ impl eframe::App for MyApp<'_> {
 
                                                });
                                            });
-                } else if self.should_parse_again {
+                } else if self.should_parse_again && !self.ask_file_format {
                     self.open_json();
                 }
             }
         });
-        if self.table.is_some() {
+        if self.table.as_ref().is_some_and(|table| table.editable) {
             #[cfg(not(target_arch = "wasm32"))]
             {
                 ctx.input_mut(|i| {

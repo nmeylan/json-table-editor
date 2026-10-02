@@ -1,8 +1,8 @@
 use super::Column;
-use super::cell_lookup::find_cell;
+use super::table_source::{Cell, TableSource};
 use crate::parser::column_id;
 use indexmap::{IndexMap, IndexSet};
-use json_flat_parser::{FlatJsonValue, JsonArrayEntries, ValueType};
+use json_flat_parser::ValueType;
 use rayon::prelude::*;
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -22,8 +22,8 @@ pub enum ColumnFilter {
 
 impl ColumnFilter {
     #[inline]
-    fn matches(&self, entry: Option<&FlatJsonValue<String>>) -> bool {
-        let value = entry.and_then(|entry| entry.value.as_ref());
+    fn matches(&self, cell: Option<Cell>) -> bool {
+        let value = cell.and_then(|cell| cell.value);
         match self {
             Self::Include(values) => value.is_some_and(|value| values.contains(value)),
             Self::Exclude(values) => value.is_none_or(|value| !values.contains(value)),
@@ -48,10 +48,10 @@ enum SortKey<'a> {
 
 impl<'a> SortKey<'a> {
     /// `None` when null or missing.
-    fn of(entry: Option<&'a FlatJsonValue<String>>) -> Option<Self> {
-        let entry = entry?;
-        let value = entry.value.as_deref()?;
-        match entry.pointer.value_type {
+    fn of(cell: Option<Cell<'a>>) -> Option<Self> {
+        let cell = cell?;
+        let value = cell.value?;
+        match cell.value_type {
             ValueType::Null => None,
             ValueType::Bool => Some(Self::Bool(value == "true")),
             ValueType::Number => Some(value.parse::<f64>().map_or(Self::Str(value), Self::Number)),
@@ -190,19 +190,17 @@ impl RowView {
     }
 
     /// Filter then sort.
-    pub fn recompute(&mut self, nodes: &[JsonArrayEntries<String>]) {
+    pub fn recompute(&mut self, source: &dyn TableSource) {
         #[cfg(debug_assertions)]
         let start = crate::compatibility::now();
         self.data_to_view = None;
         let filters = compiled_filters(&self.filters, None);
         self.visible = if filters.is_empty() {
-            (0..nodes.len()).collect()
+            (0..source.rows_count()).collect()
         } else {
-            nodes
-                .par_iter()
-                .enumerate()
-                .filter(|(_, row)| matches_all(row, &filters))
-                .map(|(data_index, _)| data_index)
+            (0..source.rows_count())
+                .into_par_iter()
+                .filter(|data_index| matches_all(source, *data_index, &filters))
                 .collect()
         };
         if let Some((column, direction)) = self.sort.as_ref() {
@@ -210,7 +208,7 @@ impl RowView {
             let mut keys = self
                 .visible
                 .par_iter()
-                .map(|data_index| (SortKey::of(find_cell(&nodes[*data_index], id)), *data_index))
+                .map(|data_index| (SortKey::of(source.cell(*data_index, id)), *data_index))
                 .collect::<Vec<(Option<SortKey>, usize)>>();
             keys.par_sort_by(|(a, a_index), (b, b_index)| {
                 let ordering = match (a, b) {
@@ -231,7 +229,7 @@ impl RowView {
         #[cfg(debug_assertions)]
         crate::log!(
             "RowView::recompute {} rows -> {} visible in {}ms",
-            nodes.len(),
+            source.rows_count(),
             self.visible.len(),
             start.elapsed().as_millis()
         );
@@ -240,7 +238,7 @@ impl RowView {
     /// Distinct values of `column` among rows passing every filter except the column's own.
     pub fn distinct_values(
         &self,
-        nodes: &[JsonArrayEntries<String>],
+        source: &dyn TableSource,
         column: &Column,
     ) -> Arc<IndexSet<String>> {
         let mut hasher = DefaultHasher::new();
@@ -262,12 +260,12 @@ impl RowView {
 
         let filters = compiled_filters(&self.filters, Some(column.name.as_ref()));
         let id = column_id(&column.name);
-        let values = nodes
-            .par_iter()
-            .filter(|row| matches_all(row, &filters))
-            .filter_map(|row| find_cell(row, id).and_then(|entry| entry.value.as_ref()))
-            .collect::<Vec<&String>>();
-        let mut unique_values = values.into_iter().collect::<IndexSet<&String>>();
+        let values = (0..source.rows_count())
+            .into_par_iter()
+            .filter(|data_index| matches_all(source, *data_index, &filters))
+            .filter_map(|data_index| source.cell(data_index, id).and_then(|cell| cell.value))
+            .collect::<Vec<&str>>();
+        let mut unique_values = values.into_iter().collect::<IndexSet<&str>>();
         if matches!(column.value_type, ValueType::Number) {
             unique_values.sort_by(|a, b| {
                 let num_a = a.parse::<f64>();
@@ -287,7 +285,7 @@ impl RowView {
         let values = Arc::new(
             unique_values
                 .into_iter()
-                .cloned()
+                .map(str::to_string)
                 .collect::<IndexSet<String>>(),
         );
         self.distinct_values_cache
@@ -309,10 +307,10 @@ fn compiled_filters<'a>(
 }
 
 #[inline]
-fn matches_all(row: &JsonArrayEntries<String>, filters: &[(usize, &ColumnFilter)]) -> bool {
+fn matches_all(source: &dyn TableSource, data_index: usize, filters: &[(usize, &ColumnFilter)]) -> bool {
     filters
         .iter()
-        .all(|(column_id, filter)| filter.matches(find_cell(row, *column_id)))
+        .all(|(column_id, filter)| filter.matches(source.cell(data_index, *column_id)))
 }
 
 #[cfg(test)]
@@ -350,7 +348,7 @@ mod tests {
         view.set_filter(column.to_string(), Some(ColumnFilter::Exclude(set(values))));
     }
 
-    fn distinct(view: &RowView, nodes: &[JsonArrayEntries<String>], column: &str) -> Vec<String> {
+    fn distinct(view: &RowView, nodes: &Vec<JsonArrayEntries<String>>, column: &str) -> Vec<String> {
         let column = Column::new(column.to_string(), ValueType::String);
         view.distinct_values(nodes, &column)
             .iter()

@@ -21,6 +21,7 @@ impl SubTable<'_> {
         parent_value_type: ValueType,
         index_in_json_entries_array: usize,
         depth: u8,
+        editable: bool,
     ) -> Self {
         let name = parent_pointer.pointer.clone();
         if matches!(parent_value_type, ValueType::Array(_)) {
@@ -34,6 +35,7 @@ impl SubTable<'_> {
             let (nodes, columns) = crate::parser::as_array(result).unwrap();
             let mut array_table = ArrayTable::new(None, nodes, columns, 10, parent_pointer);
             array_table.is_sub_table = true;
+            array_table.editable = editable;
             Self {
                 name,
                 array_table: Some(array_table),
@@ -52,7 +54,7 @@ impl SubTable<'_> {
             Self {
                 name: name.clone(),
                 array_table: None,
-                object_table: Some(ObjectTable::new(result.json, name)),
+                object_table: Some(ObjectTable::new(result.json, name, editable)),
                 row_index: index_in_json_entries_array,
             }
         }

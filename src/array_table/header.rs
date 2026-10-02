@@ -63,7 +63,7 @@ impl<'array> ArrayTable<'array> {
                         let values = || {
                             values.get_or_init(|| {
                                 if Self::is_filterable(column) {
-                                    self.row_view.distinct_values(&self.nodes, column)
+                                    self.row_view.distinct_values(self.source(), column)
                                 } else {
                                     Default::default()
                                 }

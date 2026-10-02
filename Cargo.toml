@@ -26,9 +26,9 @@ regex-lite = "0.1.6"
 parking_lot_mpsc = { version = "0.1.5" }
 ehttp = "0.5.0"
 
-#[patch."https://github.com/nmeylan/json-parser-flat-format.git"]
+[patch."https://github.com/nmeylan/json-parser-flat-format.git"]
 #json-flat-parser = {path = "C:\\dev\\ragnarok\\json-flat-parser"}
-#json-flat-parser = {path = "/home/nmeylan/dev/ragnarok/json-flat-parser"}
+json-flat-parser = {path = "/home/nmeylan/dev/ragnarok/json-flat-parser"}
 
 
 
