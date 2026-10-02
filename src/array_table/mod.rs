@@ -7,6 +7,7 @@ use table_source::{CompactRows, TableSource};
 use crate::components::cell_text::CellText;
 use crate::components::icon::ButtonWithIcon;
 use crate::components::table::{CellLocation, TableBody};
+use crate::components::value_popup::value_popup;
 use crate::fonts::{COPY, FILTER, PENCIL, PLUS, TABLE, TABLE_CELLS};
 use crate::panels::{SearchReplacePanel, SearchReplaceResponse, PANEL_REPLACE};
 use crate::parser::{column_id, replace_occurrences, row_number_entry, search_occurrences};
@@ -749,7 +750,7 @@ impl<'array> ArrayTable<'array> {
                                     CellText::new(&*value)
                                 };
 
-                                let mut response = label.ui(ui, cell_id);
+                                let (response, overflow) = label.ui(ui, cell_id);
 
                                 if self.editable && response.double_clicked() {
                                     *self.editing_value.borrow_mut() = value.to_string();
@@ -772,14 +773,9 @@ impl<'array> ArrayTable<'array> {
                                     ui.ctx().set_cursor_icon(CursorIcon::Cell);
                                 }
 
-                                if value.len() > 100 {
-                                    response = response.on_hover_ui(|ui| {
-                                        ui.style_mut().interaction.selectable_labels = true;
-                                        let scroll_area = egui::ScrollArea::vertical();
-                                        scroll_area.show(ui, |ui| {
-                                            ui.label(&*value).request_focus();
-                                        });
-                                    });
+                                if overflow {
+                                    let is_json = matches!(entry.pointer.value_type, ValueType::Object(..) | ValueType::Array(_));
+                                    value_popup(ui, &response, cell_id, &value, is_json);
                                 };
                                 return Some(response);
                             }
@@ -998,23 +994,18 @@ impl<'array> ArrayTable<'array> {
                     } else {
                         self.seed2
                     };
-                let value = source
+                let cell = source
                     .cell(row_index, columns[col_index].id)
-                    .and_then(|cell| cell.value.filter(|_| !matches!(cell.value_type, ValueType::Null)));
-                let response = match value {
-                    Some(value) => {
+                    .filter(|cell| !matches!(cell.value_type, ValueType::Null));
+                let response = match cell.as_ref().and_then(|cell| cell.value.map(|value| (value, cell.value_type))) {
+                    Some((value, value_type)) => {
                         let label = CellText::new(if value.len() > 1000 { &value[0..1000] } else { value });
-                        let response = label.ui(ui, cell_id);
-                        if value.len() > 100 {
-                            response.on_hover_ui(|ui| {
-                                ui.style_mut().interaction.selectable_labels = true;
-                                egui::ScrollArea::vertical().show(ui, |ui| {
-                                    ui.label(value).request_focus();
-                                });
-                            })
-                        } else {
-                            response
+                        let (response, overflow) = label.ui(ui, cell_id);
+                        if overflow {
+                            let is_json = matches!(value_type, ValueType::Object(..) | ValueType::Array(_));
+                            value_popup(ui, &response, cell_id, value, is_json);
                         }
+                        response
                     }
                     None => {
                         let rect = ui.available_rect_before_wrap();

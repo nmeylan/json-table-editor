@@ -6,3 +6,4 @@ pub mod icon;
 pub mod popover;
 pub mod table;
 pub mod table_control_pane;
+pub mod value_popup;

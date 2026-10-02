@@ -13,7 +13,8 @@ impl CellText {
         CellText { text: text.into() }
     }
 
-    pub fn ui(self, ui: &mut Ui, cell_id: usize) -> Response {
+    /// Returns whether the text overflows the cell
+    pub fn ui(self, ui: &mut Ui, cell_id: usize) -> (Response, bool) {
         let rect = ui.available_rect_before_wrap();
         let cell_zone = ui.interact(rect, Id::new(cell_id), Sense::click());
 
@@ -37,13 +38,14 @@ impl CellText {
             Align::RIGHT => rect.right_top(),
         };
 
+        let overflow = galley.size().x > rect.width();
         ui.painter().add(epaint::TextShape::new(
             galley_pos,
             galley,
             ui.style().visuals.text_color(),
         ));
 
-        cell_zone
+        (cell_zone, overflow)
     }
 }
 
