@@ -27,6 +27,7 @@ use std::sync::Arc;
 use crate::array_table::{ArrayTable, ScrollToRowMode};
 use crate::components::icon;
 use crate::components::table::HoverData;
+use crate::components::table_control_pane::TableControlPane;
 use crate::fonts::{CHEVRON_DOWN, CHEVRON_UP};
 use crate::panels::{AboutPanel, PANEL_ABOUT};
 use crate::parser::{save_to_buffer, save_to_file};
@@ -712,8 +713,8 @@ impl eframe::App for MyApp<'_> {
         egui::Panel::bottom("bottom-panel").show(ui, |ui| {
             ui.horizontal(|ui| {
                 if self.table.is_some() {
-                    let table = self.table.as_ref().unwrap();
-                    ui.label(format!("{} rows ", table.nodes.len()));
+                    let table = self.table.as_mut().unwrap();
+                    TableControlPane::row_count(ui, table.row_view().len(), table.nodes.len());
                     ui.separator();
                     ui.label(format!("{} columns ", table.all_columns().len()));
                     ui.separator();
@@ -722,27 +723,9 @@ impl eframe::App for MyApp<'_> {
                         ui.separator();
                         ui.label(format!("Start pointer: {}", table.parent_pointer.pointer));
                     }
-                    if !table.columns_filter.is_empty() {
+                    if table.row_view().active_filters().count() > 0 {
                         ui.separator();
-                        if ui
-                            .label(
-                                RichText::new(format!(
-                                    "{} active filters",
-                                    table.columns_filter.len()
-                                ))
-                                .underline(),
-                            )
-                            .on_hover_ui(|ui| {
-                                ui.vertical(|ui| {
-                                    table.columns_filter.iter().for_each(|(k, _)| {
-                                        ui.label(k.as_str());
-                                    })
-                                });
-                            })
-                            .hovered()
-                        {
-                            ui.ctx().set_cursor_icon(CursorIcon::Help);
-                        }
+                        TableControlPane::active_filters(ui, table);
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
