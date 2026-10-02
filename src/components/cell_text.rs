@@ -1,7 +1,8 @@
 use eframe::emath::Align;
 use eframe::epaint;
 use std::sync::Arc;
-use egui::{FontSelection, Id, Response, RichText, Sense, Ui, WidgetText};
+use egui::text::{LayoutJob, TextFormat};
+use egui::{FontSelection, Id, Response, RichText, Sense, TextStyle, Ui, WidgetText};
 
 pub struct CellText {
     text: WidgetText,
@@ -44,4 +45,22 @@ impl CellText {
 
         cell_zone
     }
+}
+
+/// Json pointer with its parent path faded, so the last segment stands out: `/stats/` + `str`.
+pub fn pointer_text(ui: &Ui, pointer: &str) -> LayoutJob {
+    let split = pointer.rfind('/').map_or(0, |i| i + 1);
+    let font_id = TextStyle::Body.resolve(ui.style());
+    let mut job = LayoutJob::default();
+    job.append(
+        &pointer[..split],
+        0.0,
+        TextFormat::simple(font_id.clone(), ui.visuals().weak_text_color()),
+    );
+    job.append(
+        &pointer[split..],
+        0.0,
+        TextFormat::simple(font_id, ui.visuals().strong_text_color()),
+    );
+    job
 }

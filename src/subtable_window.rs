@@ -2,7 +2,7 @@ use crate::array_table::ArrayTable;
 use crate::object_table::ObjectTable;
 use crate::{ArrayResponse, View};
 use eframe::egui::{Context, Ui};
-use egui::Order;
+use egui::{Id, Order};
 use json_flat_parser::lexer::Lexer;
 use json_flat_parser::parser::Parser;
 use json_flat_parser::{FlatJsonValue, ParseOptions, ParseResult, PointerKey, ValueType};
@@ -108,22 +108,41 @@ impl SubTable<'_> {
         }
     }
 
+    /// Pointer as a breadcrumb, e.g. `1532 › skills › 0 › effects (12 items)`
+    fn title(&self) -> String {
+        let mut title = self.name.trim_start_matches('/').replace('/', " › ");
+        if let Some(ref array_table) = self.array_table {
+            title.push_str(&format!(" ({} items)", array_table.nodes.len()));
+        }
+        title
+    }
+
     pub(crate) fn show(&mut self, ctx: &Context, open: &mut bool) -> Option<Option<ArrayResponse>> {
-        egui::Window::new(self.name())
+        egui::Window::new(self.title())
+            .id(Id::new(self.name()))
             .open(open)
             .resize(|r| {
-                let nodes = if let Some(ref array_table) = self.array_table {
-                    array_table.nodes.len()
+                let style = ctx.global_style();
+                let spacing = &style.spacing;
+                let (rows, content_width) = if let Some(ref array_table) = self.array_table {
+                    (array_table.nodes.len(), array_table.content_width(spacing))
                 } else if let Some(ref object_table) = self.object_table {
-                    object_table.nodes.len()
+                    (
+                        object_table.filtered_nodes.len(),
+                        object_table.content_width(spacing),
+                    )
                 } else {
-                    1
+                    (1, 0.0)
                 };
-                r.default_height(
-                    40.0 + nodes as f32
-                        * ArrayTable::row_height(&ctx.global_style(), &ctx.global_style().spacing),
-                )
-                .default_width(480.0)
+                // Header is 2 rows high, and a horizontal scroll bar is below the table
+                let content_height = (rows + 2) as f32
+                    * (ArrayTable::row_height(&style, spacing) + spacing.item_spacing.y)
+                    + spacing.scroll.allocated_width();
+                let screen = ctx.content_rect().size();
+                r.default_size([
+                    content_width.max(480.0).min(screen.x * 0.8),
+                    content_height.min(screen.y * 0.7),
+                ])
             })
             .order(Order::Middle)
             .resizable([true, true])

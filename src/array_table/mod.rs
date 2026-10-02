@@ -39,6 +39,11 @@ use std::string::ToString;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+// Estimated width of a character, used to size columns from their name
+pub(crate) const TEXT_WIDTH: f32 = 7.0;
+const ROW_NUMBER_COLUMN_WIDTH: f32 = 40.0;
+const LAST_COLUMN_MIN_WIDTH: f32 = 240.0;
+
 #[derive(Clone, Debug)]
 pub struct Column<'col> {
     pub name: Cow<'col, str>,
@@ -439,7 +444,36 @@ impl<'array> ArrayTable<'array> {
     fn table_ui(&mut self, ui: &mut egui::Ui, pinned: bool) -> ArrayResponse {
         let text_height = Self::row_height(ui.style(), ui.spacing());
 
-        self.draw_table(ui, text_height, 7.0, pinned)
+        self.draw_table(ui, text_height, TEXT_WIDTH, pinned)
+    }
+
+    #[inline]
+    fn initial_column_width(name: &str, text_width: f32) -> f32 {
+        (name.len() + 3).max(10) as f32 * text_width
+    }
+
+    /// Width needed to show all columns at their initial width
+    pub fn content_width(&self, spacing: &Spacing) -> f32 {
+        let last = self.column_selected.len().saturating_sub(1);
+        let selected = self.column_selected.iter().enumerate().map(|(i, column)| {
+            let width = Self::initial_column_width(&column.name, TEXT_WIDTH);
+            if i == last && self.column_selected.len() > 3 {
+                width.max(LAST_COLUMN_MIN_WIDTH)
+            } else {
+                width
+            }
+        });
+        // First pinned column is the row number
+        let pinned = self
+            .column_pinned
+            .iter()
+            .skip(1)
+            .map(|column| Self::initial_column_width(&column.name, TEXT_WIDTH));
+        let columns_count = self.column_pinned.len() + self.column_selected.len();
+        ROW_NUMBER_COLUMN_WIDTH
+            + pinned.chain(selected).sum::<f32>()
+            + columns_count as f32 * spacing.item_spacing.x
+            + spacing.scroll.allocated_width()
     }
 
     pub fn row_height(style: &Arc<Style>, spacing: &Spacing) -> f32 {
@@ -528,7 +562,7 @@ impl<'array> ArrayTable<'array> {
         if columns_count <= 3 {
             for i in 0..columns_count {
                 if pinned_column_table && i == 0 {
-                    table = table.column(Column::initial(40.0).clip(true).resizable(true));
+                    table = table.column(Column::initial(ROW_NUMBER_COLUMN_WIDTH).clip(true).resizable(true));
                 } else {
                     table = table.column(Column::remainder().clip(true).resizable(true));
                 }
@@ -536,12 +570,12 @@ impl<'array> ArrayTable<'array> {
         } else {
             for i in 0..columns_count {
                 if pinned_column_table && i == 0 {
-                    table = table.column(Column::initial(40.0).clip(true).resizable(true));
+                    table = table.column(Column::initial(ROW_NUMBER_COLUMN_WIDTH).clip(true).resizable(true));
                 } else if i == columns_count - 1 {
-                    table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(240.0, f32::INFINITY)));
+                    table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(LAST_COLUMN_MIN_WIDTH, f32::INFINITY)));
                 } else {
                     table = table.column(
-                        Column::initial((columns[i].name.len() + 3).max(10) as f32 * text_width)
+                        Column::initial(Self::initial_column_width(&columns[i].name, text_width))
                             .clip(true)
                             .resizable(true),
                     );
