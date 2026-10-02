@@ -149,6 +149,8 @@ pub struct ArrayTable<'array> {
     pub scroll_to_column_number: usize,
     pub scroll_to_row_mode: ScrollToRowMode,
     pub focused_cell: Option<CellLocation>,
+    // Column to pin or unpin: (from pinned column table, column index)
+    pending_pin: Option<(bool, usize)>,
 
     // Visibility information
     pub first_visible_index: usize,
@@ -332,6 +334,7 @@ impl<'array> ArrayTable<'array> {
             editing_value: RefCell::new(String::new()),
             is_sub_table: false,
             focused_cell: None,
+            pending_pin: None,
             first_visible_index: 0,
             last_visible_index: 0,
             first_visible_offset: 0.0,
@@ -590,19 +593,26 @@ impl<'array> ArrayTable<'array> {
             self.column_selected.len()
         };
         let columns = self.columns(pinned_column_table);
-        if columns_count <= 3 {
+        if pinned_column_table {
+            // No remainder column: it would fill the pinned side and can't be resized
             for i in 0..columns_count {
-                if pinned_column_table && i == 0 {
+                if i == 0 {
                     table = table.column(Column::initial(ROW_NUMBER_COLUMN_WIDTH).clip(true).resizable(true));
                 } else {
-                    table = table.column(Column::remainder().clip(true).resizable(true));
+                    table = table.column(
+                        Column::initial(Self::initial_column_width(&columns[i].name, text_width))
+                            .clip(true)
+                            .resizable(true),
+                    );
                 }
+            }
+        } else if columns_count <= 3 {
+            for _ in 0..columns_count {
+                table = table.column(Column::remainder().clip(true).resizable(true));
             }
         } else {
             for i in 0..columns_count {
-                if pinned_column_table && i == 0 {
-                    table = table.column(Column::initial(ROW_NUMBER_COLUMN_WIDTH).clip(true).resizable(true));
-                } else if i == columns_count - 1 {
+                if i == columns_count - 1 {
                     table = table.column(Column::remainder().clip(false).resizable(true).range(Rangef::new(LAST_COLUMN_MIN_WIDTH, f32::INFINITY)));
                 } else {
                     table = table.column(
@@ -647,6 +657,25 @@ impl<'array> ArrayTable<'array> {
                     );
                 },
             );
+        if let Some((from_pinned_column_table, index)) = self.pending_pin.take() {
+            if from_pinned_column_table {
+                let column = self.column_pinned.remove(index);
+                // Remove placeholder of empty selection
+                self.column_selected.retain(|c| !c.name.is_empty());
+                self.column_selected.push(column);
+                self.column_selected.sort();
+            } else {
+                let column = self.column_selected.remove(index);
+                self.column_pinned.push(column);
+                if self.column_selected.is_empty() {
+                    self.column_selected.push(self::Column::new(String::new(), ValueType::default()));
+                }
+            }
+            // Cells location refer to columns index, which changed
+            self.focused_cell = None;
+            *self.editing_index.borrow_mut() = None;
+            self.cache.borrow_mut().evict();
+        }
 
         let table_scroll_output = table_response.scroll_area_output;
         if self.scroll_y != table_scroll_output.state.offset.y {

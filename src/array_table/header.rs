@@ -143,15 +143,8 @@ impl<'array> ArrayTable<'array> {
             Some(response.inner)
         });
         if let Some(pinned_column) = pinned_column {
-            if pinned_column_table {
-                let column = self.column_pinned.remove(pinned_column);
-                self.column_selected.push(column);
-                self.column_selected.sort();
-            } else {
-                let column = self.column_selected.remove(pinned_column);
-                self.column_pinned.push(column);
-            }
-            self.cache.borrow_mut().evict();
+            // Applied once body is drawn: table columns count is already set for this frame
+            self.pending_pin = Some((pinned_column_table, pinned_column));
         }
         if let Some(replace_column) = clicked_replace_column {
             let column = self.columns(pinned_column_table)[replace_column].clone();
